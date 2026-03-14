@@ -67,13 +67,67 @@ def _workflow_name(dataset_root: Path) -> str:
     return f"{dataset_root.name}_audit"
 
 
-def _dataset_audit(dataset_root: Path, golden_root: Path) -> dict[str, Any]:
-    report = verify_run_against_golden(dataset_root, golden_root, RunConfig().tolerance)
+def _validation_runs_root() -> Path:
+    return _inputs_root() / "validation_runs"
+
+
+def _latest_workflow_run(dataset_name: str, suffixes: tuple[str, ...]) -> Path | None:
+    validation_runs = _validation_runs_root()
+    if not validation_runs.exists():
+        return None
+
+    matches: list[tuple[str, int, Path]] = []
+    for child in validation_runs.iterdir():
+        if not child.is_dir():
+            continue
+        for priority, suffix in enumerate(suffixes):
+            candidate = child / f"{dataset_name}_{suffix}"
+            if candidate.exists():
+                matches.append((child.name, priority, candidate))
+    if not matches:
+        return None
+    matches.sort(key=lambda item: (item[0], -item[1]))
+    return matches[-1][2].resolve()
+
+
+def _resolve_required_run_root(dataset_root: Path) -> Path | None:
+    dataset_name = dataset_root.name
+    repo_root = _repo_root()
+
+    explicit_run_roots = {
+        "InSAR_dataset_test": repo_root / "inputs_and_outputs" / "RUN_FULL_GATE_1e10",
+    }
+    explicit = explicit_run_roots.get(dataset_name)
+    if explicit is not None and explicit.exists():
+        return explicit.resolve()
+
+    return _latest_workflow_run(dataset_name, ("stage1_8", "stage2_8"))
+
+
+def _resolve_run_selection(dataset_root: Path, golden_base: Path | None) -> tuple[Path, Path, str]:
+    if golden_base is not None:
+        return dataset_root.resolve(), (golden_base / dataset_root.name).resolve(), "explicit_run_root"
+
+    run_root = _resolve_required_run_root(dataset_root)
+    if run_root is None:
+        raise FileNotFoundError(
+            "No concrete full-loop run copy found for "
+            f"{dataset_root.name}. Expected a repo-local run root such as "
+            "inputs_and_outputs/RUN_FULL_GATE_1e10 or a validation_runs/*/<dataset>_stage1_8 copy."
+        )
+
+    return run_root, dataset_root.resolve(), "resolved_full_loop_run_copy"
+
+
+def _dataset_audit(run_root: Path, golden_root: Path, run_source: str) -> dict[str, Any]:
+    report = verify_run_against_golden(run_root, golden_root, RunConfig().tolerance)
     summary = summarize_failures(report)
     return {
-        "workflow": _workflow_name(dataset_root),
-        "dataset": str(dataset_root),
+        "workflow": _workflow_name(golden_root),
+        "dataset": golden_root.name,
+        "run_root": str(run_root),
         "golden_root": str(golden_root),
+        "run_source": run_source,
         "ok": report.ok,
         "status": "passed" if report.ok else "failed",
         "checked": len(report.comparisons),
@@ -148,9 +202,17 @@ def main() -> int:
 
     try:
         for dataset in datasets:
-            golden_root = (golden_base / dataset.name) if golden_base else dataset
-            payload["audits"].append(_dataset_audit(dataset, golden_root.resolve()))
+            run_root, golden_root, run_source = _resolve_run_selection(dataset, golden_base)
+            payload["audits"].append(_dataset_audit(run_root, golden_root, run_source))
         payload["completed"] = True
+    except FileNotFoundError as exc:
+        payload["interrupted"] = True
+        payload["interruption"] = {
+            "kind": "missing_run_copy",
+            "message": str(exc),
+        }
+        _emit_payload(_finalize_payload(payload), args.output)
+        return 1
     except KeyboardInterrupt:
         payload["interrupted"] = True
         payload["interruption"] = {

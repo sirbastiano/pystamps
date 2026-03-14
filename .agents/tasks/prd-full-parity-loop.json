@@ -133,7 +133,7 @@
     {
       "id": "US-002",
       "title": "Make standalone validation gates truthful and reproducible",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-001"
       ],
@@ -146,13 +146,13 @@
         "Negative case: docs must not reference nonexistent task runners, silently ignored config keys, or fallback behaviors that the code does not implement."
       ],
       "startedAt": "2026-03-14T11:10:51.902689+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-03-14T11:10:51.902704+00:00"
+      "completedAt": "2026-03-14T11:24:54.680404+00:00",
+      "updatedAt": "2026-03-14T11:24:54.680378+00:00"
     },
     {
       "id": "US-003",
       "title": "Reproduce and classify the full failing parity loop",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001",
         "US-002"
@@ -164,7 +164,10 @@
         "The story identifies whether full-loop parity is blocked by upstream stages, merged unwrap stages, downstream statistics stages, or a combination.",
         "Example: the audit output explicitly distinguishes stage 3-4 residuals from stage 5-6 unwrap drift and stage 7-8 downstream mismatches.",
         "Negative case: it is not acceptable to declare parity work complete based on stale artifacts, skipped stages, or a partial rerun that leaves existing outputs untouched."
-      ]
+      ],
+      "startedAt": "2026-03-14T11:24:57.414410+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-03-14T11:24:57.414427+00:00"
     },
     {
       "id": "US-004",

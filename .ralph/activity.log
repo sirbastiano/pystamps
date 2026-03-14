@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-03-14 11:24:54 | run=20260314-105700-3558543 | iter=2 | mode=build | story=US-002 | duration=843s | status=success
 - 2026-03-14 11:10:49 | run=20260314-105700-3558543 | iter=1 | mode=build | story=US-001 | duration=829s | status=success
 - 2026-03-14 09:51:44 | run=20260314-091325-3523629 | iter=2 | mode=build | story=US-005 | duration=466s | status=success
 - 2026-03-14 09:43:55 | run=20260314-091325-3523629 | iter=1 | mode=build | story=US-001 | duration=1830s | status=success
@@ -70,3 +71,7 @@
 [2026-03-14 11:21:58] US-002 verification: full pytest/build/twine/audit complete; canonical verify passed using InSAR_dataset_test as run and golden. RUN_FULL_GATE_1e10 remains a separate parity failure.
 [2026-03-14 11:23:55] US-002 progress update: appending run summary with commit and gate results.
 [2026-03-14 11:24:18] US-002 progress update complete: recorded commit f86d124 and final validation matrix in .ralph/progress.md.
+[2026-03-14 11:24:54] ITERATION 2 end (duration=843s)
+[2026-03-14 11:24:58] ITERATION 3 start (mode=build story=US-003)
+[2026-03-14 11:29:26] US-003 implementation: updating audit driver to compare concrete full-loop run roots against golden datasets and record run_root in audit output.
+[2026-03-14 11:35:44] US-003 verification complete: targeted pytest and repo gates passed; audit and verify now record truthful parity failures with current concrete run roots.

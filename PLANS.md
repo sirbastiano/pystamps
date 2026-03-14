@@ -1,51 +1,48 @@
 # ExecPlan
 
 ## Goal
-- Make the standalone validation and release guidance truthful from a clean source checkout by aligning tracked docs, optional dataset-backed tests, and packaging metadata with the real repo command surface.
+- Reproduce the current full-loop parity failures with the supported audit and verify surfaces, then classify the remaining mismatches by stage cluster with concrete artifact names and mismatch keys.
 
 ## Scope / Non-goals
-- In scope: tracked contributor/release docs, packaging metadata and manifests, and focused regression tests that lock the standalone validation contract in place.
-- Out of scope: parity math fixes, dataset contents, workflow orchestration changes, or adding new task runners / CI surfaces that do not already exist in the repo.
+- In scope: the audit/verify reporting path, a truthful full-loop run-root selection strategy for the required datasets, focused regression tests, and the recorded run outputs for US-003.
+- Out of scope: parity math fixes, dataset content changes, pipeline-stage algorithm changes, or broad validation-contract/doc rewrites beyond what this story needs to make the classification truthful.
 
 ## Invariants and contracts to preserve
-- `uv run pytest -q`, `uv run --with build python -m build --sdist --wheel`, and `uv run --with twine python -m twine check dist/*` remain the standalone unit/build validation commands.
-- `scripts/validate_audit.py` remains the supported full-validation audit entrypoint, and it requires the local parity datasets named in `pystamps.parity_contract`.
-- Fresh-clone validation must not imply that `inputs_and_outputs/*` parity datasets are committed or required for the default unit-test path.
-- Release artifacts must continue to package the `pystamps` source tree without recursive inclusion of generated `dist/`, `build/`, or egg-info outputs.
+- `scripts/validate_audit.py` remains the supported audit entrypoint and still validates the required dataset contract from `pystamps.parity_contract`.
+- The required datasets remain `inputs_and_outputs/InSAR_dataset_test_stage8diag` and `inputs_and_outputs/InSAR_dataset_test`; the audit must compare concrete run outputs against those golden datasets rather than silently self-comparing them.
+- `pystamps verify` remains the underlying comparator and continues to emit artifact-level mismatches derived from `pystamps.verify`.
+- Fresh-clone unit/build validation remains `uv run pytest -q`, `uv run --with build python -m build --sdist --wheel`, and `uv run --with twine python -m twine check dist/*`.
 
 ## Files / layers likely to change
-- `README.md`
-- `docs/release.md`
-- `docs/testing.html`
-- `pyproject.toml`
-- `MANIFEST.in`
-- `tests/` coverage for docs/packaging contract checks
+- `scripts/validate_audit.py`
+- `tests/test_validate_audit.py`
+- `PLANS.md`
+- Story run records under `.ralph/` and `inputs_and_outputs/validation_runs/`
 
 ## Ordered steps
-1. Confirm the exact standalone validation commands and dataset requirements from repo code/config rather than from stale docs.
-2. Update tracked docs so they separate fresh-clone unit/build validation from optional local-dataset parity validation and do not reference nonexistent task runners or unsupported fallback behavior.
-3. Tighten packaging metadata/manifests so generated release outputs cannot be re-ingested into future builds.
-4. Add focused regression tests for the documented validation commands, dataset-test guarding, and manifest exclusions.
-5. Run targeted checks first, then the required repo quality gates for this story, followed by a brief security/performance/regression review before commit.
+1. Replace the audit driver's self-compare default with deterministic full-loop run-root resolution for the required datasets and surface the chosen `run_root` in the audit payload.
+2. Add focused tests for the new run-root selection and keep the existing missing-dataset/interruption coverage passing.
+3. Run the required audit and concrete verify commands, plus a machine-readable failure classification artifact, to capture current parity evidence.
+4. Run the repo quality gates, perform a brief security/performance/regression review, then record progress and commit the story output.
 
 ## Validation plan
-- `uv run pytest -q tests/test_parity_contract.py tests/test_validate_audit.py tests/test_dataset.py`
+- `uv run pytest -q tests/test_validate_audit.py tests/test_verify.py`
 - `uv run pytest -q`
 - `uv run --with build python -m build --sdist --wheel`
 - `uv run --with twine python -m twine check dist/*`
 - `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json`
-- `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run <run-copy> --golden ./inputs_and_outputs/InSAR_dataset_test`
+- `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test`
+- `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/classify_verify_failures.py --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/us003_verify_classification.json`
 
 ## Rollback / recovery
-- Revert the docs/packaging/test hunks together. No stateful rollback is required beyond deleting rebuilt artifacts from `dist/` or `build/` if validation regenerates them.
+- Revert the audit-driver/test/logging hunks together. Generated `dist/`, `build/`, and `inputs_and_outputs/validation_runs/*` artifacts can be removed if this story needs to be backed out.
 
 ## Risks / blockers
-- The repo already has unrelated uncommitted changes from the story loop; edits must stay tightly scoped so this story does not absorb earlier work accidentally.
-- Some tracked docs are generated/static HTML rather than Markdown, so command-surface fixes may need to be applied in multiple files to avoid contradictory guidance.
-- Full audit and verify commands depend on local datasets and possibly a prepared run copy; if those assets are absent, that remains validation evidence rather than something this story can fake.
+- The repo already contains unrelated loop-managed changes in `.agents/tasks/prd-full-parity-loop.json` and `.ralph/activity.log`; edits and commit review must stay tight so US-003 does not rewrite unrelated state.
+- The concrete full-loop run roots are repo-local assets. If they disappear or are renamed, the audit should fail loudly instead of silently self-comparing a golden dataset against itself.
+- Full parity comparisons are materially slower than unit tests, so targeted checks should run before the repo-wide gates.
 
 ## Definition of done
-- Tracked docs reference only the real standalone validation and packaging commands and clearly distinguish optional local-dataset gates from fresh-clone unit/build validation.
-- Dataset-backed tests are explicitly optional/guarded so a clean checkout does not imply committed parity datasets.
-- Packaging metadata and manifests exclude generated or recursive release artifacts from the release surface.
-- Focused regression coverage and required validation commands provide evidence for the updated contract.
+- The supported audit command produces a current failure artifact that points at concrete run roots and groups failures by stage cluster with artifact paths and mismatch keys.
+- The required verify command is run against a concrete full-loop run copy and its failing output is recorded.
+- Required validation commands and repo-wide gates complete with outcomes captured in the story logs.
