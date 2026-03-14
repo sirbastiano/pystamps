@@ -12,8 +12,8 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260314-105700-3558543-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: pending
-- Post-commit status: pending
+- Commit: c691e84 docs(parity): record us-004 blocker evidence
+- Post-commit status: clean
 - Verification:
   - Command: `uv run pytest -q` -> PASS
   - Command: `uv run --with build python -m build --sdist --wheel` -> PASS
