@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-03-14 11:37:53 | run=20260314-105700-3558543 | iter=3 | mode=build | story=US-003 | duration=776s | status=success
 - 2026-03-14 11:24:54 | run=20260314-105700-3558543 | iter=2 | mode=build | story=US-002 | duration=843s | status=success
 - 2026-03-14 11:10:49 | run=20260314-105700-3558543 | iter=1 | mode=build | story=US-001 | duration=829s | status=success
 - 2026-03-14 09:51:44 | run=20260314-091325-3523629 | iter=2 | mode=build | story=US-005 | duration=466s | status=success
@@ -76,3 +77,8 @@
 [2026-03-14 11:29:26] US-003 implementation: updating audit driver to compare concrete full-loop run roots against golden datasets and record run_root in audit output.
 [2026-03-14 11:35:44] US-003 verification complete: targeted pytest and repo gates passed; audit and verify now record truthful parity failures with current concrete run roots.
 [2026-03-14 11:37:21] US-003 progress updated: recorded audit/verify outcomes, stage-cluster classification, and implementation commit a1ca13d in .ralph/progress.md.
+[2026-03-14 11:37:53] ITERATION 3 end (duration=776s)
+[2026-03-14 11:37:56] ITERATION 4 start (mode=build story=US-004)
+[2026-03-14 11:45:25] US-004 analysis: stage8diag stage5-6 artifacts are downstream of upstream patch-level drift. Reproduced that PATCH_1 select1.keep_ix/weed1.ix_weed counts differ from golden before stage5 writes ps2/pm2, so no speculative stage5/6 code change was applied.
+[2026-03-14 11:50:28] US-004 verification complete: pytest/build/twine passed; refreshed audit plus concrete stage8diag and RUN_FULL_GATE verifies confirm stage5-6 mismatches are downstream of upstream select1/weed1 count drift.
+[2026-03-14 11:50:31] US-004 progress update recorded: documented upstream blocker evidence, no speculative stage5-6 code changes, and pending docs-only commit for this blocked iteration.

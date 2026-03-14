@@ -152,7 +152,7 @@
     {
       "id": "US-003",
       "title": "Reproduce and classify the full failing parity loop",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-001",
         "US-002"
@@ -166,13 +166,13 @@
         "Negative case: it is not acceptable to declare parity work complete based on stale artifacts, skipped stages, or a partial rerun that leaves existing outputs untouched."
       ],
       "startedAt": "2026-03-14T11:24:57.414410+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-03-14T11:24:57.414427+00:00"
+      "completedAt": "2026-03-14T11:37:53.425420+00:00",
+      "updatedAt": "2026-03-14T11:37:53.425401+00:00"
     },
     {
       "id": "US-004",
       "title": "Eliminate stage 5-6 blockers that prevent full-loop parity",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-003"
       ],
@@ -183,7 +183,10 @@
         "If a suspected fix does not improve parity, it is reverted and documented rather than left in place as speculative drift.",
         "Example: a reproduced `phuw2.mat` or `uw_interp.mat` mismatch is fixed, rerun on a clean dataset copy, and verified to reduce the exact failing key(s).",
         "Negative case: do not change stage 7-8 code to paper over unchanged stage 5-6 mismatches when the audit still attributes the blocker to unwrap/smoothing artifacts."
-      ]
+      ],
+      "startedAt": "2026-03-14T11:37:55.737488+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-03-14T11:37:55.737505+00:00"
     },
     {
       "id": "US-005",

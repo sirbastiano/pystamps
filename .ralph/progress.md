@@ -5,6 +5,40 @@ Started: Sat Mar 14 05:18:43 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-03-14 11:49:51Z] - US-004: Eliminate stage 5-6 blockers that prevent full-loop parity
+Thread:
+Run: 20260314-105700-3558543 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260314-105700-3558543-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260314-105700-3558543-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: pending
+- Post-commit status: pending
+- Verification:
+  - Command: `uv run pytest -q` -> PASS
+  - Command: `uv run --with build python -m build --sdist --wheel` -> PASS
+  - Command: `uv run --with twine python -m twine check dist/*` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/validation_runs/20260313_035019/InSAR_dataset_test_stage8diag_stage2_8 --golden ./inputs_and_outputs/InSAR_dataset_test_stage8diag` -> FAIL
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test` -> FAIL
+- Files changed:
+  - PLANS.md
+  - .ralph/progress.md
+  - .ralph/activity.log
+- What was implemented
+  - Reproduced the current stage8diag stage5-6 verify failure on the concrete run copy resolved by `latest_audit.json` and refreshed the supported audit artifact.
+  - Traced the first blocking divergence upstream of stage 5: `PATCH_1/select1.mat` and `PATCH_1/weed1.mat` already differ in shape from the golden dataset, which changes the stage-5 promoted population from golden `77888` PS to run `71671` PS before `pm2.mat`, `uw_grid.mat`, `uw_interp.mat`, or `phuw2.mat` are written.
+  - Left product code unchanged because the apparent stage5-6 mismatches are downstream symptoms of upstream patch-level drift on the current branch. A stage5-6-only patch would have been speculative and would not satisfy US-004 acceptance.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - The stage8diag stage5-6 failures now present primarily as shape mismatches (`pm2`, `uw_grid`, `uw_interp`) because the selected/weeded PS population is already wrong before patch stage-5 promotion completes.
+    - `RUN_FULL_GATE_1e10` against `InSAR_dataset_test` still fails only on `PATCH_3/weed1.mat.ps_max`, which reinforces that upstream stage3-4 drift remains the shared blocker.
+  - Gotchas encountered
+    - The `uw_interp`/`uw_grid` mismatch looked like a stage-6 interpolation bug at first glance, but the run patch `ps2.mat` count proved the divergence happened earlier.
+    - The audit currently classifies `pm2.mat` and later outputs under stage5-6 even when the first causal mismatch is upstream; story work needs to trace the earliest shape/value divergence before editing stage5-6 code.
+  - Useful context
+    - Current stage8diag evidence: `select1.keep_ix` count `79132` vs golden `79227`, `weed1.ix_weed` count `71671` vs golden `77888`, and resulting `uw_interp.mat.Z` shape `(931, 2355)` vs golden `(1773, 4378)`.
+---
 ## [2026-03-14 11:36:58 UTC] - US-003: Reproduce and classify the full failing parity loop
 Thread:
 Run: 20260314-105700-3558543 (iteration 3)

@@ -1,48 +1,45 @@
 # ExecPlan
 
 ## Goal
-- Reproduce the current full-loop parity failures with the supported audit and verify surfaces, then classify the remaining mismatches by stage cluster with concrete artifact names and mismatch keys.
+- Investigate the US-004 stage 5-6 parity blockers with current audit evidence, confirm whether a source-of-truth stage-5/6 Python fix exists on this branch, and avoid speculative downstream drift.
 
 ## Scope / Non-goals
-- In scope: the audit/verify reporting path, a truthful full-loop run-root selection strategy for the required datasets, focused regression tests, and the recorded run outputs for US-003.
-- Out of scope: parity math fixes, dataset content changes, pipeline-stage algorithm changes, or broad validation-contract/doc rewrites beyond what this story needs to make the classification truthful.
+- In scope: current stage8diag audit evidence, patch-level stage-5 promotion and merged stage-5/6 inputs, required validation commands, and story-progress documentation.
+- Out of scope: stage-3/4 fixes, stage-7/8 numerical changes, dataset edits, or unverifiable stage-6 algorithm guesses.
 
 ## Invariants and contracts to preserve
-- `scripts/validate_audit.py` remains the supported audit entrypoint and still validates the required dataset contract from `pystamps.parity_contract`.
-- The required datasets remain `inputs_and_outputs/InSAR_dataset_test_stage8diag` and `inputs_and_outputs/InSAR_dataset_test`; the audit must compare concrete run outputs against those golden datasets rather than silently self-comparing them.
-- `pystamps verify` remains the underlying comparator and continues to emit artifact-level mismatches derived from `pystamps.verify`.
-- Fresh-clone unit/build validation remains `uv run pytest -q`, `uv run --with build python -m build --sdist --wheel`, and `uv run --with twine python -m twine check dist/*`.
+- Do not change stage-7/8 code to mask unchanged stage-5/6 mismatches.
+- Do not leave speculative parity code in place if the verify/audit evidence does not improve.
+- Keep the supported audit and verify surfaces unchanged: `scripts/validate_audit.py` and `pystamps verify`.
 
 ## Files / layers likely to change
-- `scripts/validate_audit.py`
-- `tests/test_validate_audit.py`
 - `PLANS.md`
-- Story run records under `.ralph/` and `inputs_and_outputs/validation_runs/`
+- `.ralph/progress.md`
+- `.ralph/activity.log`
 
 ## Ordered steps
-1. Replace the audit driver's self-compare default with deterministic full-loop run-root resolution for the required datasets and surface the chosen `run_root` in the audit payload.
-2. Add focused tests for the new run-root selection and keep the existing missing-dataset/interruption coverage passing.
-3. Run the required audit and concrete verify commands, plus a machine-readable failure classification artifact, to capture current parity evidence.
-4. Run the repo quality gates, perform a brief security/performance/regression review, then record progress and commit the story output.
+1. Reproduce the current stage8diag stage-5/6 verify failure on the concrete run copy named by `latest_audit.json`.
+2. Trace the first shape or value divergence back through `uw_interp.mat` / `uw_grid.mat` to the earliest upstream artifact.
+3. Only edit source-of-truth Python if the root cause is confirmed within stage-5/6 code and the fix measurably improves the targeted artifacts.
+4. If the earliest divergence is upstream of stage 5, leave product code unchanged, record the blocker, and keep the iteration documentation truthful.
 
 ## Validation plan
-- `uv run pytest -q tests/test_validate_audit.py tests/test_verify.py`
 - `uv run pytest -q`
 - `uv run --with build python -m build --sdist --wheel`
 - `uv run --with twine python -m twine check dist/*`
 - `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json`
+- `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/validation_runs/20260313_035019/InSAR_dataset_test_stage8diag_stage2_8 --golden ./inputs_and_outputs/InSAR_dataset_test_stage8diag`
 - `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test`
-- `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/classify_verify_failures.py --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/us003_verify_classification.json`
 
 ## Rollback / recovery
-- Revert the audit-driver/test/logging hunks together. Generated `dist/`, `build/`, and `inputs_and_outputs/validation_runs/*` artifacts can be removed if this story needs to be backed out.
+- This iteration should remain documentation-only unless a verified stage-5/6 root cause is proven. Roll back plan/progress updates together if they need to be reverted.
 
 ## Risks / blockers
-- The repo already contains unrelated loop-managed changes in `.agents/tasks/prd-full-parity-loop.json` and `.ralph/activity.log`; edits and commit review must stay tight so US-003 does not rewrite unrelated state.
-- The concrete full-loop run roots are repo-local assets. If they disappear or are renamed, the audit should fail loudly instead of silently self-comparing a golden dataset against itself.
-- Full parity comparisons are materially slower than unit tests, so targeted checks should run before the repo-wide gates.
+- Current stage8diag failures classified under stage 5-6 are fed by earlier patch-level divergence:
+  - `PATCH_1/select1.mat`: `C_ps2` shape `(80929,) != (80938,)`
+  - `PATCH_1/weed1.mat`: `ix_weed` shape `(79132,) != (79227,)`
+  - Derived patch stage-5 output count: `71671` vs golden `77888`
+- Because stage-5 promotion already receives the wrong selected/weeded population, a stage-5/6-only code change on this branch would be speculative and would not satisfy US-004 acceptance.
 
 ## Definition of done
-- The supported audit command produces a current failure artifact that points at concrete run roots and groups failures by stage cluster with artifact paths and mismatch keys.
-- The required verify command is run against a concrete full-loop run copy and its failing output is recorded.
-- Required validation commands and repo-wide gates complete with outcomes captured in the story logs.
+- Either a confirmed stage-5/6 source bug is fixed with measurable audit/verify improvement, or the story is explicitly recorded as blocked by upstream evidence with no speculative code left behind.
