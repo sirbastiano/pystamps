@@ -5,6 +5,44 @@ Started: Sat Mar 14 05:18:43 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-03-14 11:36:58 UTC] - US-003: Reproduce and classify the full failing parity loop
+Thread:
+Run: 20260314-105700-3558543 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260314-105700-3558543-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260314-105700-3558543-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: a1ca13d fix(validation): audit concrete parity run roots
+- Post-commit status: clean after the follow-up progress/log commit for this entry
+- Verification:
+  - Command: `uv run pytest -q tests/test_validate_audit.py tests/test_verify.py` -> PASS
+  - Command: `uv run pytest -q` -> PASS
+  - Command: `uv run --with build python -m build --sdist --wheel` -> PASS
+  - Command: `uv run --with twine python -m twine check dist/*` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test` -> FAIL
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/classify_verify_failures.py --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/us003_verify_classification.json` -> FAIL
+- Files changed:
+  - .agents/tasks/prd-full-parity-loop.json
+  - .ralph/activity.log
+  - PLANS.md
+  - scripts/validate_audit.py
+  - tests/test_validate_audit.py
+- What was implemented
+  - Made `scripts/validate_audit.py` resolve concrete full-loop run roots for the required datasets instead of silently self-comparing the golden datasets, and recorded `run_root` plus `run_source` in `latest_audit.json`.
+  - Added focused regression coverage for deterministic run-root selection and for the new `missing_run_copy` failure mode.
+  - Re-ran the supported audit and recorded the current failure split: `InSAR_dataset_test_stage8diag` is blocked by a combination of stage 3-4 residuals (`PATCH_1/select1.mat.C_ps2`, `PATCH_1/weed1.mat.ix_weed`), stage 5-6 unwrap drift (`pm2.mat.C_ps`, `phuw2.mat.msd`, `ifgstd2.mat.ifg_std`, `uw_grid.mat.grid_ij`, `uw_interp.mat.Z`), and stage 7-8 downstream mismatches (`scla2.mat.C_ps_uw`, `mean_v.mat.m`, `uw_space_time.mat.dph_noise`), while `RUN_FULL_GATE_1e10` against `InSAR_dataset_test` is currently blocked only by the upstream stage 3-4 residual `PATCH_3/weed1.mat.ps_max`.
+  - Recorded the concrete verify classification in `inputs_and_outputs/validation_runs/us003_verify_classification.json` and refreshed `inputs_and_outputs/validation_runs/latest_audit.json` with the same truthful parity evidence.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - The supported audit command was previously reporting false success because it defaulted to verifying each golden dataset against itself when no explicit run root was supplied.
+    - The current branch’s concrete `InSAR_dataset_test` blocker is upstream stage 3-4 only, while the stage8diag branch still carries a mixed upstream + unwrap + downstream failure stack.
+  - Gotchas encountered
+    - The working activity logger command from repo root is `ralph log "message"`; the prompt’s `/shared/home/.../pySTAMPS/ralph log` path is not directly executable here.
+    - The build gate rewrites generated `_version.py` files and emits new `dist/` artifacts, so those validation byproducts need to be cleaned back out before commit.
+  - Useful context
+    - The stage8diag audit resolved the latest available full-loop copy at `inputs_and_outputs/validation_runs/20260313_035019/InSAR_dataset_test_stage8diag_stage2_8`, which is why its audit payload now shows a concrete failing `run_root` instead of the golden dataset path.
+---
 ## [2026-03-14 11:22:19 UTC] - US-002: Make standalone validation gates truthful and reproducible
 Thread:
 Run: 20260314-105700-3558543 (iteration 2)
