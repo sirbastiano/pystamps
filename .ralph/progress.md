@@ -374,3 +374,48 @@ PY` -> PASS
   - Useful context
     - Full verify still reports unrelated residuals (`pm2.mat`, `phuw2.mat`, `uw_grid.mat`, `uw_space_time.mat`, `uw_interp.mat`), but the audit found direct Stage-7 solve-path candidates first, so the next fix should stay scoped to Stage 7.
 ---
+## [2026-03-14 11:59:35 UTC] - US-005: Resolve stage 7-8 numerical parity only after upstream blockers are contained
+Thread:
+Run: 20260314-105700-3558543 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260314-105700-3558543-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260314-105700-3558543-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 0366318 docs(parity): record us-005 contained audit
+- Post-commit status: `clean`
+- Verification:
+  - Command: `uv run pytest -q` -> PASS
+  - Command: `uv run --with build python -m build --sdist --wheel` -> PASS
+  - Command: `uv run --with twine python -m twine check dist/*` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test` -> FAIL
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python - <<'PY'
+from pathlib import Path
+from pystamps.config import ToleranceConfig
+from pystamps.verify import _compare_mat
+run = Path('inputs_and_outputs/RUN_FULL_GATE_1e10')
+golden = Path('inputs_and_outputs/InSAR_dataset_test')
+tol = ToleranceConfig()
+for rel in ['scla2.mat', 'mean_v.mat', 'uw_space_time.mat']:
+    ok, message = _compare_mat(run / rel, golden / rel, tol)
+    print(f'{rel}\\t{ok}\\t{message}')
+PY` -> PASS
+- Files changed:
+  - .agents/tasks/prd-full-parity-loop.json
+  - .ralph/activity.log
+  - PLANS.md
+  - .ralph/progress.md
+- What was implemented
+  - Refreshed the required audit and verify evidence for US-005 instead of relying on the stale stage-7 drift report.
+  - Proved on the contained full-run copy `RUN_FULL_GATE_1e10` that `scla2.mat`, `mean_v.mat`, and `uw_space_time.mat` already match the golden dataset exactly under the repository tolerance contract.
+  - Left stage-7/8 product code unchanged because the refreshed failures are upstream and out of scope: the audit still fails on the stage8diag dataset due stage-3/4 and stage-5/6 shape drift, and the full verify still fails only on `PATCH_3/weed1.mat.ps_max`.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - Stage-7/8 parity on `RUN_FULL_GATE_1e10` is already green once upstream blockers are contained; direct MAT comparison reports `Matched 5 numeric keys`, `Matched 1 numeric keys`, and `Matched 6 numeric keys` for `scla2.mat`, `mean_v.mat`, and `uw_space_time.mat`.
+    - The refreshed `latest_audit.json` still reports stage8diag stage-7/8 failures, but they remain coupled to earlier shape drift in `PATCH_1/select1.mat`, `PATCH_1/weed1.mat`, `pm2.mat`, and `uw_interp.mat`.
+  - Gotchas encountered
+    - The required activity logger is `ralph log "message"` from `PATH`; `./ralph` does not exist in the project directory.
+    - Packaging validation rewrites generated `_version.py` metadata and emits new `dist/` artifacts; those side effects should be cleaned before committing story work.
+  - Useful context
+    - This iteration does not justify a stage-7/8 source fix because there is no contained-run mismatch left to improve; the remaining full-loop failures are owned by upstream stories and keep the global audit/verify gates red.
+---

@@ -86,3 +86,5 @@
 [2026-03-14 11:53:04] ITERATION 4 end (duration=908s)
 [2026-03-14 11:53:10] ITERATION 5 start (mode=build story=US-005)
 [2026-03-14 11:57:09] US-005 iteration 5: confirmed on RUN_FULL_GATE_1e10 that scla2.mat, mean_v.mat, and uw_space_time.mat match golden; full verify fails only on PATCH_3/weed1.mat upstream residual.
+[2026-03-14 12:00:22] US-005 verification complete: pytest/build/twine passed, direct RUN_FULL_GATE_1e10 stage7-8 comparisons match golden, and the required audit/verify remain blocked only by upstream residuals.
+[2026-03-14 12:00:22] US-005 progress updated: recorded no-code stage7-8 outcome, gate results, and upstream blocker context in .ralph/progress.md.
