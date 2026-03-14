@@ -1,16 +1,16 @@
 # ExecPlan
 
 ## Goal
-- Investigate the US-004 stage 5-6 parity blockers with current audit evidence, confirm whether a source-of-truth stage-5/6 Python fix exists on this branch, and avoid speculative downstream drift.
+- Resolve US-005 by rerunning the current parity surfaces, confirming whether stage 7-8 still have independent numerical drift, and refusing speculative downstream edits when the contained full-run copy already matches golden.
 
 ## Scope / Non-goals
-- In scope: current stage8diag audit evidence, patch-level stage-5 promotion and merged stage-5/6 inputs, required validation commands, and story-progress documentation.
-- Out of scope: stage-3/4 fixes, stage-7/8 numerical changes, dataset edits, or unverifiable stage-6 algorithm guesses.
+- In scope: refreshed audit evidence for `scla2.mat`, `mean_v.mat`, and `uw_space_time.mat`; required repo gates; and truthful story-progress documentation.
+- Out of scope: stage-3/4 fixes, stage-5/6 fixes, dataset edits, or any stage-7/8 source change that is not supported by fresh before/after evidence on the targeted keys.
 
 ## Invariants and contracts to preserve
-- Do not change stage-7/8 code to mask unchanged stage-5/6 mismatches.
-- Do not leave speculative parity code in place if the verify/audit evidence does not improve.
-- Keep the supported audit and verify surfaces unchanged: `scripts/validate_audit.py` and `pystamps verify`.
+- Do not modify stage-7/8 code unless a rerun shows an actual stage-7/8 mismatch on a contained run copy.
+- Do not treat stage8diag shape drift as standalone stage-7/8 evidence when upstream patch and unwrap artifacts already diverge.
+- Keep the supported validation contract unchanged: `scripts/validate_audit.py` and `pystamps verify` remain the source-of-truth gates.
 
 ## Files / layers likely to change
 - `PLANS.md`
@@ -18,28 +18,29 @@
 - `.ralph/activity.log`
 
 ## Ordered steps
-1. Reproduce the current stage8diag stage-5/6 verify failure on the concrete run copy named by `latest_audit.json`.
-2. Trace the first shape or value divergence back through `uw_interp.mat` / `uw_grid.mat` to the earliest upstream artifact.
-3. Only edit source-of-truth Python if the root cause is confirmed within stage-5/6 code and the fix measurably improves the targeted artifacts.
-4. If the earliest divergence is upstream of stage 5, leave product code unchanged, record the blocker, and keep the iteration documentation truthful.
+1. Refresh the full audit and direct verify evidence on the current branch.
+2. Compare `RUN_FULL_GATE_1e10` against `InSAR_dataset_test` for `scla2.mat`, `mean_v.mat`, and `uw_space_time.mat` to confirm whether stage-7/8 parity is already green once upstream blockers are contained.
+3. Only edit source-of-truth Python if a fresh rerun shows a real stage-7/8 mismatch and the change measurably improves the exact failing key.
+4. If stage-7/8 already match on the contained run, leave product code unchanged and record that the remaining gate failures are upstream/out-of-scope for US-005.
 
 ## Validation plan
 - `uv run pytest -q`
 - `uv run --with build python -m build --sdist --wheel`
 - `uv run --with twine python -m twine check dist/*`
 - `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json`
-- `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/validation_runs/20260313_035019/InSAR_dataset_test_stage8diag_stage2_8 --golden ./inputs_and_outputs/InSAR_dataset_test_stage8diag`
 - `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run pystamps verify --run inputs_and_outputs/RUN_FULL_GATE_1e10 --golden ./inputs_and_outputs/InSAR_dataset_test`
+- `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python - <<'PY' ... _compare_mat(...) for scla2.mat, mean_v.mat, uw_space_time.mat ... PY`
 
 ## Rollback / recovery
-- This iteration should remain documentation-only unless a verified stage-5/6 root cause is proven. Roll back plan/progress updates together if they need to be reverted.
+- This iteration should remain evidence-only unless fresh contained-run evidence proves a stage-7/8 source bug. Roll back plan/progress/activity updates together if the documentation needs correction.
 
 ## Risks / blockers
-- Current stage8diag failures classified under stage 5-6 are fed by earlier patch-level divergence:
+- The refreshed audit still shows stage8diag downstream file failures, but they are coupled to upstream stage-3/4 and stage-5/6 divergence:
   - `PATCH_1/select1.mat`: `C_ps2` shape `(80929,) != (80938,)`
   - `PATCH_1/weed1.mat`: `ix_weed` shape `(79132,) != (79227,)`
-  - Derived patch stage-5 output count: `71671` vs golden `77888`
-- Because stage-5 promotion already receives the wrong selected/weeded population, a stage-5/6-only code change on this branch would be speculative and would not satisfy US-004 acceptance.
+  - `pm2.mat`: `C_ps` shape `(71671,) != (69009,)`
+  - `uw_interp.mat`: `Z` shape `(931, 2355) != (1773, 4378)`
+- On the contained full-run copy `RUN_FULL_GATE_1e10`, the direct stage-7/8 artifact comparisons already match golden and the only failing verify artifact is upstream: `PATCH_3/weed1.mat.ps_max` with `max_abs=0.000147104`.
 
 ## Definition of done
-- Either a confirmed stage-5/6 source bug is fixed with measurable audit/verify improvement, or the story is explicitly recorded as blocked by upstream evidence with no speculative code left behind.
+- Either a confirmed stage-7/8 source bug is fixed with measurable improvement on the exact failing key, or the story is truthfully recorded as requiring no stage-7/8 code change because fresh contained-run evidence shows those artifacts already match golden.

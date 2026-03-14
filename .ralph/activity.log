@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-03-14 11:53:06 | run=20260314-105700-3558543 | iter=4 | mode=build | story=US-004 | duration=908s | status=success
 - 2026-03-14 11:37:53 | run=20260314-105700-3558543 | iter=3 | mode=build | story=US-003 | duration=776s | status=success
 - 2026-03-14 11:24:54 | run=20260314-105700-3558543 | iter=2 | mode=build | story=US-002 | duration=843s | status=success
 - 2026-03-14 11:10:49 | run=20260314-105700-3558543 | iter=1 | mode=build | story=US-001 | duration=829s | status=success
@@ -82,3 +83,6 @@
 [2026-03-14 11:45:25] US-004 analysis: stage8diag stage5-6 artifacts are downstream of upstream patch-level drift. Reproduced that PATCH_1 select1.keep_ix/weed1.ix_weed counts differ from golden before stage5 writes ps2/pm2, so no speculative stage5/6 code change was applied.
 [2026-03-14 11:50:28] US-004 verification complete: pytest/build/twine passed; refreshed audit plus concrete stage8diag and RUN_FULL_GATE verifies confirm stage5-6 mismatches are downstream of upstream select1/weed1 count drift.
 [2026-03-14 11:50:31] US-004 progress update recorded: documented upstream blocker evidence, no speculative stage5-6 code changes, and pending docs-only commit for this blocked iteration.
+[2026-03-14 11:53:04] ITERATION 4 end (duration=908s)
+[2026-03-14 11:53:10] ITERATION 5 start (mode=build story=US-005)
+[2026-03-14 11:57:09] US-005 iteration 5: confirmed on RUN_FULL_GATE_1e10 that scla2.mat, mean_v.mat, and uw_space_time.mat match golden; full verify fails only on PATCH_3/weed1.mat upstream residual.

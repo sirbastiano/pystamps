@@ -172,7 +172,7 @@
     {
       "id": "US-004",
       "title": "Eliminate stage 5-6 blockers that prevent full-loop parity",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [
         "US-003"
       ],
@@ -185,13 +185,13 @@
         "Negative case: do not change stage 7-8 code to paper over unchanged stage 5-6 mismatches when the audit still attributes the blocker to unwrap/smoothing artifacts."
       ],
       "startedAt": "2026-03-14T11:37:55.737488+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-03-14T11:37:55.737505+00:00"
+      "completedAt": "2026-03-14T11:53:06.871533+00:00",
+      "updatedAt": "2026-03-14T11:53:06.871513+00:00"
     },
     {
       "id": "US-005",
       "title": "Resolve stage 7-8 numerical parity only after upstream blockers are contained",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-004"
       ],
@@ -202,7 +202,10 @@
         "If a proposed numerical fix does not reduce the targeted mismatch, it must be reverted before story completion.",
         "Example: a stage 7 solve-path fix reduces the reported max_abs or wrapped_max_abs on the exact failing keys and leaves packaging/unit gates green.",
         "Negative case: a change that keeps `C_ps_uw` flat, worsens `mean_v.mat.m`, or shifts drift without reducing the full-loop failure count does not satisfy the story."
-      ]
+      ],
+      "startedAt": "2026-03-14T11:53:09.483018+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-03-14T11:53:09.483036+00:00"
     },
     {
       "id": "US-006",
