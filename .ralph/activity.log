@@ -68,3 +68,5 @@
 [2026-03-14 11:15:14] US-002 verification: running build gate and locating a concrete verify run copy.
 [2026-03-14 11:16:06] US-002 verification: corrected release-scope wording after sdist inspection and rerunning contract test.
 [2026-03-14 11:21:58] US-002 verification: full pytest/build/twine/audit complete; canonical verify passed using InSAR_dataset_test as run and golden. RUN_FULL_GATE_1e10 remains a separate parity failure.
+[2026-03-14 11:23:55] US-002 progress update: appending run summary with commit and gate results.
+[2026-03-14 11:24:18] US-002 progress update complete: recorded commit f86d124 and final validation matrix in .ralph/progress.md.
