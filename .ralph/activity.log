@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-03-14 11:10:49 | run=20260314-105700-3558543 | iter=1 | mode=build | story=US-001 | duration=829s | status=success
 - 2026-03-14 09:51:44 | run=20260314-091325-3523629 | iter=2 | mode=build | story=US-005 | duration=466s | status=success
 - 2026-03-14 09:43:55 | run=20260314-091325-3523629 | iter=1 | mode=build | story=US-001 | duration=1830s | status=success
 - 2026-03-14 07:39:09 | run=20260314-052029-3444733 | iter=4 | mode=build | story=US-004 | duration=921s | status=success
@@ -59,3 +60,11 @@
 [2026-03-14 11:01:07] US-001 targeted tests passed; starting required repo-wide validation and locating a concrete run copy for the verify gate.
 [2026-03-14 11:06:16] US-001 review fix applied: full_validation is now the required workflow reported by the audit contract, with unsupported dataset selection covered by tests. Re-running required gates.
 [2026-03-14 11:10:21] US-001 progress entry appended with commit and validation details after the final gate rerun.
+[2026-03-14 11:10:49] ITERATION 1 end (duration=829s)
+[2026-03-14 11:10:52] ITERATION 2 start (mode=build story=US-002)
+[2026-03-14 11:11:22] US-002 audit: inspecting README, packaging metadata, manifests, and validation tests.
+[2026-03-14 11:12:28] US-002 pre-change check: building current sdist/wheel to inspect packaging surface.
+[2026-03-14 11:14:50] US-002 verification: running targeted dataset/doc/packaging contract tests.
+[2026-03-14 11:15:14] US-002 verification: running build gate and locating a concrete verify run copy.
+[2026-03-14 11:16:06] US-002 verification: corrected release-scope wording after sdist inspection and rerunning contract test.
+[2026-03-14 11:21:58] US-002 verification: full pytest/build/twine/audit complete; canonical verify passed using InSAR_dataset_test as run and golden. RUN_FULL_GATE_1e10 remains a separate parity failure.

@@ -24,8 +24,9 @@
     <section class="card">
       <h2>Running tests</h2>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pytest -q</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pytest -q tests/test_dataset.py</code></pre>
-      <p>The repository includes committed unit tests. Dataset-backed parity tests are kept in-tree as optional checks and skip cleanly when the local validation datasets are absent.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run --with build python -m build --sdist --wheel
+uv run --with twine python -m twine check dist/*</code></pre>
+      <p>The repository includes committed unit tests. Dataset-backed parity tests are kept in-tree as optional checks and skip cleanly when the local validation datasets are absent, so <span class="code-inline">uv run pytest -q</span> remains the clean-checkout gate.</p>
     </section>
 
     <section class="card">
@@ -46,14 +47,19 @@
     <section class="card">
       <h2>Validation workflow</h2>
       <p>Stage verification contract and audit metadata are represented by <span class="code-inline">pystamps.parity_contract</span> constants and exported helpers.</p>
-      <p>The parity audit requires local validation datasets. When those datasets are not present, use the default unit test slice instead of the audit commands below.</p>
+      <p>The parity audit requires local validation datasets. When those datasets are not present, stop at the unit/build/package commands above; do not guess a Makefile, CI wrapper, or reduced audit dataset list.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">python - <<'PY'
 from pystamps.parity_contract import build_parity_contract
 print(build_parity_contract('inputs_and_outputs'))
 PY</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run python scripts/validate_audit.py \
-  --datasets inputs_and_outputs/InSAR_dataset_test \
-  --output inputs_and_outputs/validation_runs/latest_audit.json</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  uv run python scripts/validate_audit.py \
+    --datasets \
+      inputs_and_outputs/InSAR_dataset_test_stage8diag \
+      inputs_and_outputs/InSAR_dataset_test \
+    --output inputs_and_outputs/validation_runs/latest_audit.json</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  uv run pystamps verify --run RUN_COPY --golden ./inputs_and_outputs/InSAR_dataset_test</code></pre>
     </section>
   </main>
 </div>

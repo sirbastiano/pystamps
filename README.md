@@ -22,7 +22,7 @@ External prerequisites are not bundled in the package:
 - a separate `StaMPS` checkout only when using `pystamps list-legacy`
 - external datasets and golden artifacts for parity validation
 
-The wheel and sdist ship the `pystamps` Python package only. Large datasets under `inputs_and_outputs`, scratch runs under `tmp`, and the vendored `StaMPS` tree remain repository assets and are not included in release artifacts.
+The wheel ships the `pystamps` Python package and package metadata. The sdist ships the Python source tree and tracked docs needed to rebuild that package, while generated release outputs under `dist/`, `build/`, and local parity datasets under `inputs_and_outputs/` remain outside the release artifacts.
 
 ## Development Setup
 
@@ -30,14 +30,23 @@ The wheel and sdist ship the `pystamps` Python package only. Large datasets unde
 uv sync
 ```
 
-Core validation commands:
+Fresh-clone validation commands:
 
 ```bash
 uv run pytest -q
-uv run python scripts/validate_audit.py \
-  --datasets inputs_and_outputs/InSAR_dataset_test
 uv run --with build python -m build --sdist --wheel
 uv run --with twine python -m twine check dist/*
+```
+
+Optional local-dataset parity validation:
+
+```bash
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  uv run python scripts/validate_audit.py \
+    --datasets \
+      inputs_and_outputs/InSAR_dataset_test_stage8diag \
+      inputs_and_outputs/InSAR_dataset_test \
+    --output inputs_and_outputs/validation_runs/latest_audit.json
 ```
 
 Manual release uploads:
@@ -169,11 +178,11 @@ uv run --with twine python -m twine upload --repository testpypi dist/*
 uv run --with twine python -m twine upload dist/*
 ```
 
-Build outputs are written to `dist/` as one wheel and one sdist. The release process is manual and tag-driven; see [docs/release.md](docs/release.md) for the full checklist.
+Build outputs are written to `dist/` as one wheel and one sdist. Generated release directories such as `dist/` and `build/` are excluded from future source builds so packaging validation stays reproducible. The release process is manual and tag-driven; see [docs/release.md](docs/release.md) for the full checklist.
 
 ## Notes
 
 - Stages 1-8 now execute in Python if artifacts are missing.
 - The checked-in parity workflow is expected to reproduce the golden StaMPS artifacts exactly on the required datasets.
-- This repo includes the benchmark dataset under `inputs_and_outputs/InSAR_dataset_test`.
+- Local parity datasets under `inputs_and_outputs/` are optional repo assets used for audit and verify workflows; a fresh clone can still run the unit/build/package gates without them.
 - Repo-only developer workflows such as `scripts/validate_audit.py` require the full source tree, not just an installed wheel.

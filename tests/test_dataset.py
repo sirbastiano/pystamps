@@ -8,10 +8,13 @@ from pystamps.io.dataset import discover_dataset, infer_merged_stage, infer_patc
 DATASET = Path("inputs_and_outputs/InSAR_dataset_test")
 
 
-pytestmark = pytest.mark.skipif(
-    not DATASET.exists(),
-    reason="requires local parity dataset under inputs_and_outputs/InSAR_dataset_test",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not DATASET.exists(),
+        reason="requires local parity dataset under inputs_and_outputs/InSAR_dataset_test",
+    ),
+    pytest.mark.dataset_parity,
+]
 
 
 def test_discover_dataset_has_patches() -> None:

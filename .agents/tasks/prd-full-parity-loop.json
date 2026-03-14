@@ -116,7 +116,7 @@
     {
       "id": "US-001",
       "title": "Stabilize the audit entrypoint and validation contract",
-      "status": "in_progress",
+      "status": "done",
       "dependsOn": [],
       "description": "As a maintainer, I want a single audit driver and explicit contract so the full parity loop can run unattended and fail deterministically when requirements are not met.",
       "acceptanceCriteria": [
@@ -127,13 +127,13 @@
         "Negative case: if one required dataset path is missing, the audit command exits non-zero and reports the missing dataset instead of hanging, partially succeeding, or silently skipping it."
       ],
       "startedAt": "2026-03-14T10:57:00.752166+00:00",
-      "completedAt": null,
-      "updatedAt": "2026-03-14T10:57:00.752202+00:00"
+      "completedAt": "2026-03-14T11:10:49.809698+00:00",
+      "updatedAt": "2026-03-14T11:10:49.809669+00:00"
     },
     {
       "id": "US-002",
       "title": "Make standalone validation gates truthful and reproducible",
-      "status": "open",
+      "status": "in_progress",
       "dependsOn": [
         "US-001"
       ],
@@ -144,7 +144,10 @@
         "Package metadata and manifests exclude generated or recursive release artifacts that would corrupt the release validation surface.",
         "Example: a contributor following the updated docs can run unit validation and packaging validation without guessing a Makefile or hidden CI surface.",
         "Negative case: docs must not reference nonexistent task runners, silently ignored config keys, or fallback behaviors that the code does not implement."
-      ]
+      ],
+      "startedAt": "2026-03-14T11:10:51.902689+00:00",
+      "completedAt": null,
+      "updatedAt": "2026-03-14T11:10:51.902704+00:00"
     },
     {
       "id": "US-003",

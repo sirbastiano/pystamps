@@ -3,11 +3,21 @@ include LICENSE
 recursive-include docs *.md
 prune dist
 prune build
+prune .pytest_cache
+prune .ruff_cache
+prune .mypy_cache
+prune .venv
+prune .codex
+prune .github
 prune inputs_and_outputs
 prune scripts
 prune tests
 prune tmp
 prune StaMPS
+prune templates
+prune pystamps.egg-info
 prune .agents
 prune .runs
 prune .ralph
+global-exclude __pycache__
+global-exclude *.py[cod]
