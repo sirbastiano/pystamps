@@ -10,237 +10,79 @@
 <body>
 <div class="site">
   <aside class="sidebar">
-    <div class="logo"><span class="logo-mark"></span><h1>pySTAMPS Docs</h1></div>
-    <small>Architecture Reference</small>
+    <div class="logo"><img src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>System structure, module roles, and data flow.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
-      <div class="nav-group"><h2>API</h2><ul class="nav-list"><li><a href="api/pystamps.html">Package</a></li><li><a href="api/configuration.html">config</a></li><li><a href="api/cli.html">cli</a></li><li><a href="api/status.html">status</a></li><li><a href="api/verify.html">verify</a></li><li><a href="api/parity_contract.html">parity_contract</a></li><li><a href="api/io_dataset.html">io.dataset</a></li><li><a href="api/io_mat.html">io.mat</a></li><li><a href="api/runtime.html">runtime</a></li><li><a href="api/kernels.html">kernels</a></li><li><a href="api/pipeline_types.html">pipeline.types</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li><li><a href="api/compat_legacy.html">compat.legacy</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li></ul></div>
     </nav>
   </aside>
   <main class="content">
     <div class="breadcrumb">Home / Architecture</div>
-    <h1 id="architecture">Architecture</h1>
 
-    <section class="card" id="summary">
-      <h2 id="summary-title">High-level architecture summary</h2>
-      <p>Execution is split into four layers: command orchestration, pipeline scheduling, stage-portable algorithms, and kernel execution backends.</p>
-      <ul>
-        <li><strong>Orchestrator:</strong> CLI resolves config and command intent.</li>
-        <li><strong>Scheduler:</strong> Stage graph resolves patch and merged workflows.</li>
-        <li><strong>Runtime:</strong> Hybrid executor handles IO and CPU parallelism.</li>
-        <li><strong>Numeric kernels:</strong> Stage-7 and stage-8 kernels with optional GPU fallback.</li>
-      </ul>
+    <section class="hero">
+      <span class="badge">System map</span>
+      <h1>pySTAMPS is layered by orchestration, stage execution, I/O, and verification.</h1>
+      <p>The architecture is easiest to understand if you separate control flow from numerical work. The CLI decides intent, the pipeline decides stage scheduling, the ported stage functions perform scientific transformations, and verification checks the results against a golden reference.</p>
     </section>
 
-    <section class="card" id="folder-structure">
-      <h2 id="folder-title">Folder structure</h2>
-      <div class="table-wrap">
-      <table>
-        <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
-        <tbody>
-          <tr><td><code>pystamps/cli.py</code></td><td>Command-line interface and dispatcher</td></tr>
-          <tr><td><code>pystamps/config.py</code></td><td>Config datamodel and YAML/JSON loading</td></tr>
-          <tr><td><code>pystamps/pipeline/</code></td><td>Stage definitions and ported stage implementations</td></tr>
-          <tr><td><code>pystamps/runtime/</code></td><td>Hybrid execution primitives</td></tr>
-          <tr><td><code>pystamps/io/</code></td><td>Dataset and MAT I/O helpers</td></tr>
-          <tr><td><code>pystamps/kernels/</code></td><td>Kernel registry and backend selector</td></tr>
-          <tr><td><code>docs/</code></td><td>Generated static documentation site</td></tr>
-        </tbody>
-      </table>
+    <section class="card">
+      <h2>Core layers</h2>
+      <div class="quick-links">
+        <div class="highlight-card"><h3>CLI layer</h3><p><span class="code-inline">pystamps.cli</span> parses commands and builds the execution context.</p></div>
+        <div class="highlight-card"><h3>Scheduling layer</h3><p><span class="code-inline">pystamps.pipeline.stages</span> chooses the stage range, checks existing artifacts, and records results.</p></div>
+        <div class="highlight-card"><h3>Stage layer</h3><p><span class="code-inline">pystamps.pipeline.ported</span> contains the concrete stage implementations and many stage-specific helpers.</p></div>
+        <div class="highlight-card"><h3>Support layer</h3><p><span class="code-inline">pystamps.io</span>, <span class="code-inline">pystamps.runtime</span>, <span class="code-inline">pystamps.kernels</span>, and <span class="code-inline">pystamps.verify</span> provide the shared infrastructure.</p></div>
       </div>
     </section>
 
-    <section class="card" id="modules-responsibilities">
-      <h2 id="modules-title">Core modules and responsibilities</h2>
-      <h3 id="mod-cli">CLI and control</h3>
-      <p><span class="code-inline">pystamps.cli</span> exposes command parsing and dispatch for <span class="code-inline">status</span>, <span class="code-inline">run</span>, <span class="code-inline">verify</span>, and <span class="code-inline">list-legacy</span>.</p>
-      <h3 id="mod-pipeline">Pipeline orchestration</h3>
-      <p><span class="code-inline">pystamps.pipeline.stages</span> defines stage metadata and dispatch; <span class="code-inline">pystamps.pipeline.ported</span> implements stage behavior.</p>
-      <h3 id="mod-runtime">Execution and backends</h3>
-      <p><span class="code-inline">pystamps.runtime.executor</span> provides thread/process pools and the task-kind interface. <span class="code-inline">pystamps.kernels</span> chooses CPU/GPU/native implementations via registry.</p>
-      <h3 id="mod-io">I/O and verification</h3>
-      <p><span class="code-inline">pystamps.io.dataset</span> discovers dataset layout; <span class="code-inline">pystamps.io.mat</span> reads/writes MATLAB files; <span class="code-inline">pystamps.verify</span> compares run output with golden datasets.</p>
+    <section class="diagram-card">
+      <h2>Workflow graph in Figma</h2>
+      <p>The beginner workflow graph is useful here too because it shows how status inspection, execution, and verification connect.</p>
+      <a class="diagram-link" href="https://www.figma.com/online-whiteboard/create-diagram/2cd2c194-7c86-4c16-9a10-d964fc5a1b40?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=&request_id=72140c10-d529-4949-8a78-a575e6a13883">
+        <strong>Open the architecture-adjacent workflow graph in Figma</strong>
+        <p>Use it as a visual companion to the module and data-flow sections below.</p>
+      </a>
     </section>
 
-    <section class="card" id="data-flow">
-      <h2 id="dataflow-title">Data flow</h2>
+    <section class="card">
+      <h2>Folder structure</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>pystamps/cli.py</code></td><td>Command-line interface and dispatch</td></tr>
+            <tr><td><code>pystamps/config.py</code></td><td>Typed runtime, tolerance, and compatibility configuration</td></tr>
+            <tr><td><code>pystamps/pipeline/</code></td><td>Pipeline orchestration, typed results, and stage implementations</td></tr>
+            <tr><td><code>pystamps/io/</code></td><td>Dataset discovery and MATLAB file I/O helpers</td></tr>
+            <tr><td><code>pystamps/runtime/</code></td><td>Hybrid thread/process execution primitives</td></tr>
+            <tr><td><code>pystamps/kernels/</code></td><td>Kernel registry and CPU/GPU dispatch</td></tr>
+            <tr><td><code>pystamps/verify.py</code></td><td>Golden-dataset comparison and mismatch classification</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Data flow</h2>
       <ol>
-        <li>CLI receives command and merges overrides into <span class="code-inline">RunConfig</span>.</li>
-        <li>Dataset root is discovered into patch list and merged workspace.</li>
-        <li>Each selected stage checks expected artifacts; if missing it executes implementation or replay mode.</li>
-        <li>Stage functions produce stage-specific MAT payloads and debug/cached artifacts.</li>
-        <li>Verification compares produced MAT keys via numeric recursive extraction and tolerances.</li>
+        <li>The CLI receives a command such as <span class="code-inline">run</span>, <span class="code-inline">status</span>, or <span class="code-inline">verify</span>.</li>
+        <li>A <span class="code-inline">RunConfig</span> is loaded, and a <span class="code-inline">PipelineContext</span> is created for pipeline work.</li>
+        <li>The dataset root is discovered into patch directories and merged-stage artifacts.</li>
+        <li>Selected stages either reuse existing outputs or execute the ported implementation.</li>
+        <li>Verification recursively compares numeric payloads in MATLAB files and summarizes failures for debugging.</li>
       </ol>
-      <div class="callout tip">If an artifact already exists, the scheduler records <span class="code-inline">skipped_existing</span> and does not re-run the stage.</div>
+      <div class="callout tip">This artifact-driven design is why pySTAMPS is good at resumable workflows: it can skip work when expected stage outputs are already present.</div>
     </section>
 
-    <section class="card" id="external-integrations">
-      <h2 id="external-title">External integrations</h2>
+    <section class="card">
+      <h2>Design decisions that matter in practice</h2>
       <ul>
-        <li>Optional GPU backend via <span class="code-inline">cupy</span> (enabled through dependency profile).</li>
-        <li>Legacy helper binaries are not required for all execution paths but may be used in external workflows; discoverable via <span class="code-inline">list-legacy</span>.</li>
-        <li>Compatibility mode supports strict reference replay from another run directory using <span class="code-inline">compat.reference_root</span>.</li>
+        <li><strong>Stage ranges are explicit:</strong> you can isolate late stages when debugging or benchmarking.</li>
+        <li><strong>Execution is hybrid:</strong> the runtime can use threads for I/O-heavy work and processes for CPU-heavy work.</li>
+        <li><strong>Verification is numeric:</strong> comparisons are not text diffs but tolerance-aware checks on MATLAB payloads.</li>
+        <li><strong>Compatibility is configurable:</strong> strict reference replay can copy known-good artifacts into a run tree before stage execution.</li>
       </ul>
-    </section>
-
-    <section class="card" id="design-patterns">
-      <h2 id="patterns-title">Design patterns</h2>
-      <ul>
-        <li><strong>Dataclass-oriented configuration:</strong> immutable-ish typed containers for context and results.</li>
-        <li><strong>Command/strategy separation:</strong> parsing versus execution separated in <span class="code-inline">cli</span>.</li>
-        <li><strong>Backend registry:</strong> named kernel implementations resolved by backend string.</li>
-        <li><strong>Artifact-driven idempotency:</strong> stage results are discovered by expected files.</li>
-      </ul>
-    </section>
-
-    <section class="card" id="figma-diagrams">
-      <h2 id="diagrams-title">Figma diagram specifications</h2>
-      <p>Embed the following JSON blocks in documentation artifacts or import into tooling that creates Figma node sets.</p>
-
-      <pre><button class="copy-btn">Copy</button><code class="language-json">{
-  "name": "High-level system architecture",
-  "purpose": "Show CLI -> pipeline context -> stage executor -> kernels and I/O boundaries",
-  "nodes": [
-    {"id": "cli", "label": "pystamps.cli", "type": "entrypoint"},
-    {"id": "config", "label": "pystamps.config", "type": "config"},
-    {"id": "pipeline", "label": "pystamps.pipeline", "type": "orchestrator"},
-    {"id": "runtime", "label": "pystamps.runtime.executor", "type": "executor"},
-    {"id": "ports", "label": "pystamps.pipeline.ported", "type": "compute"},
-    {"id": "kernels", "label": "pystamps.kernels", "type": "kernel"},
-    {"id": "io", "label": "pystamps.io", "type": "storage"},
-    {"id": "verify", "label": "pystamps.verify", "type": "qa"}
-  ],
-  "edges": [
-    {"source": "cli", "target": "config", "label": "load config"},
-    {"source": "cli", "target": "pipeline", "label": "dispatch command"},
-    {"source": "pipeline", "target": "runtime", "label": "submit tasks"},
-    {"source": "runtime", "target": "ports", "label": "run stage"},
-    {"source": "ports", "target": "kernels", "label": "accelerated compute"},
-    {"source": "ports", "target": "io", "label": "read/write payloads"},
-    {"source": "pipeline", "target": "verify", "label": "status/progress/results"}
-  ],
-  "layout": "layered-diagram (top-down)",
-  "theme": {
-    "bg": "#0f1117",
-    "surface": "#161a24",
-    "border": "#2a3244",
-    "accent": "#66a1ff"
-  },
-  "grouping": [
-    {"name": "control-plane", "members": ["cli", "config"]},
-    {"name": "compute-plane", "members": ["pipeline", "runtime", "ports", "kernels"]},
-    {"name": "data-plane", "members": ["io", "verify"]}
-  ]
-}</code></pre>
-
-      <pre><button class="copy-btn">Copy</button><code class="language-json">{
-  "name": "Module dependency graph",
-  "purpose": "Package-level module import and dependency relationships",
-  "nodes": [
-    {"id": "pystamps", "label": "pystamps", "type": "package"},
-    {"id": "cli", "label": "cli", "type": "module"},
-    {"id": "pipeline_types", "label": "pipeline.types", "type": "module"},
-    {"id": "pipeline_stages", "label": "pipeline.stages", "type": "module"},
-    {"id": "pipeline_ported", "label": "pipeline.ported", "type": "module"},
-    {"id": "runtime", "label": "runtime.executor", "type": "module"},
-    {"id": "io_dataset", "label": "io.dataset", "type": "module"},
-    {"id": "io_mat", "label": "io.mat", "type": "module"},
-    {"id": "kernels", "label": "kernels", "type": "module"}
-  ],
-  "edges": [
-    {"source": "cli", "target": "pipeline_stages", "label": "invoke"},
-    {"source": "pipeline_stages", "target": "pipeline_types", "label": "use context/result"},
-    {"source": "pipeline_stages", "target": "pipeline_ported", "label": "delegate implementations"},
-    {"source": "pipeline_stages", "target": "runtime", "label": "concurrency"},
-    {"source": "pipeline_ported", "target": "io_mat", "label": "read/write matrices"},
-    {"source": "pipeline_ported", "target": "kernels", "label": "kernel calls"},
-    {"source": "kernels", "target": "runtime", "label": "CPU/GPU dispatch"},
-    {"source": "pipeline_stages", "target": "io_dataset", "label": "discover artifacts"}
-  ],
-  "layout": "orthogonal-graph",
-  "theme": {"bg": "#0f1117", "surface": "#1d2330", "border": "#2a3244", "accent": "#8ec5ff"},
-  "grouping": [{"name": "Pipeline", "members": ["pipeline_stages", "pipeline_types", "pipeline_ported"]}]
-}</code></pre>
-
-      <pre><button class="copy-btn">Copy</button><code class="language-json">{
-  "name": "Data flow diagram",
-  "purpose": "Trace data artifacts through stages 1..8",
-  "nodes": [
-    {"id": "src", "label": "dataset folder", "type": "input"},
-    {"id": "pscand", "label": "pscands inputs", "type": "artifact"},
-    {"id": "stage1", "label": "stage1_load_initial", "type": "stage"},
-    {"id": "stage2", "label": "stage2_estimate_gamma", "type": "stage"},
-    {"id": "stage3", "label": "stage3_select_ps", "type": "stage"},
-    {"id": "stage4", "label": "stage4_weed_ps", "type": "stage"},
-    {"id": "stage5", "label": "stage5_correct_and_promote", "type": "stage"},
-    {"id": "merge", "label": "stage5_merge_and_ifgstd", "type": "stage"},
-    {"id": "stage6", "label": "stage6_unwrap", "type": "stage"},
-    {"id": "stage7", "label": "stage7_calc_scla", "type": "stage"},
-    {"id": "stage8", "label": "stage8_filter_scn", "type": "stage"}
-  ],
-  "edges": [
-    {"source": "src", "target": "pscand", "label": "patch root inputs"},
-    {"source": "pscand", "target": "stage1", "label": "parse/read"},
-    {"source": "stage1", "target": "stage2", "label": "ps1, ph1, bp1"},
-    {"source": "stage2", "target": "stage3", "label": "pm1"},
-    {"source": "stage3", "target": "stage4", "label": "select1"},
-    {"source": "stage4", "target": "stage5", "label": "weed1"},
-    {"source": "stage5", "target": "merge", "label": "ps2/ph2"},
-    {"source": "merge", "target": "stage6", "label": "ps2/ph2/bp2/uw artifacts"},
-    {"source": "stage6", "target": "stage7", "label": "phuw2, uw_grid"},
-    {"source": "stage7", "target": "stage8", "label": "scla2/mv2"}
-  ],
-  "layout": "left-to-right",
-  "theme": {"bg": "#0f1117", "accent": "#66a1ff", "border": "#2a3244"},
-  "grouping": [
-    {"name": "patch stages", "members": ["stage1", "stage2", "stage3", "stage4", "stage5"]},
-    {"name": "merged stages", "members": ["merge", "stage6", "stage7", "stage8"]}
-  ]
-}</code></pre>
-
-      <pre><button class="copy-btn">Copy</button><code class="language-json">{
-  "name": "Request lifecycle (CLI/API) diagram",
-  "purpose": "Request flow for run/status/verify/list-legacy commands",
-  "nodes": [
-    {"id": "user", "label": "User CLI", "type": "actor"},
-    {"id": "parser", "label": "argparse", "type": "parser"},
-    {"id": "config", "label": "load_config", "type": "config"},
-    {"id": "command", "label": "command handler", "type": "dispatcher"},
-    {"id": "runner", "label": "pipeline or verify/status", "type": "executor"},
-    {"id": "report", "label": "stdout json", "type": "output"}
-  ],
-  "edges": [
-    {"source": "user", "target": "parser", "label": "invokes"},
-    {"source": "parser", "target": "config", "label": "--config"},
-    {"source": "parser", "target": "command", "label": "command dispatch"},
-    {"source": "command", "target": "runner", "label": "execute function"},
-    {"source": "runner", "target": "report", "label": "emit JSON"}
-  ],
-  "layout": "top-down swimlane",
-  "theme": {"bg": "#0f1117", "surface": "#161a24", "accent": "#8ec5ff"},
-  "grouping": [{"name": "request path", "members": ["parser", "config", "command", "runner", "report"]}]
-}</code></pre>
-
-      <pre><button class="copy-btn">Copy</button><code class="language-json">{
-  "name": "Deployment architecture",
-  "purpose": "Deployment topology for CLI usage and static test assets",
-  "nodes": [
-    {"id": "dev", "label": "Developer workstation", "type": "client"},
-    {"id": "venv", "label": "Python runtime + deps", "type": "runtime"},
-    {"id": "repo", "label": "checkout", "type": "storage"},
-    {"id": "ghp", "label": "GitHub Pages", "type": "cdn"},
-    {"id": "dataset", "label": "dataset folders", "type": "data"}
-  ],
-  "edges": [
-    {"source": "dev", "target": "venv", "label": "run CLI"},
-    {"source": "venv", "target": "repo", "label": "reads/writes"},
-    {"source": "repo", "target": "ghp", "label": "publish static docs"},
-    {"source": "repo", "target": "dataset", "label": "reads"}
-  ],
-  "layout": "force-directed",
-  "theme": {"bg": "#0f1117", "accent": "#66a1ff", "border": "#2a3244"},
-  "grouping": [{"name": "docs runtime", "members": ["repo", "ghp"]}]
-}</code></pre>
     </section>
   </main>
 </div>

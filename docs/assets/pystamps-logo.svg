@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">pySTAMPS logo</title>
+  <desc id="desc">A technical logo mark for pySTAMPS combining layered radar waves and structured tiles.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#09111f"/>
+      <stop offset="100%" stop-color="#17324d"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#62b0ff"/>
+      <stop offset="100%" stop-color="#2de0c8"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="96" fill="url(#bg)"/>
+  <rect x="88" y="88" width="336" height="336" rx="56" fill="none" stroke="#284966" stroke-width="12"/>
+  <path d="M118 320c36-52 82-78 138-78 58 0 104 26 138 78" fill="none" stroke="url(#accent)" stroke-width="18" stroke-linecap="round"/>
+  <path d="M148 356c28-38 64-57 108-57 46 0 82 19 108 57" fill="none" stroke="#9fd5ff" stroke-width="14" stroke-linecap="round" opacity="0.9"/>
+  <circle cx="188" cy="196" r="20" fill="#62b0ff"/>
+  <circle cx="256" cy="168" r="24" fill="#2de0c8"/>
+  <circle cx="324" cy="196" r="20" fill="#62b0ff"/>
+  <path d="M176 244l80-40 80 40" fill="none" stroke="#d9f2ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M176 244v52l80 40 80-40v-52" fill="none" stroke="#d9f2ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

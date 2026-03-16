@@ -10,13 +10,14 @@
 <body>
 <div class="site">
   <aside class="sidebar">
-    <div class="logo"><span class="logo-mark"></span><h1>pySTAMPS Docs</h1></div>
-    <small>Python-first StaMPS migration runtime</small>
+    <div class="logo"><img src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>Beginner-friendly documentation for a Python-first StaMPS runtime.</small>
     <nav>
       <div class="nav-group">
         <h2>Guide</h2>
         <ul class="nav-list">
-          <li><a href="index.html">Introduction</a></li>
+          <li><a class="active" href="index.html">Introduction</a></li>
+          <li><a href="getting-started.html">Getting Started</a></li>
           <li><a href="installation.html">Installation</a></li>
           <li><a href="quickstart.html">Quick Start</a></li>
           <li><a href="architecture.html">Architecture</a></li>
@@ -28,9 +29,10 @@
         </ul>
       </div>
       <div class="nav-group">
-        <h2>API</h2>
+        <h2>Reference</h2>
         <ul class="nav-list">
-          <li><a href="api/pystamps.html">Package</a></li>
+          <li><a href="function-reference.html">Function Reference</a></li>
+          <li><a href="api/pystamps.html">Package API</a></li>
           <li><a href="api/configuration.html">config</a></li>
           <li><a href="api/cli.html">cli</a></li>
           <li><a href="api/status.html">status</a></li>
@@ -50,54 +52,76 @@
   </aside>
   <main class="content">
     <div class="breadcrumb">Home</div>
-    <h1>pySTAMPS Documentation</h1>
-    <p>pySTAMPS is a Python-first StaMPS migration runtime for INSAR processing workflows. This site documents installation, architecture, configuration, and the API surface used by the command line and library modules.</p>
 
-    <div class="card">
-      <h2>Project Snapshot</h2>
-      <div class="grid">
-        <div>
-          <p>Project and primary language: <span class="code-inline">Python 3.12+</span>.</p>
-          <p>Primary goals:</p>
-          <ul>
-            <li>Dataset discovery and stage status inspection</li>
-            <li>Pipeline execution for stages <span class="code-inline">1..8</span></li>
-            <li>Verification against golden datasets</li>
-            <li>Parity audit tooling and CLI entry points</li>
-          </ul>
+    <section class="hero">
+      <span class="badge">Python-first StaMPS runtime</span>
+      <h1>Process, inspect, and verify pySTAMPS runs without losing the engineering details.</h1>
+      <p>pySTAMPS is a static-dataset processing toolkit for StaMPS-style workflows. It helps you inspect a dataset, run selected processing stages, and compare generated outputs against a trusted reference set. These docs assume you may be new to interferometry and explain the practical meaning of the workflow before diving into the command line.</p>
+      <div class="hero-actions">
+        <a class="button-link" href="getting-started.html">Start with the beginner guide</a>
+        <a class="button-link secondary" href="quickstart.html">See the command flow</a>
+        <a class="button-link secondary" href="function-reference.html">Read the function reference</a>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card"><h3>Inspect</h3><p>Use <span class="code-inline">pystamps status</span> to check layout and discovered stages before running anything expensive.</p></div>
+        <div class="stat-card"><h3>Run</h3><p>Process the dataset by stage range so you can rehearse, retry, or resume safely.</p></div>
+        <div class="stat-card"><h3>Verify</h3><p>Compare generated outputs with golden datasets and reason about mismatches quantitatively.</p></div>
+      </div>
+    </section>
+
+    <section class="panel-grid">
+      <article class="action-card">
+        <h3>New to interferometry?</h3>
+        <p>Read <a href="getting-started.html">Getting Started</a> for plain-language explanations of phase, coherence, unwrapping, and why pySTAMPS writes many <span class="code-inline">.mat</span> files.</p>
+      </article>
+      <article class="action-card">
+        <h3>Need the shortest path?</h3>
+        <p>Go to <a href="quickstart.html">Quick Start</a> for the minimum set of commands to inspect a dataset copy, dry-run the pipeline, and verify outputs.</p>
+      </article>
+      <article class="action-card">
+        <h3>Need a formal map?</h3>
+        <p>Use <a href="function-reference.html">Function Reference</a> to see which modules own configuration, orchestration, verification, dataset discovery, and runtime execution.</p>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>What pySTAMPS actually does</h2>
+      <div class="quick-links">
+        <div class="highlight-card">
+          <h3>It works on a dataset folder</h3>
+          <p>pySTAMPS expects a StaMPS-style dataset root with patch directories such as <span class="code-inline">PATCH_1</span> and stage artifacts inside those patches or at the merged dataset level.</p>
         </div>
-        <div>
-          <h3>Key features</h3>
-          <ul>
-            <li>Hybrid thread/process execution</li>
-            <li>Optional GPU kernels with CuPy fallback</li>
-            <li>Configurable tolerances and stage control</li>
-            <li>Production-friendly static docs output</li>
-          </ul>
+        <div class="highlight-card">
+          <h3>It orchestrates stages 1 through 8</h3>
+          <p>The pipeline can run only the range you need. This matters because later stages often depend on outputs created by earlier stages, and some stages are expensive.</p>
+        </div>
+        <div class="highlight-card">
+          <h3>It is artifact driven</h3>
+          <p>Existing stage artifacts are inspected and can be skipped. That lets you resume or study a partial run without throwing away all intermediate results.</p>
         </div>
       </div>
-    </div>
+    </section>
 
-    <section class="card">
-      <h2>High-level architecture summary</h2>
-      <p>The runtime is organized as layered Python modules: CLI orchestration, pipeline scheduler, I/O helpers, typed execution, and numerical kernels. Artifacts are produced as <span class="code-inline">.mat</span> files and reused across merged/patch stages.</p>
-      <p>See <a href="architecture.html">Architecture</a> for details and diagram specs.</p>
+    <section class="diagram-card">
+      <h2>Beginner workflow graph</h2>
+      <p>The pySTAMPS workflow has been diagrammed in Figma so you can view the full flow from dataset inspection to verification in one place.</p>
+      <a class="diagram-link" href="https://www.figma.com/online-whiteboard/create-diagram/2cd2c194-7c86-4c16-9a10-d964fc5a1b40?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=&request_id=72140c10-d529-4949-8a78-a575e6a13883">
+        <strong>Open the pySTAMPS Beginner Flow graph in Figma</strong>
+        <p>This graph is useful if you prefer a visual view of how <span class="code-inline">status</span>, <span class="code-inline">run</span>, and <span class="code-inline">verify</span> relate to each other.</p>
+      </a>
     </section>
 
     <section class="card">
-      <h2>Quick links</h2>
-      <ul>
-        <li><a href="quickstart.html">Run the first dataset check</a></li>
-        <li><a href="usage.html">Command usage examples</a></li>
-        <li><a href="api/cli.html">CLI API Reference</a></li>
-      </ul>
+      <h2>Start here if you want to run the package</h2>
+      <ol>
+        <li>Install the Python environment and external tools from <a href="installation.html">Installation</a>.</li>
+        <li>Read <a href="getting-started.html">Getting Started</a> if you want the domain concepts explained simply.</li>
+        <li>Follow <a href="quickstart.html">Quick Start</a> on a copy of a dataset, not your only original dataset.</li>
+        <li>Use <a href="usage.html">Usage</a> once you need stage selection, verification, or backend tuning.</li>
+      </ol>
     </section>
 
-    <section class="callout tip">
-      <strong>Note:</strong> This documentation is static HTML and can be deployed directly to GitHub Pages without build tooling.
-    </section>
-
-    <p class="footer">Last updated: 2026-03-13</p>
+    <p class="footer">Last updated: 2026-03-15</p>
   </main>
 </div>
 </body>

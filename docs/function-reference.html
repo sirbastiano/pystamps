@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Function Reference - pySTAMPS Docs</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script defer src="assets/scripts.js"></script>
+</head>
+<body>
+<div class="site">
+  <aside class="sidebar">
+    <div class="logo"><img src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>Formal module and function guide.</small>
+    <nav>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a class="active" href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/cli.html">cli</a></li><li><a href="api/configuration.html">config</a></li><li><a href="api/status.html">status</a></li><li><a href="api/verify.html">verify</a></li><li><a href="api/io_dataset.html">io.dataset</a></li><li><a href="api/io_mat.html">io.mat</a></li><li><a href="api/runtime.html">runtime</a></li><li><a href="api/kernels.html">kernels</a></li><li><a href="api/pipeline_types.html">pipeline.types</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li></ul></div>
+    </nav>
+  </aside>
+  <main class="content">
+    <div class="breadcrumb">Home / Function Reference</div>
+
+    <section class="hero">
+      <span class="badge">Reference</span>
+      <h1>Use this page when you need ownership, not guesswork.</h1>
+      <p>This reference is organized by module responsibility. It prioritizes the public and practical surface of pySTAMPS and groups very large helper-heavy modules by responsibility rather than listing every private helper with equal weight.</p>
+    </section>
+
+    <section class="card">
+      <h2>CLI and top-level control</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Object</th><th>Role</th><th>Why you use it</th></tr></thead>
+          <tbody>
+            <tr><td><code>pystamps.cli.main()</code></td><td>Main CLI entrypoint</td><td>Dispatches the <span class="code-inline">status</span>, <span class="code-inline">run</span>, <span class="code-inline">verify</span>, and <span class="code-inline">list-legacy</span> commands.</td></tr>
+            <tr><td><code>pystamps.cli._cmd_status()</code></td><td>Status command handler</td><td>Formats discovered dataset stage information as JSON.</td></tr>
+            <tr><td><code>pystamps.cli._cmd_run()</code></td><td>Run command handler</td><td>Builds a pipeline context, applies worker overrides, invokes the scheduler, and emits stage results.</td></tr>
+            <tr><td><code>pystamps.cli._cmd_verify()</code></td><td>Verify command handler</td><td>Runs golden-dataset comparison and summarizes failures.</td></tr>
+            <tr><td><code>pystamps.cli._cmd_list_legacy()</code></td><td>Legacy discovery handler</td><td>Lists discoverable legacy StaMPS scripts from a checkout root.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Configuration and typed execution state</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Object</th><th>Role</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>pystamps.config.RunConfig</code></td><td>Top-level runtime configuration</td><td>Bundles runtime, tolerance, external-tool, and compatibility settings.</td></tr>
+            <tr><td><code>pystamps.config.load_config()</code></td><td>Config loader</td><td>Reads YAML or JSON and returns a typed <span class="code-inline">RunConfig</span>.</td></tr>
+            <tr><td><code>pystamps.pipeline.types.PipelineContext</code></td><td>Execution context</td><td>Holds dataset path, selected stage range, dry-run state, and the loaded config.</td></tr>
+            <tr><td><code>pystamps.pipeline.types.PipelineReport</code></td><td>Pipeline result container</td><td>Stores per-stage results and an aggregated failure list.</td></tr>
+            <tr><td><code>pystamps.pipeline.types.StageResult</code></td><td>Per-stage report item</td><td>Records stage id, scope, target, status, details, and duration.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Dataset discovery and status</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Object</th><th>Role</th><th>When to use</th></tr></thead>
+          <tbody>
+            <tr><td><code>pystamps.io.dataset.discover_dataset()</code></td><td>Dataset layout discovery</td><td>Use when you need a structured view of patch directories and root-level artifacts.</td></tr>
+            <tr><td><code>pystamps.io.dataset.infer_patch_stage()</code></td><td>Patch stage inference</td><td>Determines how far a patch has progressed by inspecting artifacts.</td></tr>
+            <tr><td><code>pystamps.io.dataset.infer_merged_stage()</code></td><td>Merged stage inference</td><td>Determines the latest merged-stage artifact visible at the dataset root.</td></tr>
+            <tr><td><code>pystamps.status.collect_status()</code></td><td>CLI-friendly status collection</td><td>Builds the structured status payload printed by <span class="code-inline">pystamps status</span>.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Verification and parity tooling</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Object</th><th>Role</th><th>Why it matters</th></tr></thead>
+          <tbody>
+            <tr><td><code>pystamps.verify.verify_run_against_golden()</code></td><td>Primary verification entrypoint</td><td>Compares a run directory against a golden directory using tolerance-aware numeric checks.</td></tr>
+            <tr><td><code>pystamps.verify.classify_failures()</code></td><td>Mismatch classification</td><td>Groups failures into more interpretable debugging categories.</td></tr>
+            <tr><td><code>pystamps.verify.summarize_failures()</code></td><td>Summary builder</td><td>Produces a compact failure digest that is easier to act on than raw comparisons alone.</td></tr>
+            <tr><td><code>pystamps.parity_contract.build_parity_contract()</code></td><td>Audit contract builder</td><td>Defines the supported parity datasets, workflows, and expected audit metadata.</td></tr>
+            <tr><td><code>pystamps.parity_contract.discover_golden_datasets()</code></td><td>Golden dataset discovery</td><td>Finds dataset directories under the configured inputs root.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Pipeline orchestration</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Object</th><th>Role</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td><code>pystamps.pipeline.stages.run_pipeline()</code></td><td>Main scheduler</td><td>Discovers the dataset, selects stages, skips existing artifacts when appropriate, and aggregates results.</td></tr>
+            <tr><td><code>pystamps.pipeline.stages._selected_stages()</code></td><td>Stage-range resolver</td><td>Maps <span class="code-inline">start_step</span> and <span class="code-inline">end_step</span> onto concrete stage definitions.</td></tr>
+            <tr><td><code>pystamps.pipeline.stages._run_patch_stage()</code></td><td>Patch-stage executor</td><td>Runs one patch-scoped stage and records its outcome.</td></tr>
+            <tr><td><code>pystamps.pipeline.stages._run_merged_stage()</code></td><td>Merged-stage executor</td><td>Runs one merged-stage function against the dataset root.</td></tr>
+            <tr><td><code>pystamps.pipeline.stages._replay_from_reference()</code></td><td>Compatibility helper</td><td>Copies artifacts from a reference tree when strict reference replay is enabled.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Ported stage implementations</h2>
+      <p>The <span class="code-inline">pystamps.pipeline.ported</span> module is intentionally large because it contains stage implementations plus many scientific and data-shaping helpers. The most important functions are the stage entrypoints:</p>
+      <ul>
+        <li><code>stage1_load_initial()</code>: load initial patch inputs and early metadata.</li>
+        <li><code>stage2_estimate_gamma()</code>: estimate stability/coherence-like quantities and produce <span class="code-inline">pm1.mat</span>.</li>
+        <li><code>stage3_select_ps()</code>: select persistent-scatterer candidates.</li>
+        <li><code>stage4_weed_ps()</code>: weed or prune candidates using additional constraints.</li>
+        <li><code>stage5_correct_and_promote()</code>: promote patch outputs into stage-5 corrected artifacts.</li>
+        <li><code>stage5_merge_and_ifgstd()</code>: merge patch outputs and calculate merged statistics.</li>
+        <li><code>stage6_unwrap()</code>: perform temporal unwrap workflow.</li>
+        <li><code>stage7_calc_scla()</code>: estimate SCLA and velocity-like terms.</li>
+        <li><code>stage8_filter_scn()</code>: perform the final space-time filtering pass.</li>
+      </ul>
+      <div class="callout info"><strong>Reading tip:</strong> use the stage entrypoints and the grouped helper families as your map. Do not start by reading every private helper in file order.</div>
+    </section>
+
+    <section class="card">
+      <h2>Runtime and kernels</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Object</th><th>Role</th><th>Why it exists</th></tr></thead>
+          <tbody>
+            <tr><td><code>pystamps.runtime.executor.HybridExecutor</code></td><td>Concurrency abstraction</td><td>Provides a consistent interface for thread and process pools.</td></tr>
+            <tr><td><code>pystamps.kernels.run_stage7_scla_kernel()</code></td><td>Stage-7 kernel dispatch</td><td>Selects the CPU or GPU implementation for SCLA-related calculations.</td></tr>
+            <tr><td><code>pystamps.kernels.run_stage8_edge_noise_kernel()</code></td><td>Stage-8 kernel dispatch</td><td>Selects the CPU or GPU implementation for edge-noise calculations.</td></tr>
+            <tr><td><code>pystamps.kernels.BackendUnavailableError</code></td><td>Backend capability error</td><td>Signals that a requested kernel backend is unavailable.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="footer">For command examples, continue with <a href="usage.html">Usage</a>. For the generated API pages, see the <a href="api/pystamps.html">Package API</a>.</p>
+  </main>
+</div>
+</body>
+</html>

@@ -1,6 +1,51 @@
-# pySTAMPS
+<p align="center">
+  <img src="docs/assets/pystamps-logo.svg" alt="pySTAMPS logo" width="160" />
+</p>
 
-Python-first migration workspace for StaMPS with hybrid threaded/process execution and golden-dataset verification.
+<h1 align="center">pySTAMPS</h1>
+
+<p align="center">
+  Python-first StaMPS migration runtime for structured InSAR processing, verification, and reproducible parity workflows.
+</p>
+
+<p align="center">
+  <strong>Run pipeline stages.</strong>
+  <strong>Inspect dataset state.</strong>
+  <strong>Verify outputs against reference datasets.</strong>
+</p>
+
+<p align="center">
+  <a href="docs/index.html">HTML Docs</a>
+  ·
+  <a href="docs/quickstart.html">Quick Start</a>
+  ·
+  <a href="docs/api/pystamps.html">API Reference</a>
+  ·
+  <a href="examples/pystamps_beginner_walkthrough.ipynb">Beginner Notebook</a>
+</p>
+
+pySTAMPS is a Python package for running a StaMPS-style persistent-scatterer workflow on a dataset folder and checking the produced outputs against a reference dataset.
+
+If you are new to interferometry, start here:
+- [docs/index.html](docs/index.html): HTML documentation home
+- [docs/quickstart.html](docs/quickstart.html): first-run path through the package
+- [docs/usage.html](docs/usage.html): command patterns and workflow examples
+- `examples/pystamps_beginner_walkthrough.ipynb`: notebook walkthrough on the reference datasets in this repo
+- [docs/api/pystamps.html](docs/api/pystamps.html): API entrypoint for the package modules and functions
+
+## What pySTAMPS does
+
+At a high level, pySTAMPS:
+- reads a StaMPS-style dataset directory
+- determines which processing stages can run
+- runs selected stages from 1 through 8
+- writes `.mat` outputs back into the dataset directory
+- compares a run directory against a known-good reference dataset when you use `verify`
+
+You do not need to know the mathematics of interferometry to start using the package. You do need to understand one practical idea:
+- a dataset directory is the working unit
+- pySTAMPS reads inputs from that directory and writes outputs back into it
+- because of that, it is safest to run on a copy of your dataset, not your only original
 
 ## Install
 
@@ -21,13 +66,16 @@ External prerequisites are not bundled in the package:
 - `snaphu` for unwrap workflows
 - a separate `StaMPS` checkout only when using `pystamps list-legacy`
 - external datasets and golden artifacts for parity validation
+- the maintained run-copy seed `inputs_and_outputs/RUN_FULL_GATE_1e10` for the release-grade `InSAR_dataset_test` refresh path
 
 The wheel ships the `pystamps` Python package and package metadata. The sdist ships the Python source tree and tracked docs needed to rebuild that package, while generated release outputs under `dist/`, `build/`, and local parity datasets under `inputs_and_outputs/` remain outside the release artifacts.
 
-## Development Setup
+## Development setup
 
 ```bash
 uv sync
+# or
+make setup
 ```
 
 Fresh-clone validation commands:
@@ -36,51 +84,61 @@ Fresh-clone validation commands:
 uv run pytest -q
 uv run --with build python -m build --sdist --wheel
 uv run --with twine python -m twine check dist/*
+# or
+make test
+make test-impl
+make build
+make twine-check
 ```
 
-Optional local-dataset parity validation:
+## Quick start
+
+Inspect a dataset before you run anything:
 
 ```bash
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-  uv run python scripts/validate_audit.py \
-    --datasets \
-      inputs_and_outputs/InSAR_dataset_test_stage8diag \
-      inputs_and_outputs/InSAR_dataset_test \
-    --output inputs_and_outputs/validation_runs/latest_audit.json
+uv run pystamps status --dataset inputs_and_outputs/InSAR_dataset_test
 ```
 
-Manual release uploads:
+Preview a run without doing heavy work:
 
 ```bash
-uv run --with twine python -m twine upload --repository testpypi dist/*
-uv run --with twine python -m twine upload dist/*
+uv run pystamps run \
+  --dataset inputs_and_outputs/InSAR_dataset_test \
+  --start-step 1 --end-step 8 --dry-run
 ```
 
-The standalone repo uses direct `uv` commands; there is no tracked `Makefile` in this snapshot.
+Run the pipeline on a working copy of your dataset:
 
-## What It Does
+```bash
+cp -a /path/to/input_dataset /path/to/input_dataset_run
+uv run pystamps run \
+  --dataset /path/to/input_dataset_run \
+  --start-step 1 --end-step 8
+```
 
-- `pystamps` CLI with commands:
-  - `status`: inspect patch and merged stage progress
-  - `run`: execute stage orchestration (supports `--dry-run`)
-  - `verify`: compare run artifacts against a golden dataset
-  - `list-legacy`: enumerate legacy `StaMPS/bin` scripts
-- Dataset discovery for `patch.list` and `PATCH_*` folders
-- Hybrid runtime (`threads` + `processes`) abstraction
-- MAT loader and numeric tolerance comparison utilities
-- Verification harness wired to `inputs_and_outputs/InSAR_dataset_test`
-- Ported Python implementations for patch stages 1-5:
-  - stage 1: candidate load from `pscands.*` + metadata (`day.1.in`, `bperp.1.in`, ...)
-  - stage 2: coherence/gamma proxy estimation and `pm1.mat` creation
-  - stage 3: PS selection and `select1.mat` generation
-  - stage 4: weed filtering and `weed1.mat` generation
-  - stage 5: promote selected/weeded PS into version-2 artifacts (`ps2/ph2/pm2`)
-- Ported Python implementations for merged stages 6-8:
-  - stage 6: temporal unwrap to `phuw2.mat`
-  - stage 7: SCLA and velocity proxy estimation (`scla2.mat`, `mean_v.mat`, `mv2.mat`)
-  - stage 8: space-time filtering payload (`uw_space_time.mat`)
+Verify a run against a golden dataset:
 
-## CLI Usage
+```bash
+uv run pystamps verify \
+  --run /path/to/run_dataset \
+  --golden /path/to/golden_dataset
+```
+
+Use `make verify` only for the repo's maintained reference-path check:
+`inputs_and_outputs/RUN_FULL_GATE_1e10` against
+`inputs_and_outputs/InSAR_dataset_test`.
+
+For a slower, stricter repo-level audit of the maintained validation datasets, see [howtorun.md](howtorun.md) and the parity section below.
+
+## CLI commands
+
+`pystamps` provides four main commands:
+- `status`: inspect dataset layout and detected stage progress
+- `run`: execute one or more processing stages
+- `verify`: compare a run directory against a golden dataset
+- `list-legacy`: discover legacy StaMPS scripts from a StaMPS checkout
+
+Examples:
 
 ```bash
 pystamps status --dataset inputs_and_outputs/InSAR_dataset_test
@@ -98,6 +156,10 @@ Environment-based legacy discovery:
 ```bash
 STAMPS_ROOT=/path/to/StaMPS pystamps list-legacy
 ```
+
+## Configuration
+
+Use `--config` when you want to tune runtime behavior or compatibility options.
 
 Strict legacy parity replay mode:
 
@@ -129,20 +191,48 @@ runtime:
 pystamps --config accel.yaml run --dataset /path/to/dataset --start-step 1 --end-step 8
 ```
 
-## Validation and Benchmarking
+See [docs/function_reference.md](docs/function_reference.md) for the configuration dataclasses and loader details.
 
-Strict parity audit:
+## Validation and benchmarking
+
+Optional local-dataset parity validation:
 
 ```bash
-uv run python scripts/validate_audit.py \
-  --datasets \
-    inputs_and_outputs/InSAR_dataset_test_stage8diag \
-    inputs_and_outputs/InSAR_dataset_test \
-  --output inputs_and_outputs/validation_runs/latest_audit.json
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  uv run python scripts/validate_audit.py \
+    --datasets \
+      inputs_and_outputs/InSAR_dataset_test_stage8diag \
+      inputs_and_outputs/InSAR_dataset_test \
+    --output inputs_and_outputs/validation_runs/latest_audit.json
+# or
+make audit
 ```
 
+Resolve the required full-loop run copy for the explicit verify gate from the fresh audit artifact:
+
+```bash
+RUN_COPY="$(uv run python - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('inputs_and_outputs/validation_runs/latest_audit.json').read_text(encoding='utf-8'))
+print(next(audit['run_root'] for audit in payload['audits'] if audit['dataset'] == 'InSAR_dataset_test'))
+PY
+)"
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  uv run pystamps verify --run "$RUN_COPY" --golden ./inputs_and_outputs/InSAR_dataset_test
+```
+
+This explicit verify gate must use the fresh `run_root` from
+`latest_audit.json`. `make verify` does not replace this step; it only checks
+the repo's fixed maintained reference paths.
+
+Strict parity audit notes:
 - `scripts/validate_audit.py` is the supported unattended audit entrypoint.
-- The audit validates both required datasets before verification begins and exits non-zero with a missing-dataset report if either path is absent.
+- The audit validates both required datasets before verification begins, creates fresh run copies under `inputs_and_outputs/validation_runs/<timestamp>/`, and exits non-zero with a missing-dataset report if either path is absent.
+- `InSAR_dataset_test` currently refreshes from the maintained seed `inputs_and_outputs/RUN_FULL_GATE_1e10` starting at stage 4, while `InSAR_dataset_test_stage8diag` refreshes from the dataset root starting at stage 2.
+- The explicit verify gate must use the `run_root` recorded in `inputs_and_outputs/validation_runs/latest_audit.json`; stale copies such as older `validation_runs/*` directories do not satisfy the gate.
+- Any interruption, manual restart, or partial reuse of stale outputs is a validation failure rather than a passing audit.
 - `latest_audit.json` records the contract, per-dataset audits, `failed_workflows`, `completed`, `interrupted`, and `ok`.
 
 Benchmark runner:
@@ -152,12 +242,14 @@ uv run python scripts/benchmark_backends.py \
   --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag \
   --start-step 1 --end-step 8 \
   --repeat 3 --warmup 1
+# or
+make benchmark
 ```
 
 - Each measured run now executes on a dedicated dataset copy under `inputs_and_outputs/benchmarks`.
 - Benchmark subprocesses pin `OPENBLAS_NUM_THREADS=1`, `OMP_NUM_THREADS=1`, and `MKL_NUM_THREADS=1` for reproducible CPU timings.
 
-## Build and Distribution
+## Build and distribution
 
 Create release artifacts:
 
@@ -179,6 +271,15 @@ uv run --with twine python -m twine upload dist/*
 ```
 
 Build outputs are written to `dist/` as one wheel and one sdist. Generated release directories such as `dist/` and `build/` are excluded from future source builds so packaging validation stays reproducible. The release process is manual and tag-driven; see [docs/release.md](docs/release.md) for the full checklist.
+
+## Additional reading
+
+- [docs/getting_started.md](docs/getting_started.md)
+- [howtorun.md](howtorun.md)
+- [docs/function_reference.md](docs/function_reference.md)
+- `examples/pystamps_beginner_walkthrough.ipynb`
+- [docs/architecture.md](docs/architecture.md)
+- [docs/release.md](docs/release.md)
 
 ## Notes
 

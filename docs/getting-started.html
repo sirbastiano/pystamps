@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Getting Started - pySTAMPS Docs</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script defer src="assets/scripts.js"></script>
+</head>
+<body>
+<div class="site">
+  <aside class="sidebar">
+    <div class="logo"><img src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>Plain-language orientation for first-time users.</small>
+    <nav>
+      <div class="nav-group">
+        <h2>Guide</h2>
+        <ul class="nav-list">
+          <li><a href="index.html">Introduction</a></li>
+          <li><a class="active" href="getting-started.html">Getting Started</a></li>
+          <li><a href="installation.html">Installation</a></li>
+          <li><a href="quickstart.html">Quick Start</a></li>
+          <li><a href="architecture.html">Architecture</a></li>
+          <li><a href="configuration.html">Configuration</a></li>
+          <li><a href="usage.html">Usage</a></li>
+          <li><a href="testing.html">Testing</a></li>
+          <li><a href="contributing.html">Contributing</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="nav-group">
+        <h2>Reference</h2>
+        <ul class="nav-list">
+          <li><a href="function-reference.html">Function Reference</a></li>
+          <li><a href="api/pystamps.html">Package API</a></li>
+        </ul>
+      </div>
+    </nav>
+  </aside>
+  <main class="content">
+    <div class="breadcrumb">Home / Getting Started</div>
+
+    <section class="hero">
+      <span class="badge">Beginner guide</span>
+      <h1>Understand the workflow before you run it.</h1>
+      <p>You do not need to be an interferometry specialist to start using pySTAMPS. You do need a working mental model of what the package reads, what it writes, and why the outputs are organized into stages.</p>
+    </section>
+
+    <section class="card">
+      <h2>What is pySTAMPS?</h2>
+      <p>pySTAMPS is a Python implementation and orchestration layer for StaMPS-style processing. In practical terms, it reads a dataset directory, checks which processing artifacts already exist, runs the stages you select, and lets you compare your generated outputs against a trusted reference dataset.</p>
+      <div class="callout info"><strong>Think of it this way:</strong> pySTAMPS is a reproducible processing assistant for a folder full of scientific inputs and intermediate outputs.</div>
+    </section>
+
+    <section class="card">
+      <h2>Minimum concepts in plain language</h2>
+      <div class="concept-grid">
+        <div class="highlight-card">
+          <h3>Interferogram</h3>
+          <p>An interferogram is a derived measurement that compares two radar observations. It stores phase differences, which are useful but not yet easy to interpret physically.</p>
+        </div>
+        <div class="highlight-card">
+          <h3>Phase</h3>
+          <p>Phase is a wrapped angular quantity. It repeats, so a raw phase value often needs extra processing before it can be interpreted as a smooth displacement-like signal.</p>
+        </div>
+        <div class="highlight-card">
+          <h3>Unwrapping</h3>
+          <p>Unwrapping tries to turn repeating phase cycles into a continuous signal. In pySTAMPS this is one of the later merged stages and may rely on external tools such as <span class="code-inline">snaphu</span>.</p>
+        </div>
+        <div class="highlight-card">
+          <h3>Coherence</h3>
+          <p>Coherence is a rough measure of signal stability and reliability. Higher coherence usually means a point is easier to trust during later processing.</p>
+        </div>
+        <div class="highlight-card">
+          <h3>Persistent scatterer</h3>
+          <p>A persistent scatterer is a point that remains stable enough across repeated observations to be useful for long-term analysis.</p>
+        </div>
+        <div class="highlight-card">
+          <h3>SCLA</h3>
+          <p>SCLA stands for spatially correlated look-angle error. In practice, pySTAMPS estimates and compensates for structured phase components that are not the signal you want to keep.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>What a dataset folder looks like</h2>
+      <p>pySTAMPS works on a dataset root. That root usually contains patch directories such as <span class="code-inline">PATCH_1</span>, plus merged-level folders and files such as <span class="code-inline">geo</span>, <span class="code-inline">rslc</span>, or <span class="code-inline">diff0</span>.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-text">inputs_and_outputs/InSAR_dataset_test/
+  PATCH_1/
+  PATCH_2/
+  PATCH_3/
+  PATCH_4/
+  geo/
+  rslc/
+  diff0/
+</code></pre>
+      <div class="callout tip">Run on a copy of a dataset. pySTAMPS writes new artifacts into the same directory tree, so a disposable run copy is safer than your only original dataset.</div>
+    </section>
+
+    <section class="card">
+      <h2>First commands to learn</h2>
+      <ol>
+        <li>Inspect the dataset layout:</li>
+      </ol>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset inputs_and_outputs/InSAR_dataset_test</code></pre>
+      <ol start="2">
+        <li>Check what a full run would do without writing outputs:</li>
+      </ol>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset inputs_and_outputs/InSAR_dataset_test --start-step 1 --end-step 8 --dry-run</code></pre>
+      <ol start="3">
+        <li>Run a smaller stage range on a copy:</li>
+      </ol>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">cp -a inputs_and_outputs/InSAR_dataset_test /tmp/InSAR_dataset_test_run
+uv run pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 6 --end-step 8</code></pre>
+      <ol start="4">
+        <li>Verify the result against a golden dataset:</li>
+      </ol>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run /tmp/InSAR_dataset_test_run --golden inputs_and_outputs/InSAR_dataset_test</code></pre>
+    </section>
+
+    <section class="diagram-card">
+      <h2>See the workflow graph in Figma</h2>
+      <p>If text is not enough, open the visual graph that shows the end-to-end beginner flow.</p>
+      <a class="diagram-link" href="https://www.figma.com/online-whiteboard/create-diagram/2cd2c194-7c86-4c16-9a10-d964fc5a1b40?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=&request_id=72140c10-d529-4949-8a78-a575e6a13883">
+        <strong>Open pySTAMPS Beginner Flow in Figma</strong>
+        <p>It shows the sequence from dataset inspection to stage execution and verification.</p>
+      </a>
+    </section>
+
+    <section class="card">
+      <h2>When to use the repo-specific shortcuts</h2>
+      <p>The repository includes convenience targets such as <span class="code-inline">make test</span>, <span class="code-inline">make audit</span>, and <span class="code-inline">make verify</span>. These are useful for repo maintenance, but the generic CLI form is still the clearest way to learn how pySTAMPS works on your own datasets.</p>
+      <div class="callout warning"><strong>Important:</strong> <span class="code-inline">make verify</span> is a fixed reference-path convenience target for this repository. It is not a generic replacement for arbitrary <span class="code-inline">pystamps verify --run ... --golden ...</span> commands.</div>
+    </section>
+
+    <p class="footer">Next: follow <a href="quickstart.html">Quick Start</a> for a command-by-command workflow.</p>
+  </main>
+</div>
+</body>
+</html>

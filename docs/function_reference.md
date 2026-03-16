@@ -1,0 +1,320 @@
+# pySTAMPS Function Reference
+
+This document organizes the main package surface for readers who want to understand what pySTAMPS exposes and where different responsibilities live.
+
+It focuses on user-facing and module-level entry points first. For very large internal modules, especially `pystamps.pipeline.ported`, related helpers are grouped by purpose instead of documenting every private helper line by line.
+
+## Package overview
+
+Core areas:
+- `pystamps.cli`: command-line entrypoints
+- `pystamps.config`: configuration dataclasses and config loading
+- `pystamps.io.dataset`: dataset discovery and stage inference
+- `pystamps.io.mat`: MAT-file reading and writing
+- `pystamps.status`: dataset status reporting
+- `pystamps.verify`: run-versus-reference comparison
+- `pystamps.pipeline.types`: runtime data structures
+- `pystamps.pipeline.stages`: orchestration across stages 1 through 8
+- `pystamps.pipeline.ported`: stage implementations and helpers
+- `pystamps.kernels.*`: accelerated kernels and registry
+- `pystamps.runtime.executor`: hybrid execution infrastructure
+- `pystamps.compat.legacy`: legacy StaMPS command discovery
+- `pystamps.parity_contract`: repo parity contract helpers
+
+## `pystamps.__init__`
+
+### `__version__`
+Package version exported from `pystamps._version`.
+
+## `pystamps.cli`
+
+Purpose: command-line interface for inspecting datasets, running stages, verifying outputs, and listing legacy commands.
+
+### `_parse_args() -> argparse.Namespace`
+Builds and parses the CLI arguments.
+
+### `_load_run_config(path: str | None) -> RunConfig`
+Loads a config file and converts configuration errors into user-facing CLI exits.
+
+### `_cmd_status(dataset: str) -> int`
+Runs the dataset status command and prints a JSON payload.
+
+### `_cmd_run(args: argparse.Namespace, run_config: RunConfig) -> int`
+Applies worker overrides, builds a `PipelineContext`, runs the pipeline, prints stage results as JSON, and returns a process exit code.
+
+### `_cmd_verify(run: str, golden: str, run_config: RunConfig) -> int`
+Runs verification between a run directory and a golden directory, prints a JSON summary, and returns success or failure.
+
+### `_resolve_stamps_root(stamps_root: str | None) -> str`
+Resolves the StaMPS root by preferring an explicit argument and then `STAMPS_ROOT` from the environment.
+
+### `_cmd_list_legacy(stamps_root: str | None) -> int`
+Discovers legacy StaMPS commands and prints them as JSON.
+
+### `main() -> int`
+Top-level CLI dispatcher.
+
+## `pystamps.config`
+
+Purpose: structured configuration for runtime behavior, numeric tolerances, external tools, and compatibility modes.
+
+### Dataclasses
+- `RuntimeConfig`: runtime backend and worker settings
+- `ToleranceConfig`: numeric comparison tolerances for verification
+- `ExternalToolsConfig`: paths or names for required external tools
+- `CompatibilityConfig`: compatibility and strict-reference settings
+- `RunConfig`: top-level runtime configuration bundle
+
+### Other types
+- `ConfigError`: raised when the config file is invalid
+
+### Functions
+- `_load_raw(path: Path) -> dict[str, Any]`: read a YAML or JSON config payload
+- `_as_dict(payload: dict[str, Any], key: str) -> dict[str, Any]`: helper for safe nested-dict extraction
+- `load_config(path: str | Path | None = None) -> RunConfig`: load a config file or defaults into a `RunConfig`
+
+## `pystamps.status`
+
+Purpose: summarize what stage a dataset and each patch appear to have reached.
+
+### Dataclasses
+- `PatchStatus`: patch name and inferred stage
+- `DatasetStatus`: dataset path, merged stage, and per-patch status
+
+### Functions
+- `collect_status(dataset_root: str | Path) -> DatasetStatus`: inspect a dataset root and report discovered stage state
+
+## `pystamps.io.dataset`
+
+Purpose: discover dataset layout and infer stage progress from filesystem state.
+
+### Dataclasses
+- `DatasetLayout`: normalized dataset structure used by the pipeline
+
+### Other types
+- `DatasetError`: raised when the dataset layout is invalid
+
+### Functions
+- `_patch_sort_key(path: Path) -> tuple[int, str]`: stable patch ordering helper
+- `discover_dataset(root: str | Path) -> DatasetLayout`: inspect dataset root and enumerate patches
+- `infer_patch_stage(patch_dir: str | Path) -> int`: infer the current stage of one patch directory
+- `infer_merged_stage(root_dir: str | Path) -> int`: infer merged dataset stage from output artifacts
+- `expected_stage_artifact(stage: int, scope: str) -> str | None`: map stage and scope to the expected artifact name
+
+## `pystamps.io.mat`
+
+Purpose: read and write MATLAB `.mat` payloads used throughout the workflow.
+
+### Other types
+- `MatReadError`: raised when a MAT file cannot be read in a supported way
+
+### Functions
+- `_decode_h5_dataset(obj: Any, h5file: Any) -> Any`: helper for MAT v7.3 / HDF5 payload decoding
+- `read_mat(path: str | Path) -> dict[str, Any]`: load a MAT file into a Python dictionary
+- `write_mat(path: str | Path, payload: dict[str, Any]) -> None`: write a Python dictionary to a MAT file
+
+## `pystamps.verify`
+
+Purpose: compare a run directory with a golden dataset and summarize mismatches.
+
+### Dataclasses
+- `FileComparison`: one file-level comparison result
+- `VerificationReport`: aggregate report over many file comparisons
+- `FailureClassification`: metadata for a failure class
+- `ClassifiedFailure`: classified view of one failure record
+
+### Public and module-level functions
+- `_is_numeric(value: Any) -> bool`: numeric-type helper
+- `_to_array(value: Any) -> np.ndarray`: normalize scalar-like values to arrays
+- `_collect_numeric(payload: Any, prefix: str = "") -> dict[str, np.ndarray]`: flatten numeric payloads for comparison
+- `_compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple[bool, str]`: compare MAT payloads under tolerance settings
+- `_iter_pattern_files(root: Path, pattern: str) -> list[Path]`: collect files matching a parity pattern
+- `_extract_failure_key(message: str) -> str | None`: parse a failing key name from a mismatch message
+- `classify_failure(relative_path: str) -> FailureClassification`: map a path to a broad failure class
+- `classify_failures(report: VerificationReport) -> list[ClassifiedFailure]`: classify all failures in a report
+- `summarize_failures(report: VerificationReport) -> dict[str, Any]`: build a structured summary for troubleshooting
+- `verify_run_against_golden(...) -> VerificationReport`: compare all configured patterns between a run and a golden dataset
+
+## `pystamps.pipeline.types`
+
+Purpose: shared runtime data structures passed between orchestration and stage implementations.
+
+### Dataclasses
+- `PipelineContext`: dataset root, selected stages, runtime config, and dry-run settings
+- `StageResult`: one stage execution record
+- `PipelineReport`: collection of stage results plus failures
+
+## `pystamps.pipeline.stages`
+
+Purpose: orchestration layer for deciding which stages run, in what order, and with what execution strategy.
+
+### Dataclasses and exceptions
+- `StageDef`: definition of one pipeline stage
+- `StageExecutionError`: raised when orchestration cannot execute a stage correctly
+
+### Functions
+- `_normalize_backend(name: str) -> str`: normalize backend naming
+- `_task_kind_for_stage(stage: StageDef, context: PipelineContext, patch_count: int = 0) -> str`: classify execution mode for scheduling
+- `_replay_from_reference(...)`: reuse or replay outputs from a reference root when compatibility mode requests it
+- `_run_ported_patch_stage(...)`: run one Python-ported patch stage
+- `_run_patch_stage(...)`: run one patch-level stage
+- `_run_patch_stage_timed(...)`: timed wrapper for patch execution
+- `_run_merged_stage(...)`: run one merged-stage operation
+- `_run_merged_stage_timed(...)`: timed wrapper for merged execution
+- `_selected_stages(start_step: int, end_step: int) -> list[StageDef]`: select the active stage definitions for a requested range
+- `run_pipeline(context: PipelineContext) -> PipelineReport`: main pipeline orchestration entrypoint
+
+## `pystamps.pipeline.ported`
+
+Purpose: Python implementations of the stage logic and the internal numerical helpers they depend on.
+
+### Main exceptions and dataclasses
+- `PortedStageError`: raised for stage-level implementation failures
+- `StageOptions`: stage-level options resolved from a patch
+- `Parms`: loaded parameter bundle
+- `Stage5PatchBundle`: merged-stage preparation bundle
+- `Stage1MetadataResolution`: resolved metadata needed by stage 1
+
+### Public stage entrypoints
+- `resolve_stage1_metadata(...) -> Stage1MetadataResolution`
+- `stage1_load_initial(patch_dir: Path, backend: str = "auto") -> str`
+- `stage2_estimate_gamma(patch_dir: Path, backend: str = "auto", debug: bool = False) -> str`
+- `stage3_select_ps(patch_dir: Path, backend: str = "auto") -> str`
+- `stage4_weed_ps(...) -> str`
+- `stage5_correct_and_promote(patch_dir: Path, backend: str = "auto") -> str`
+- `stage5_merge_and_ifgstd(...) -> str`
+- `stage6_unwrap(...) -> str`
+- `stage7_calc_scla(...) -> str`
+- `stage8_filter_scn(...) -> str`
+
+### Internal helper groups in `ported`
+
+Because `ported.py` is large, the helpers are best understood by purpose.
+
+#### Dataset and file resolution helpers
+Examples:
+- `_resolve_file`
+- `_stage1_dataset_root`
+- `_snap_ifg_records`
+- `_resolve_rslc_par`
+- `_discover_patch_dirs`
+
+These functions locate input files, patch folders, and metadata sources.
+
+#### MAT and type-coercion helpers
+Examples:
+- `_read_mat_cached`
+- `_cache_mat_payload`
+- `_coerce_1d`
+- `_coerce_complex`
+- `_mat_scalar`
+- `_mat_text`
+- `_matlab_col`
+- `_matlab_row`
+- `_matlab_char_row`
+
+These functions normalize MAT payloads and array shapes to match the expected numerical code paths.
+
+#### Numerical fitting and filtering helpers
+Examples:
+- `_weighted_lstsq`
+- `_weighted_slope_fit`
+- `_weighted_affine_fit`
+- `_stage7_mean_velocity_fit`
+- `_clap_filter_kernel`
+- `_clap_filt_patch`
+- `_clap_filt_grid`
+- `_wrap_filt`
+- `_wrap_filt_global`
+- `_ps_topofit_single`
+- `_ps_topofit_batch`
+
+These helpers perform the estimation and filtering operations used inside multiple stages.
+
+#### Geometry and graph helpers
+Examples:
+- `_local_xy_from_lonlat`
+- `_delaunay_edges`
+- `_load_triangle_edges`
+- `_adjacent_component_keep_mask`
+- `_select_reference_ps`
+
+These helpers support patch geometry, graph construction, and reference-point selection.
+
+#### Stage-specific support helpers
+Examples:
+- `_stage2_psquare_weighting`
+- `_stage2_weighting_snapshot_targets`
+- `_stage7_unwrap_ifg_sets`
+- `_deramp_unwrapped_phase`
+- `_build_stage_options`
+- `_build_low_pass`
+- `_load_stage5_patch_bundle`
+
+These helpers exist to keep the numbered stage functions manageable.
+
+## `pystamps.kernels.accelerated`
+
+Purpose: accelerated CPU and GPU kernels used by later numerical stages.
+
+### Types
+- `BackendUnavailableError`: raised when a requested backend cannot be used
+
+### Functions
+- `_cupy() -> Any | None`: lazy CuPy resolver
+- `_resolve_backend(backend: str) -> str`: backend selection helper
+- `_to_numpy(arr: Any) -> np.ndarray`: normalize backend arrays to NumPy
+- `_cov_from_accumulators(...) -> np.ndarray`: covariance helper
+- `_auto_chunk_size(...) -> int`: choose chunk sizes for memory-aware execution
+- `_stage7_scla_cpu(...)`
+- `_stage7_scla_gpu(...)`
+- `_stage8_edge_noise_cpu(...)`
+- `_stage8_edge_noise_gpu(...)`
+- `run_stage7_scla_kernel(...)`: public stage-7 kernel wrapper
+- `run_stage8_edge_noise_kernel(...)`: public stage-8 kernel wrapper
+
+## `pystamps.kernels.registry`
+
+Purpose: register and resolve kernel implementations.
+
+### Dataclasses
+- `KernelImplementation`
+- `KernelRegistry`
+
+## `pystamps.runtime.executor`
+
+Purpose: hybrid execution infrastructure for thread and process pools.
+
+### Classes
+- `HybridExecutor`: context-managed executor that coordinates IO and CPU worker pools
+
+## `pystamps.compat.legacy`
+
+Purpose: locate legacy StaMPS commands from a StaMPS checkout.
+
+### Functions
+- `discover_legacy_commands(stamps_root: str | Path = "StaMPS") -> list[Path]`
+
+## `pystamps.parity_contract`
+
+Purpose: define the supported parity validation contract for the repo-maintained datasets.
+
+### Functions
+- `_is_dataset_dir(path: Path) -> bool`: identify candidate dataset directories
+- `discover_golden_datasets(inputs_root: str | Path) -> list[Path]`: discover dataset roots under `inputs_and_outputs`
+- `_relative_to_repo(path: Path, repo_root: Path) -> str`: helper for repo-relative paths
+- `_dataset_payload(dataset: Path, repo_root: Path) -> dict[str, Any]`: build a dataset summary payload
+- `build_parity_contract(inputs_root: str | Path) -> dict[str, Any]`: build the full supported audit contract payload
+
+## How to use this reference
+
+If you are operating the package as a user:
+1. start with `pystamps.cli`
+2. look at `pystamps.config` when you need tuning
+3. use `pystamps.status`, `pystamps.pipeline.stages`, and `pystamps.verify` as the main mental model
+
+If you are debugging or extending the package:
+1. inspect `pystamps.pipeline.types`
+2. follow `pystamps.pipeline.stages.run_pipeline`
+3. drop into the numbered entrypoints in `pystamps.pipeline.ported`
+4. inspect `pystamps.kernels.accelerated` and `pystamps.runtime.executor` for performance-sensitive paths
