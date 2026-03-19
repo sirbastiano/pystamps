@@ -1036,6 +1036,38 @@ def _weighted_affine_fit(time_diff: np.ndarray, y: np.ndarray, w: np.ndarray) ->
     return intercept, slope
 
 
+def _stage7_mean_velocity_fit(
+    ph_mean_v: np.ndarray,
+    day: np.ndarray,
+    master_ix: int,
+    ifg_std: np.ndarray,
+) -> np.ndarray:
+    day_f = np.asarray(day, dtype=np.float64).reshape(-1)
+    if day_f.ndim != 1:
+        raise PortedStageError("stage7 mean velocity fit expects a 1-D day vector")
+
+    ph = np.asarray(ph_mean_v, dtype=np.float64)
+    if ph.ndim != 2:
+        raise PortedStageError("stage7 mean velocity fit expects a 2-D phase matrix")
+    if ph.shape[1] != day_f.size:
+        raise PortedStageError("stage7 mean velocity fit phase width must match day vector")
+
+    std = np.asarray(ifg_std, dtype=np.float64).reshape(-1)
+    if std.size != day_f.size:
+        raise PortedStageError("stage7 mean velocity fit std vector must match day vector")
+
+    master_zero = float(day_f[int(master_ix) - 1])
+    time_diff = day_f - master_zero
+    weights = np.divide(
+        1.0,
+        (std * np.pi / 180.0) ** 2,
+        out=np.zeros_like(std, dtype=np.float64),
+        where=std > 0,
+    )
+    intercept, slope = _weighted_affine_fit(time_diff, ph, weights)
+    return np.vstack((intercept.astype(np.float32), slope.astype(np.float32)))
+
+
 def _grid_neighbor_msd(ph_uw: np.ndarray, nzix: np.ndarray) -> np.ndarray:
     """Mirror uw_stat_costs.m MSD from neighboring unwrapped-grid jumps."""
     ph_uw_arr = np.asarray(ph_uw, dtype=np.float32)
@@ -4121,9 +4153,7 @@ def stage7_calc_scla(
     else:
         C_ps_uw = np.mean(resid_full, axis=1).astype(np.float32)
 
-    G_v = np.column_stack((np.ones(solve_ifg.size, dtype=np.float64), day[solve_ix] - float(day[master_ix - 1])))
-    mean_v_cov = np.diag((ifg_std[solve_ix] * np.pi / 181.0) ** 2)
-    mean_v_m = _weighted_lstsq_shared_design(G_v, ph_mean_v[:, solve_ix].T, cov=mean_v_cov).astype(np.float32)
+    mean_v_m = _stage7_mean_velocity_fit(ph_mean_v, day, master_ix, ifg_std)
     mean_v = mean_v_m[1, :].astype(np.float32)
 
     payload = {

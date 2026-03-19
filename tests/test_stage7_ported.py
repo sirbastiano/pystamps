@@ -5,6 +5,7 @@ import numpy as np
 from pystamps.pipeline.ported import (
     _deramp_unwrapped_phase,
     _select_reference_ps,
+    _stage7_mean_velocity_fit,
     _stage7_unwrap_ifg_sets,
     _weighted_lstsq_shared_design,
 )
@@ -93,3 +94,34 @@ def test_stage7_unwrap_ifg_sets_keeps_master_for_sequential_diffs() -> None:
 
     np.testing.assert_array_equal(unwrap_ifg, np.asarray([1, 2, 3, 4], dtype=np.int64))
     np.testing.assert_array_equal(solve_ifg, np.asarray([1, 2, 4], dtype=np.int64))
+
+
+def test_stage7_mean_velocity_fit_uses_full_stack_weights() -> None:
+    ph_mean_v = np.asarray(
+        [
+            [3.0, 0.0, -1.0, 1.0],
+            [-2.0, 0.0, 4.0, 7.0],
+        ],
+        dtype=np.float64,
+    )
+    day = np.asarray([8.0, 10.0, 13.0, 17.0], dtype=np.float64)
+    ifg_std = np.asarray([1.0, 2.0, 4.0, 8.0], dtype=np.float64)
+
+    m = _stage7_mean_velocity_fit(ph_mean_v, day, master_ix=2, ifg_std=ifg_std)
+
+    time_diff = day - day[1]
+    weights = 1.0 / ((ifg_std * np.pi / 180.0) ** 2)
+    s0 = float(np.sum(weights))
+    s1 = float(np.sum(weights * time_diff))
+    s2 = float(np.sum(weights * time_diff * time_diff))
+    det = s0 * s2 - s1 * s1
+    wy0 = np.sum(ph_mean_v * weights[None, :], axis=1)
+    wy1 = np.sum(ph_mean_v * (weights * time_diff)[None, :], axis=1)
+    expected = np.vstack(
+        (
+            ((wy0 * s2 - wy1 * s1) / det).astype(np.float32),
+            ((wy1 * s0 - wy0 * s1) / det).astype(np.float32),
+        )
+    )
+
+    np.testing.assert_allclose(m, expected, atol=1e-10, rtol=0.0)

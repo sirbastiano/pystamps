@@ -3,12 +3,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import time
 from pathlib import Path
 from typing import Any
 
 from pystamps.config import RunConfig
-from pystamps.parity_contract import build_parity_contract
+from pystamps.parity_contract import (
+    STAGE1_VERIFY_PATTERNS,
+    STAGE4_CLEAN_PATTERNS,
+    STAGE25_CLEAN_PATTERNS,
+    STAGE68_CLEAN_PATTERNS,
+    STAGE28_CLEAN_PATTERNS,
+    FULL_CLEAN_PATTERNS,
+    build_parity_contract,
+)
+from pystamps.pipeline.stages import run_pipeline
+from pystamps.pipeline.types import PipelineContext
 from pystamps.verify import summarize_failures, verify_run_against_golden
 
 
@@ -71,6 +83,87 @@ def _validation_runs_root() -> Path:
     return _inputs_root() / "validation_runs"
 
 
+def _copy_dataset(src: Path, dst: Path) -> None:
+    if dst.exists():
+        shutil.rmtree(dst)
+    try:
+        shutil.copytree(src, dst, copy_function=os.link)
+    except OSError:
+        shutil.copytree(src, dst)
+
+
+def _clean_outputs(dataset_root: Path, patterns: tuple[str, ...]) -> None:
+    for pattern in patterns:
+        for path in dataset_root.glob(pattern):
+            if path.is_file():
+                path.unlink()
+
+
+def _has_stage1_artifacts(dataset_root: Path) -> bool:
+    return all(any(dataset_root.glob(pattern)) for pattern in STAGE1_VERIFY_PATTERNS)
+
+
+def _stage48_clean_patterns() -> tuple[str, ...]:
+    stage5_onward = tuple(pattern for pattern in STAGE25_CLEAN_PATTERNS if pattern not in {"PATCH_*/pm1.mat", "PATCH_*/select1.mat"})
+    return STAGE4_CLEAN_PATTERNS + stage5_onward + STAGE68_CLEAN_PATTERNS
+
+
+def _seed_root_for_dataset(dataset_root: Path) -> Path:
+    if dataset_root.name == "InSAR_dataset_test":
+        explicit = _repo_root() / "inputs_and_outputs" / "RUN_FULL_GATE_1e10"
+        if explicit.exists():
+            return explicit.resolve()
+    return dataset_root.resolve()
+
+
+def _run_profile(dataset_root: Path) -> tuple[Path, int, int, tuple[str, ...], str]:
+    seed_root = _seed_root_for_dataset(dataset_root)
+    if seed_root.name == "RUN_FULL_GATE_1e10":
+        return seed_root, 4, 8, _stage48_clean_patterns(), "RUN_FULL_GATE_1e10"
+    if _has_stage1_artifacts(dataset_root):
+        return seed_root, 2, 8, STAGE28_CLEAN_PATTERNS, dataset_root.name
+    return seed_root, 1, 8, FULL_CLEAN_PATTERNS, dataset_root.name
+
+
+def _build_run_copy(dataset_root: Path, audit_stamp: str) -> tuple[Path, dict[str, Any]]:
+    seed_root, start_step, end_step, clean_patterns, seed_name = _run_profile(dataset_root)
+    validation_dir = _validation_runs_root() / audit_stamp
+    validation_dir.mkdir(parents=True, exist_ok=True)
+    run_root = validation_dir / f"{dataset_root.name}_stage{start_step}_8"
+    _copy_dataset(seed_root, run_root)
+    _clean_outputs(run_root, clean_patterns)
+
+    context = PipelineContext(
+        dataset_root=run_root.resolve(),
+        run_config=RunConfig(),
+        start_step=start_step,
+        end_step=end_step,
+        dry_run=False,
+    )
+    report = run_pipeline(context)
+    failures = [
+        {
+            "stage": result.stage_id,
+            "scope": result.scope,
+            "target": result.target,
+            "status": result.status,
+            "details": result.details,
+        }
+        for result in report.failures
+    ]
+    if failures:
+        raise RuntimeError(f"Pipeline regeneration failed for {dataset_root.name}: {json.dumps(failures)}")
+
+    return run_root.resolve(), {
+        "start_step": start_step,
+        "end_step": end_step,
+        "seed_root": str(seed_root),
+        "seed_name": seed_name,
+        "clean_patterns": list(clean_patterns),
+        "validation_run_dir": str(validation_dir.resolve()),
+    }
+
+
 def _latest_workflow_run(dataset_name: str, suffixes: tuple[str, ...]) -> Path | None:
     validation_runs = _validation_runs_root()
     if not validation_runs.exists():
@@ -119,10 +212,23 @@ def _resolve_run_selection(dataset_root: Path, golden_base: Path | None) -> tupl
     return run_root, dataset_root.resolve(), "resolved_full_loop_run_copy"
 
 
-def _dataset_audit(run_root: Path, golden_root: Path, run_source: str) -> dict[str, Any]:
+def _prepare_run_selection(
+    dataset_root: Path, golden_base: Path | None, audit_stamp: str
+) -> tuple[Path, Path, str, dict[str, Any] | None]:
+    if golden_base is not None:
+        run_root, golden_root, run_source = _resolve_run_selection(dataset_root, golden_base)
+        return run_root, golden_root, run_source, None
+
+    run_root, generation = _build_run_copy(dataset_root, audit_stamp)
+    return run_root, dataset_root.resolve(), "generated_full_loop_run_copy", generation
+
+
+def _dataset_audit(
+    run_root: Path, golden_root: Path, run_source: str, generation: dict[str, Any] | None = None
+) -> dict[str, Any]:
     report = verify_run_against_golden(run_root, golden_root, RunConfig().tolerance)
     summary = summarize_failures(report)
-    return {
+    payload = {
         "workflow": _workflow_name(golden_root),
         "dataset": golden_root.name,
         "run_root": str(run_root),
@@ -133,6 +239,9 @@ def _dataset_audit(run_root: Path, golden_root: Path, run_source: str) -> dict[s
         "checked": len(report.comparisons),
         **summary,
     }
+    if generation is not None:
+        payload["run_generation"] = generation
+    return payload
 
 
 def _base_payload(contract: dict[str, Any]) -> dict[str, Any]:
@@ -177,6 +286,7 @@ def main() -> int:
     payload = _base_payload(contract)
     datasets, missing_from_request, extra_request = _resolve_datasets(args, contract)
     golden_base = Path(args.golden_root).expanduser().resolve() if args.golden_root else None
+    audit_stamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
 
     missing = [str(dataset) for dataset in datasets if not dataset.exists()]
     if missing_from_request or extra_request:
@@ -202,13 +312,21 @@ def main() -> int:
 
     try:
         for dataset in datasets:
-            run_root, golden_root, run_source = _resolve_run_selection(dataset, golden_base)
-            payload["audits"].append(_dataset_audit(run_root, golden_root, run_source))
+            run_root, golden_root, run_source, generation = _prepare_run_selection(dataset, golden_base, audit_stamp)
+            payload["audits"].append(_dataset_audit(run_root, golden_root, run_source, generation))
         payload["completed"] = True
     except FileNotFoundError as exc:
         payload["interrupted"] = True
         payload["interruption"] = {
             "kind": "missing_run_copy",
+            "message": str(exc),
+        }
+        _emit_payload(_finalize_payload(payload), args.output)
+        return 1
+    except RuntimeError as exc:
+        payload["interrupted"] = True
+        payload["interruption"] = {
+            "kind": "run_copy_generation_failed",
             "message": str(exc),
         }
         _emit_payload(_finalize_payload(payload), args.output)

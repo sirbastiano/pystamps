@@ -6,6 +6,8 @@ import numpy as np
 
 from pystamps.kernels.registry import DEFAULT_REGISTRY
 
+_STAGE8_NOISE_SCALE = np.float32(0.5)
+
 
 class BackendUnavailableError(RuntimeError):
     """Raised when a requested compute backend is not available."""
@@ -229,12 +231,16 @@ def _stage8_edge_noise_cpu(
         chunk_edges = _auto_chunk_size(n_edge, max(1, n_ifg * 3), np.dtype(np.float32).itemsize)
     chunk_edges = max(1, int(chunk_edges))
 
+    dph_space_uw = np.empty((n_edge, n_ifg), dtype=np.float32)
     dph_noise = np.empty((n_edge, n_ifg), dtype=np.float32)
     for start in range(0, n_edge, chunk_edges):
         end = min(start + chunk_edges, n_edge)
-        dph_space = ph[b[start:end], :] * np.conj(ph[a[start:end], :])
-        dph_noise[start:end, :] = np.angle(dph_space).astype(np.float32)
-    return {"dph_noise": dph_noise, "dph_space_uw": dph_noise.copy()}
+        dph_space = np.angle(ph[b[start:end], :] * np.conj(ph[a[start:end], :])).astype(np.float32)
+        dph_space_uw[start:end, :] = dph_space
+        dph_noise[start:end, :] = (
+            (dph_space - np.mean(dph_space, axis=1, keepdims=True)) * _STAGE8_NOISE_SCALE
+        ).astype(np.float32)
+    return {"dph_noise": dph_noise, "dph_space_uw": dph_space_uw}
 
 
 def _stage8_edge_noise_gpu(
@@ -257,14 +263,19 @@ def _stage8_edge_noise_gpu(
         chunk_edges = _auto_chunk_size(n_edge, max(1, n_ifg * 6), np.dtype(np.float32).itemsize)
     chunk_edges = max(1, int(chunk_edges))
 
-    out = np.empty((n_edge, n_ifg), dtype=np.float32)
+    dph_space_uw = np.empty((n_edge, n_ifg), dtype=np.float32)
+    dph_noise = np.empty((n_edge, n_ifg), dtype=np.float32)
     for start in range(0, n_edge, chunk_edges):
         end = min(start + chunk_edges, n_edge)
         a_c = cp.asarray(a[start:end], dtype=cp.int64)
         b_c = cp.asarray(b[start:end], dtype=cp.int64)
-        dph_space = ph[b_c, :] * cp.conj(ph[a_c, :])
-        out[start:end, :] = _to_numpy(cp.angle(dph_space).astype(cp.float32)).astype(np.float32)
-    return {"dph_noise": out, "dph_space_uw": out.copy()}
+        dph_space = cp.angle(ph[b_c, :] * cp.conj(ph[a_c, :])).astype(cp.float32)
+        dph_space_np = _to_numpy(dph_space).astype(np.float32)
+        dph_space_uw[start:end, :] = dph_space_np
+        dph_noise[start:end, :] = (
+            (dph_space_np - np.mean(dph_space_np, axis=1, keepdims=True)) * _STAGE8_NOISE_SCALE
+        ).astype(np.float32)
+    return {"dph_noise": dph_noise, "dph_space_uw": dph_space_uw}
 
 
 DEFAULT_REGISTRY.register("stage7_scla", cpu=_stage7_scla_cpu, gpu=_stage7_scla_gpu, native=_stage7_scla_cpu)

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Verification - pySTAMPS Docs</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script defer src="assets/scripts.js"></script>
+</head>
+<body>
+<div class="site">
+  <aside class="sidebar">
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>Output comparison and parity checks.</small>
+    <nav>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a class="active" href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/cli.html">cli</a></li><li><a href="api/verify.html">verify</a></li><li><a href="api/parity_contract.html">parity_contract</a></li></ul></div>
+    </nav>
+  </aside>
+  <main class="content">
+    <div class="breadcrumb">Home / Verification</div>
+
+    <section class="hero">
+      <span class="badge">Result checks</span>
+      <h1>Validate generated outputs with deterministic comparison workflows.</h1>
+      <p>Verification in pySTAMPS has two practical layers: a direct CLI comparison against a reference dataset, and parity-audit scripts that prepare fresh run copies before validation.</p>
+    </section>
+
+    <section class="card">
+      <h2>CLI verification</h2>
+      <p>Use `pystamps verify` once a run copy exists.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps verify --run /tmp/run-copy --golden /path/to/reference</code></pre>
+      <ul>
+        <li>Returns <span class="code-inline">0</span> when all comparisons pass and non-zero when mismatches are found.</li>
+        <li>Compares numeric MATLAB payloads with tolerance settings and classifies failure families by artifact.</li>
+        <li>Use repository-specific shortcuts only for fixed in-repo references.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Repository shortcut caveat</h2>
+      <p><span class="code-inline">make verify</span> is a convenience for fixed reference paths in this repository. For arbitrary runs, use the CLI command above so the path pair is explicit.</p>
+    </section>
+
+    <section class="card">
+      <h2>Parity audit workflow</h2>
+      <p>Parity audits prepare and track fresh run copies, then report the copy path for explicit verification.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  python scripts/validate_audit.py \
+    --datasets \
+      inputs_and_outputs/InSAR_dataset_test_stage8diag \
+      inputs_and_outputs/InSAR_dataset_test \
+    --output inputs_and_outputs/validation_runs/latest_audit.json</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">RUN_COPY="$(python - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('inputs_and_outputs/validation_runs/latest_audit.json').read_text(encoding='utf-8'))
+print(next(audit['run_root'] for audit in payload['audits'] if audit['dataset'] == 'InSAR_dataset_test'))
+PY
+)"
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  pystamps verify --run "$RUN_COPY" --golden ./inputs_and_outputs/InSAR_dataset_test</code></pre>
+      <ul>
+        <li>Fresh audit output should be treated as active input for subsequent checks.</li>
+        <li>Do not rerun against stale copies; interrupted audits or manual restart paths invalidate prior results.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Release flow references</h2>
+      <p>For release gate ordering, use the same parity-audit and verify steps from the verification flow. The release page now links here for full command context.</p>
+      <p>See the full API contract fields for parity in <a href="api/parity_contract.html">api/parity_contract</a> and the command-level verification API in <a href="api/verify.html">api/verify</a>.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>

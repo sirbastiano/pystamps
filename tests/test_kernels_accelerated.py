@@ -30,6 +30,32 @@ def test_stage8_kernel_cpu_shapes() -> None:
     assert out["dph_space_uw"].shape == (2, 2)
 
 
+def test_stage8_kernel_uses_forward_edge_orientation() -> None:
+    uw_ph = np.asarray(
+        [
+            [1 + 0j, 1j],
+            [1j, 1 + 0j],
+        ],
+        dtype=np.complex64,
+    )
+    out = run_stage8_edge_noise_kernel(
+        uw_ph,
+        np.asarray([0], dtype=np.int64),
+        np.asarray([1], dtype=np.int64),
+        backend="cpu",
+    )
+
+    expected = np.angle(uw_ph[[1], :] * np.conj(uw_ph[[0], :])).astype(np.float32)
+
+    np.testing.assert_allclose(out["dph_space_uw"], expected, atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(
+        out["dph_noise"],
+        (expected - np.mean(expected, axis=1, keepdims=True)) * np.float32(0.5),
+        atol=0.0,
+        rtol=0.0,
+    )
+
+
 def test_gpu_backend_requires_cupy() -> None:
     if importlib.util.find_spec("cupy") is not None:
         out = run_stage8_edge_noise_kernel(

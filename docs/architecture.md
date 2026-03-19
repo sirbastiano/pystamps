@@ -16,7 +16,6 @@
 - Stages 6-8 currently use migration-baseline numerical methods and are not yet parity-equivalent to legacy StaMPS on full datasets.
 - Each stage has an expected artifact map used for progress/status and execution dispatch.
 
-## Verification
+## Output checks
 
-- Verification compares numeric MAT payloads with configurable tolerances.
-- Golden dataset path currently targeted: `inputs_and_outputs/InSAR_dataset_test`.
+- Comparison and parity checks are documented in the dedicated verification guide.

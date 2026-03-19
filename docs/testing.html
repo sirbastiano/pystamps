@@ -10,10 +10,10 @@
 <body>
 <div class="site">
   <aside class="sidebar">
-    <div class="logo"><span class="logo-mark"></span><h1>pySTAMPS Docs</h1></div>
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Testing Guide</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>API</h2><ul class="nav-list"><li><a href="api/pystamps.html">Package</a></li><li><a href="api/configuration.html">config</a></li><li><a href="api/cli.html">cli</a></li><li><a href="api/status.html">status</a></li><li><a href="api/verify.html">verify</a></li><li><a href="api/parity_contract.html">parity_contract</a></li><li><a href="api/io_dataset.html">io.dataset</a></li><li><a href="api/io_mat.html">io.mat</a></li><li><a href="api/runtime.html">runtime</a></li><li><a href="api/kernels.html">kernels</a></li><li><a href="api/pipeline_types.html">pipeline.types</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li><li><a href="api/compat_legacy.html">compat.legacy</a></li></ul></div>
     </nav>
   </aside>
@@ -23,44 +23,32 @@
 
     <section class="card">
       <h2>Running tests</h2>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pytest -q</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run --with build python -m build --sdist --wheel
-uv run --with twine python -m twine check dist/*</code></pre>
-      <p>The repository includes committed unit tests. Dataset-backed parity tests are kept in-tree as optional checks and skip cleanly when the local validation datasets are absent, so <span class="code-inline">uv run pytest -q</span> remains the clean-checkout gate.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">python -m pytest -q</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">python -m build --sdist --wheel
+python -m twine check dist/*</code></pre>
+      <p>The repository includes committed unit tests. Dataset-backed parity tests are kept in-tree as optional checks and skip cleanly when the local validation datasets are absent, so <span class="code-inline">python -m pytest -q</span> remains the clean-checkout gate.</p>
     </section>
 
     <section class="card">
       <h2>Test structure</h2>
       <ul>
-        <li>Default unit tests cover config loading, dataset discovery, verification classification, acceleration helpers, and Stage-7 helper math.</li>
+        <li>Default unit tests cover config loading, dataset discovery, acceleration helpers, and Stage-7 helper math.</li>
         <li>Dataset-backed parity tests and audits require local inputs under <span class="code-inline">inputs_and_outputs/</span> and are not part of the minimal fresh-clone contract.</li>
-        <li>Parity checks are orchestrated through scripts and CLI workflows rather than through package import APIs alone.</li>
+        <li>Parity checks are documented in the verification guide so you can keep the test command list focused.</li>
       </ul>
     </section>
 
     <section class="card">
       <h2>Coverage</h2>
-      <p>There is no tracked CI workflow or Makefile in this standalone repo snapshot. Validation is driven directly through <span class="code-inline">uv run pytest</span>, <span class="code-inline">python -m build</span>, <span class="code-inline">twine check</span>, and the parity audit scripts.</p>
+      <p>There is no tracked CI workflow or Makefile in this standalone repo snapshot. Validation starts with <span class="code-inline">python -m pytest</span>, <span class="code-inline">python -m build</span>, and <span class="code-inline">python -m twine check</span>, then moves to parity-audit validation in <a href="verification.html">Verification</a>.</p>
       <div class="callout info">In-code assertions and explicit exceptions define many behavior guarantees where test coverage is expected to assert failure conditions.</div>
     </section>
 
     <section class="card">
       <h2>Validation workflow</h2>
-      <p>Stage verification contract and audit metadata are represented by <span class="code-inline">pystamps.parity_contract</span> constants and exported helpers.</p>
-      <p>The parity audit requires local validation datasets. When those datasets are not present, stop at the unit/build/package commands above; do not guess a Makefile, CI wrapper, or reduced audit dataset list.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">python - <<'PY'
-from pystamps.parity_contract import build_parity_contract
-print(build_parity_contract('inputs_and_outputs'))
-PY</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-  uv run python scripts/validate_audit.py \
-    --datasets \
-      inputs_and_outputs/InSAR_dataset_test_stage8diag \
-      inputs_and_outputs/InSAR_dataset_test \
-    --output inputs_and_outputs/validation_runs/latest_audit.json</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-  uv run pystamps verify --run RUN_COPY --golden ./inputs_and_outputs/InSAR_dataset_test</code></pre>
-    </section>
+      <p>Parity audits and explicit verify command patterns are described in <a href="verification.html">Verification</a>.</p>
+      <p>The verification flow includes contract construction, script orchestration, and CLI comparison commands used by release quality checks.</p>
+  </section>
   </main>
 </div>
 </body>

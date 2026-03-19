@@ -10,7 +10,7 @@
 <body>
 <div class="site">
   <aside class="sidebar">
-    <div class="logo"><img src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Plain-language orientation for first-time users.</small>
     <nav>
       <div class="nav-group">
@@ -24,6 +24,7 @@
           <li><a href="configuration.html">Configuration</a></li>
           <li><a href="usage.html">Usage</a></li>
           <li><a href="testing.html">Testing</a></li>
+          <li><a href="verification.html">Verification</a></li>
           <li><a href="contributing.html">Contributing</a></li>
           <li><a href="faq.html">FAQ</a></li>
         </ul>
@@ -48,7 +49,7 @@
 
     <section class="card">
       <h2>What is pySTAMPS?</h2>
-      <p>pySTAMPS is a Python implementation and orchestration layer for StaMPS-style processing. In practical terms, it reads a dataset directory, checks which processing artifacts already exist, runs the stages you select, and lets you compare your generated outputs against a trusted reference dataset.</p>
+      <p>pySTAMPS is a Python implementation and orchestration layer for StaMPS-style processing. In practical terms, it reads a dataset directory, checks which processing artifacts already exist, and runs the stages you select.</p>
       <div class="callout info"><strong>Think of it this way:</strong> pySTAMPS is a reproducible processing assistant for a folder full of scientific inputs and intermediate outputs.</div>
     </section>
 
@@ -102,20 +103,16 @@
       <ol>
         <li>Inspect the dataset layout:</li>
       </ol>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset inputs_and_outputs/InSAR_dataset_test</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps status --dataset inputs_and_outputs/InSAR_dataset_test</code></pre>
       <ol start="2">
         <li>Check what a full run would do without writing outputs:</li>
       </ol>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset inputs_and_outputs/InSAR_dataset_test --start-step 1 --end-step 8 --dry-run</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps run --dataset inputs_and_outputs/InSAR_dataset_test --start-step 1 --end-step 8 --dry-run</code></pre>
       <ol start="3">
         <li>Run a smaller stage range on a copy:</li>
       </ol>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">cp -a inputs_and_outputs/InSAR_dataset_test /tmp/InSAR_dataset_test_run
-uv run pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 6 --end-step 8</code></pre>
-      <ol start="4">
-        <li>Verify the result against a golden dataset:</li>
-      </ol>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run /tmp/InSAR_dataset_test_run --golden inputs_and_outputs/InSAR_dataset_test</code></pre>
+pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 6 --end-step 8</code></pre>
     </section>
 
     <section class="diagram-card">
@@ -123,14 +120,13 @@ uv run pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 6 --end-s
       <p>If text is not enough, open the visual graph that shows the end-to-end beginner flow.</p>
       <a class="diagram-link" href="https://www.figma.com/online-whiteboard/create-diagram/2cd2c194-7c86-4c16-9a10-d964fc5a1b40?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=&request_id=72140c10-d529-4949-8a78-a575e6a13883">
         <strong>Open pySTAMPS Beginner Flow in Figma</strong>
-        <p>It shows the sequence from dataset inspection to stage execution and verification.</p>
+        <p>It shows the sequence from dataset inspection to stage execution.</p>
       </a>
     </section>
 
     <section class="card">
       <h2>When to use the repo-specific shortcuts</h2>
-      <p>The repository includes convenience targets such as <span class="code-inline">make test</span>, <span class="code-inline">make audit</span>, and <span class="code-inline">make verify</span>. These are useful for repo maintenance, but the generic CLI form is still the clearest way to learn how pySTAMPS works on your own datasets.</p>
-      <div class="callout warning"><strong>Important:</strong> <span class="code-inline">make verify</span> is a fixed reference-path convenience target for this repository. It is not a generic replacement for arbitrary <span class="code-inline">pystamps verify --run ... --golden ...</span> commands.</div>
+      <p>The repository includes convenience targets such as <span class="code-inline">make test</span> and <span class="code-inline">make audit</span>. Use <a href="verification.html">Verification</a> for output comparison guidance when you move beyond execution-only workflows.</p>
     </section>
 
     <p class="footer">Next: follow <a href="quickstart.html">Quick Start</a> for a command-by-command workflow.</p>

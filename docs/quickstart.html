@@ -10,10 +10,10 @@
 <body>
 <div class="site">
   <aside class="sidebar">
-    <div class="logo"><img src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Practical command flow for a first run.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a class="active" href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a class="active" href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li></ul></div>
     </nav>
   </aside>
@@ -22,42 +22,40 @@
 
     <section class="hero">
       <span class="badge">Run flow</span>
-      <h1>Inspect, rehearse, run, then verify.</h1>
+      <h1>Inspect, rehearse, then run.</h1>
       <p>This page is the shortest correct path through pySTAMPS. It is intentionally practical: every step is something you can run on a dataset copy without needing to understand every scientific detail first.</p>
     </section>
 
     <section class="card">
       <h2>Step 1: inspect the dataset</h2>
       <p>Start by asking pySTAMPS what it sees in the dataset root.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset inputs_and_outputs/InSAR_dataset_test</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps status --dataset inputs_and_outputs/InSAR_dataset_test</code></pre>
       <p>This command does not process the data. It reports the merged stage and patch stages it can infer from the artifacts already present.</p>
     </section>
 
     <section class="card">
       <h2>Step 2: dry-run the full pipeline</h2>
       <p>A dry-run is a safe rehearsal. It shows what pySTAMPS would do without executing the stages.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset inputs_and_outputs/InSAR_dataset_test --start-step 1 --end-step 8 --dry-run</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps run --dataset inputs_and_outputs/InSAR_dataset_test --start-step 1 --end-step 8 --dry-run</code></pre>
     </section>
 
     <section class="card">
       <h2>Step 3: run on a copy, not on your only original</h2>
       <p>pySTAMPS writes artifacts into the dataset tree. Make a run copy first.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">cp -a inputs_and_outputs/InSAR_dataset_test /tmp/InSAR_dataset_test_run
-uv run pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 1 --end-step 8</code></pre>
+pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 1 --end-step 8</code></pre>
       <div class="callout tip">For debugging, shorten the range. For example, <span class="code-inline">--start-step 6 --end-step 8</span> is useful when you only need to study late merged stages.</div>
     </section>
 
     <section class="card">
-      <h2>Step 4: verify what you generated</h2>
-      <p>Verification compares your run directory with a golden reference dataset.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run /tmp/InSAR_dataset_test_run --golden inputs_and_outputs/InSAR_dataset_test</code></pre>
-      <div class="callout warning"><strong>Repo shortcut:</strong> <span class="code-inline">make verify</span> only covers the repository's fixed reference paths. Use the CLI form above when you want to verify an arbitrary run directory.</div>
+      <h2>Step 4: validate outputs</h2>
+      <p>Verification is now documented in <a href="verification.html">Verification</a>. It covers direct CLI compare commands, repository parity audit scripts, and stale-copy safety rules.</p>
     </section>
 
     <section class="panel-grid">
       <article class="action-card">
         <h3>Need worker tuning?</h3>
-        <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset DATASET_DIR --start-step 1 --end-step 8 --io-workers 12 --cpu-workers 4</code></pre>
+        <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps run --dataset DATASET_DIR --start-step 1 --end-step 8 --io-workers 12 --cpu-workers 4</code></pre>
       </article>
       <article class="action-card">
         <h3>Need a config file?</h3>
@@ -80,7 +78,6 @@ uv run pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 1 --end-s
       <ul>
         <li><span class="code-inline">status</span>: <span class="code-inline">--dataset</span></li>
         <li><span class="code-inline">run</span>: <span class="code-inline">--dataset</span>, <span class="code-inline">--start-step</span>, <span class="code-inline">--end-step</span>, <span class="code-inline">--dry-run</span>, <span class="code-inline">--io-workers</span>, <span class="code-inline">--cpu-workers</span></li>
-        <li><span class="code-inline">verify</span>: <span class="code-inline">--run</span>, <span class="code-inline">--golden</span></li>
         <li><span class="code-inline">list-legacy</span>: <span class="code-inline">--stamps-root</span> or <span class="code-inline">STAMPS_ROOT</span></li>
       </ul>
     </section>
