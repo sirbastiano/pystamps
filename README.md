@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/pystamps-logo.svg" alt="pySTAMPS" style="width: 112px; height: auto; max-width: 100%;" />
+<img src="docs/assets/pystamps-logo.svg" alt="pySTAMPS" style="width: 124px; height: auto; max-width: 100%;" />
 
 # pySTAMPS
 
