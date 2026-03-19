@@ -458,7 +458,7 @@ button.copy-btn:hover {
 .sidebar-toggle {
   position: fixed;
   top: 0.95rem;
-  left: 0.95rem;
+  left: calc(var(--sidebar-width) + 0.95rem);
   z-index: 20;
   padding: 0.45rem 0.72rem;
   border-radius: 12px;
@@ -488,6 +488,10 @@ button.copy-btn:hover {
 
 .site.sidebar-collapsed {
   grid-template-columns: 0 1fr;
+}
+
+.site.sidebar-collapsed .sidebar-toggle {
+  left: 0.95rem;
 }
 
 .site.sidebar-collapsed .sidebar {
@@ -538,6 +542,10 @@ button.copy-btn:hover {
   .sidebar-toggle {
     left: 0.75rem;
     top: 0.75rem;
+  }
+
+  .site.sidebar-collapsed .sidebar-toggle {
+    left: 0.75rem;
   }
 }
 
