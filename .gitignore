@@ -11,7 +11,10 @@ __pycache__/
 .DS_Store
 
 # Local agent/runtime state
-.ralph/
+/.agents/
+/.codex/
+/.ralph/
+/AGENTS.md
 
 # Generated metadata
 *.egg-info/
