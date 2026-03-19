@@ -79,9 +79,25 @@ body {
 .brand-logo {
   width: 34px;
   height: 34px;
+  max-width: 34px;
+  max-height: 34px;
+  object-fit: contain;
   border-radius: 10px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sidebar > .logo > img {
+  width: 26px;
+  height: 26px;
+  max-width: 26px;
+  max-height: 26px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.sidebar .logo img {
+  flex-shrink: 0;
 }
 
 .brand-logo:hover {
@@ -117,8 +133,8 @@ body {
 }
 
 .page-brand.is-index .page-brand-logo {
-  width: 78px;
-  height: 78px;
+  width: 58px;
+  height: 58px;
   border-radius: 18px;
 }
 
@@ -442,8 +458,8 @@ button.copy-btn:hover {
 
 .diagram-zoom-image {
   display: block;
-  width: 1200px;
-  max-width: none;
+  width: min(100%, 1200px);
+  height: auto;
   transform-origin: top left;
   transition: transform 120ms ease;
 }
