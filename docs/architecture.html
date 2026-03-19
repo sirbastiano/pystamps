@@ -10,10 +10,10 @@
 <body>
 <div class="site">
   <aside class="sidebar">
-    <div class="logo"><img src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>System structure, module roles, and data flow.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li></ul></div>
     </nav>
   </aside>
@@ -22,8 +22,8 @@
 
     <section class="hero">
       <span class="badge">System map</span>
-      <h1>pySTAMPS is layered by orchestration, stage execution, I/O, and verification.</h1>
-      <p>The architecture is easiest to understand if you separate control flow from numerical work. The CLI decides intent, the pipeline decides stage scheduling, the ported stage functions perform scientific transformations, and verification checks the results against a golden reference.</p>
+      <h1>pySTAMPS is layered by orchestration, stage execution, and I/O.</h1>
+      <p>The architecture is easiest to understand if you separate control flow from numerical work. The CLI decides intent, the pipeline decides stage scheduling, and the ported stage functions perform scientific transformations.</p>
     </section>
 
     <section class="card">
@@ -32,17 +32,44 @@
         <div class="highlight-card"><h3>CLI layer</h3><p><span class="code-inline">pystamps.cli</span> parses commands and builds the execution context.</p></div>
         <div class="highlight-card"><h3>Scheduling layer</h3><p><span class="code-inline">pystamps.pipeline.stages</span> chooses the stage range, checks existing artifacts, and records results.</p></div>
         <div class="highlight-card"><h3>Stage layer</h3><p><span class="code-inline">pystamps.pipeline.ported</span> contains the concrete stage implementations and many stage-specific helpers.</p></div>
-        <div class="highlight-card"><h3>Support layer</h3><p><span class="code-inline">pystamps.io</span>, <span class="code-inline">pystamps.runtime</span>, <span class="code-inline">pystamps.kernels</span>, and <span class="code-inline">pystamps.verify</span> provide the shared infrastructure.</p></div>
+        <div class="highlight-card"><h3>Support layer</h3><p><span class="code-inline">pystamps.io</span>, <span class="code-inline">pystamps.runtime</span>, and <span class="code-inline">pystamps.kernels</span> provide the shared infrastructure.</p></div>
       </div>
     </section>
 
     <section class="diagram-card">
-      <h2>Workflow graph in Figma</h2>
-      <p>The beginner workflow graph is useful here too because it shows how status inspection, execution, and verification connect.</p>
+      <h2>Workflow graph (Figma)</h2>
+      <p>This diagram focuses on the command flow around <span class="code-inline">status</span> and <span class="code-inline">run</span>. It is exported from the linked Figma draft as the PNG used below, with zoom controls so you can inspect the full layout.</p>
       <a class="diagram-link" href="https://www.figma.com/online-whiteboard/create-diagram/2cd2c194-7c86-4c16-9a10-d964fc5a1b40?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=&request_id=72140c10-d529-4949-8a78-a575e6a13883">
-        <strong>Open the architecture-adjacent workflow graph in Figma</strong>
-        <p>Use it as a visual companion to the module and data-flow sections below.</p>
+        <strong>Open the source graph in Figma</strong>
       </a>
+      <div class="diagram-zoom-wrap">
+        <div class="diagram-zoom-controls">
+          <label for="architecture-diagram-zoom">
+            <span>Diagram zoom</span>
+            <output id="architecture-diagram-zoom-value" for="architecture-diagram-zoom">100%</output>
+          </label>
+          <input
+            id="architecture-diagram-zoom"
+            class="diagram-zoom-slider"
+            type="range"
+            min="60"
+            max="180"
+            value="100"
+            data-diagram-zoom="#architecture-diagram"
+            data-diagram-zoom-output="#architecture-diagram-zoom-value"
+          />
+        </div>
+        <div class="diagram-zoom-frame">
+          <picture>
+            <img
+              id="architecture-diagram"
+              class="diagram-zoom-image"
+              src="assets/pystamps-workflow.png"
+              alt="pySTAMPS status/run workflow graph"
+            />
+          </picture>
+        </div>
+      </div>
     </section>
 
     <section class="card">
@@ -57,7 +84,6 @@
             <tr><td><code>pystamps/io/</code></td><td>Dataset discovery and MATLAB file I/O helpers</td></tr>
             <tr><td><code>pystamps/runtime/</code></td><td>Hybrid thread/process execution primitives</td></tr>
             <tr><td><code>pystamps/kernels/</code></td><td>Kernel registry and CPU/GPU dispatch</td></tr>
-            <tr><td><code>pystamps/verify.py</code></td><td>Golden-dataset comparison and mismatch classification</td></tr>
           </tbody>
         </table>
       </div>
@@ -66,11 +92,11 @@
     <section class="card">
       <h2>Data flow</h2>
       <ol>
-        <li>The CLI receives a command such as <span class="code-inline">run</span>, <span class="code-inline">status</span>, or <span class="code-inline">verify</span>.</li>
+        <li>The CLI receives a command such as <span class="code-inline">run</span> or <span class="code-inline">status</span>.</li>
         <li>A <span class="code-inline">RunConfig</span> is loaded, and a <span class="code-inline">PipelineContext</span> is created for pipeline work.</li>
         <li>The dataset root is discovered into patch directories and merged-stage artifacts.</li>
         <li>Selected stages either reuse existing outputs or execute the ported implementation.</li>
-        <li>Verification recursively compares numeric payloads in MATLAB files and summarizes failures for debugging.</li>
+        <li>Pipeline reports are recorded so downstream checks can validate outputs from this run.</li>
       </ol>
       <div class="callout tip">This artifact-driven design is why pySTAMPS is good at resumable workflows: it can skip work when expected stage outputs are already present.</div>
     </section>
@@ -80,8 +106,8 @@
       <ul>
         <li><strong>Stage ranges are explicit:</strong> you can isolate late stages when debugging or benchmarking.</li>
         <li><strong>Execution is hybrid:</strong> the runtime can use threads for I/O-heavy work and processes for CPU-heavy work.</li>
-        <li><strong>Verification is numeric:</strong> comparisons are not text diffs but tolerance-aware checks on MATLAB payloads.</li>
         <li><strong>Compatibility is configurable:</strong> strict reference replay can copy known-good artifacts into a run tree before stage execution.</li>
+        <li><strong>Output checks are separated:</strong> use <a href="verification.html">Verification</a> for comparison commands and parity audits.</li>
       </ul>
     </section>
   </main>

@@ -1,36 +1,42 @@
+<div align="center">
+
+![pySTAMPS](docs/assets/pystamps-logo.svg)
+
+# pySTAMPS
+
+Python-first StaMPS migration runtime for structured InSAR processing, verification, and reproducible parity workflows.
+
+Run pipeline stages. Inspect dataset state. Verify outputs against reference datasets.
+
+[HTML Docs](docs/index.html) · [Quick Start](docs/quickstart.html) ·
+[API Reference](docs/api/pystamps.html) ·
+[Beginner Notebook](examples/00_pystamps_beginner_walkthrough.ipynb)
+
+</div>
+
+pySTAMPS runs StaMPS-style persistent-scatterer pipelines on a dataset folder, and it can compare generated outputs with a reference run for deterministic validation.
+
 <p align="center">
-  <img src="docs/assets/pystamps-logo.svg" alt="pySTAMPS logo" width="160" />
+  <img src="docs/assets/pystamps-workflow.svg" alt="pySTAMPS workflow overview" width="920" />
 </p>
 
-<h1 align="center">pySTAMPS</h1>
-
 <p align="center">
-  Python-first StaMPS migration runtime for structured InSAR processing, verification, and reproducible parity workflows.
+  <em>From dataset inspection to dry-run, execution, and verification.</em>
 </p>
 
 <p align="center">
-  <strong>Run pipeline stages.</strong>
-  <strong>Inspect dataset state.</strong>
-  <strong>Verify outputs against reference datasets.</strong>
+  <img src="docs/assets/pystamps-capabilities.svg" alt="pySTAMPS capability map" width="920" />
 </p>
 
 <p align="center">
-  <a href="docs/index.html">HTML Docs</a>
-  ·
-  <a href="docs/quickstart.html">Quick Start</a>
-  ·
-  <a href="docs/api/pystamps.html">API Reference</a>
-  ·
-  <a href="examples/pystamps_beginner_walkthrough.ipynb">Beginner Notebook</a>
+  <em>Core package responsibilities and where each capability fits.</em>
 </p>
-
-pySTAMPS is a Python package for running a StaMPS-style persistent-scatterer workflow on a dataset folder and checking the produced outputs against a reference dataset.
 
 If you are new to interferometry, start here:
 - [docs/index.html](docs/index.html): HTML documentation home
 - [docs/quickstart.html](docs/quickstart.html): first-run path through the package
 - [docs/usage.html](docs/usage.html): command patterns and workflow examples
-- `examples/pystamps_beginner_walkthrough.ipynb`: notebook walkthrough on the reference datasets in this repo
+- `examples/00_pystamps_beginner_walkthrough.ipynb`: notebook walkthrough on the reference datasets in this repo
 - [docs/api/pystamps.html](docs/api/pystamps.html): API entrypoint for the package modules and functions
 
 ## What pySTAMPS does
@@ -46,6 +52,12 @@ You do not need to know the mathematics of interferometry to start using the pac
 - a dataset directory is the working unit
 - pySTAMPS reads inputs from that directory and writes outputs back into it
 - because of that, it is safest to run on a copy of your dataset, not your only original
+
+In practice, most users interact with pySTAMPS in four steps:
+- inspect a dataset with `pystamps status`
+- preview a run with `pystamps run --dry-run`
+- execute only the stages they need
+- verify the produced outputs against a known reference when needed
 
 ## Install
 
@@ -73,17 +85,21 @@ The wheel ships the `pystamps` Python package and package metadata. The sdist sh
 ## Development setup
 
 ```bash
-uv sync
-# or
+# Editable install with optional dev extras
+python -m pip install -e ".[dev]"
+# or with legacy setuptools flow
+python -m pip install -e .
+# if using make targets:
 make setup
 ```
 
 Fresh-clone validation commands:
 
 ```bash
-uv run pytest -q
-uv run --with build python -m build --sdist --wheel
-uv run --with twine python -m twine check dist/*
+python -m pytest -q
+python -m pip install build twine
+python -m build --sdist --wheel
+python -m twine check dist/*
 # or
 make test
 make test-impl
@@ -96,13 +112,13 @@ make twine-check
 Inspect a dataset before you run anything:
 
 ```bash
-uv run pystamps status --dataset inputs_and_outputs/InSAR_dataset_test
+python -m pystamps status --dataset inputs_and_outputs/InSAR_dataset_test
 ```
 
 Preview a run without doing heavy work:
 
 ```bash
-uv run pystamps run \
+python -m pystamps run \
   --dataset inputs_and_outputs/InSAR_dataset_test \
   --start-step 1 --end-step 8 --dry-run
 ```
@@ -111,7 +127,7 @@ Run the pipeline on a working copy of your dataset:
 
 ```bash
 cp -a /path/to/input_dataset /path/to/input_dataset_run
-uv run pystamps run \
+python -m pystamps run \
   --dataset /path/to/input_dataset_run \
   --start-step 1 --end-step 8
 ```
@@ -119,7 +135,7 @@ uv run pystamps run \
 Verify a run against a golden dataset:
 
 ```bash
-uv run pystamps verify \
+python -m pystamps verify \
   --run /path/to/run_dataset \
   --golden /path/to/golden_dataset
 ```
@@ -199,7 +215,7 @@ Optional local-dataset parity validation:
 
 ```bash
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-  uv run python scripts/validate_audit.py \
+  python scripts/validate_audit.py \
     --datasets \
       inputs_and_outputs/InSAR_dataset_test_stage8diag \
       inputs_and_outputs/InSAR_dataset_test \
@@ -211,7 +227,7 @@ make audit
 Resolve the required full-loop run copy for the explicit verify gate from the fresh audit artifact:
 
 ```bash
-RUN_COPY="$(uv run python - <<'PY'
+RUN_COPY="$(python - <<'PY'
 import json
 from pathlib import Path
 
@@ -220,7 +236,7 @@ print(next(audit['run_root'] for audit in payload['audits'] if audit['dataset'] 
 PY
 )"
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-  uv run pystamps verify --run "$RUN_COPY" --golden ./inputs_and_outputs/InSAR_dataset_test
+  python -m pystamps verify --run "$RUN_COPY" --golden ./inputs_and_outputs/InSAR_dataset_test
 ```
 
 This explicit verify gate must use the fresh `run_root` from
@@ -238,11 +254,15 @@ Strict parity audit notes:
 Benchmark runner:
 
 ```bash
-uv run python scripts/benchmark_backends.py \
+python scripts/benchmark_backends.py \
   --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag \
   --start-step 1 --end-step 8 \
   --repeat 3 --warmup 1
-# or
+```
+
+Or use the documented make target:
+
+```bash
 make benchmark
 ```
 
@@ -254,20 +274,20 @@ make benchmark
 Create release artifacts:
 
 ```bash
-uv run --with build python -m build --sdist --wheel
+python -m build --sdist --wheel
 ```
 
 Check release artifacts:
 
 ```bash
-uv run --with twine python -m twine check dist/*
+python -m twine check dist/*
 ```
 
 Manual upload targets:
 
 ```bash
-uv run --with twine python -m twine upload --repository testpypi dist/*
-uv run --with twine python -m twine upload dist/*
+python -m twine upload --repository testpypi dist/*
+python -m twine upload dist/*
 ```
 
 Build outputs are written to `dist/` as one wheel and one sdist. Generated release directories such as `dist/` and `build/` are excluded from future source builds so packaging validation stays reproducible. The release process is manual and tag-driven; see [docs/release.md](docs/release.md) for the full checklist.
@@ -277,7 +297,7 @@ Build outputs are written to `dist/` as one wheel and one sdist. Generated relea
 - [docs/getting_started.md](docs/getting_started.md)
 - [howtorun.md](howtorun.md)
 - [docs/function_reference.md](docs/function_reference.md)
-- `examples/pystamps_beginner_walkthrough.ipynb`
+- `examples/00_pystamps_beginner_walkthrough.ipynb`
 - [docs/architecture.md](docs/architecture.md)
 - [docs/release.md](docs/release.md)
 
