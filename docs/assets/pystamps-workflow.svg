@@ -69,12 +69,12 @@
   <path d="M 942 216 C 976 216, 988 216, 1020 216" class="arrow" />
   <polygon points="1020,216 1002,206 1002,226" fill="#6c8dff" />
 
-  <rect x="1040" y="142" width="120" height="146" class="step" />
+  <rect x="1040" y="142" width="150" height="146" class="step" />
   <circle cx="1076" cy="176" r="18" fill="url(#accent)" />
   <text x="1069" y="184" class="num">4</text>
   <text x="1040" y="216" class="label">Verify</text>
   <text x="1040" y="240" class="copy">Compare generated outputs</text>
-  <text x="1040" y="260" class="copy">against a reference dataset.</text>
+  <text x="1040" y="260" class="copy">against reference dataset.</text>
   <rect x="1040" y="274" width="94" height="26" class="chip" />
   <text x="1058" y="292" class="chip-text">verify</text>
 </svg>

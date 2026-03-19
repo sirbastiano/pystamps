@@ -40,27 +40,27 @@
   <path d="M 332 320 C 370 320, 386 320, 420 248" class="line" />
   <path d="M 870 320 C 832 320, 816 320, 780 248" class="line" />
 
-  <rect x="56" y="118" width="276" height="98" class="cardA" />
+  <rect x="56" y="118" width="300" height="98" class="cardA" />
   <text x="84" y="148" class="mini">INTERFACE</text>
   <text x="84" y="176" class="label">Inspect and control</text>
-  <text x="84" y="200" class="copy">Commands such as status and run give a clear view</text>
-  <text x="84" y="220" class="copy">of what pySTAMPS sees before expensive work begins.</text>
+  <text x="84" y="198" class="copy">Commands such as status and run</text>
+  <text x="84" y="218" class="copy">show what pySTAMPS will process.</text>
 
-  <rect x="868" y="118" width="276" height="98" class="cardA" />
+  <rect x="844" y="118" width="300" height="98" class="cardA" />
   <text x="896" y="148" class="mini">VERIFICATION</text>
   <text x="896" y="176" class="label">Compare outputs</text>
-  <text x="896" y="200" class="copy">Verification checks generated .mat artifacts against</text>
-  <text x="896" y="220" class="copy">reference datasets with explicit tolerance rules.</text>
+  <text x="872" y="198" class="copy">Verification compares generated .mat</text>
+  <text x="872" y="218" class="copy">artifacts with a reference dataset.</text>
 
-  <rect x="56" y="272" width="276" height="98" class="cardB" />
+  <rect x="56" y="272" width="300" height="98" class="cardB" />
   <text x="84" y="302" class="mini">DATA MODEL</text>
   <text x="84" y="330" class="label">Dataset-aware workflow</text>
-  <text x="84" y="354" class="copy">The dataset directory is the working unit for stage</text>
-  <text x="84" y="374" class="copy">inputs, outputs, and stage state discovery.</text>
+  <text x="84" y="354" class="copy">Dataset directory is the working unit</text>
+  <text x="84" y="374" class="copy">for inputs, outputs and stage state.</text>
 
-  <rect x="868" y="272" width="276" height="98" class="cardB" />
+  <rect x="844" y="272" width="300" height="98" class="cardB" />
   <text x="896" y="302" class="mini">ACCELERATION</text>
   <text x="896" y="330" class="label">Runtime and kernels</text>
-  <text x="896" y="354" class="copy">Thread, process, and optional GPU paths help the</text>
-  <text x="896" y="374" class="copy">heaviest numerical stages scale more cleanly.</text>
+  <text x="872" y="354" class="copy">Thread/process/GPU paths speed up</text>
+  <text x="872" y="374" class="copy">numerical stages where needed.</text>
 </svg>
