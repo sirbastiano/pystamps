@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+  <title id="title">pySTAMPS capability map</title>
+  <desc id="desc">A capability map showing the main parts of pySTAMPS: interface, execution, verification, and supporting modules.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f4f8fb" />
+      <stop offset="100%" stop-color="#e7eff8" />
+    </linearGradient>
+    <linearGradient id="hero" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#17324a" />
+      <stop offset="100%" stop-color="#244f79" />
+    </linearGradient>
+    <style>
+      .frame { fill: url(#bg); stroke: #c6d7e8; stroke-width: 1.2; rx: 28; }
+      .core { fill: url(#hero); rx: 26; }
+      .cardA { fill: #ffffff; stroke: #bfd0e4; stroke-width: 1.3; rx: 20; }
+      .cardB { fill: #f7fbff; stroke: #bfd0e4; stroke-width: 1.3; rx: 20; }
+      .title { fill: #0f2740; font: 700 34px Arial, Helvetica, sans-serif; }
+      .sub { fill: #4b637b; font: 500 16px Arial, Helvetica, sans-serif; }
+      .core-title { fill: #f5fbff; font: 700 28px Arial, Helvetica, sans-serif; }
+      .core-copy { fill: #d5e7f8; font: 500 15px Arial, Helvetica, sans-serif; }
+      .label { fill: #102742; font: 700 20px Arial, Helvetica, sans-serif; }
+      .copy { fill: #526a83; font: 500 14px Arial, Helvetica, sans-serif; }
+      .mini { fill: #6e869f; font: 600 12px Arial, Helvetica, sans-serif; letter-spacing: 0.08em; }
+      .line { stroke: #8faed0; stroke-width: 3; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="420" class="frame" />
+  <text x="56" y="68" class="title">pySTAMPS capability map</text>
+  <text x="56" y="96" class="sub">The package is organized so users can inspect datasets, run controlled stages, and verify outputs without leaving the Python workflow.</text>
+
+  <rect x="420" y="136" width="360" height="146" class="core" />
+  <text x="468" y="192" class="core-title">pySTAMPS core runtime</text>
+  <text x="468" y="220" class="core-copy">CLI orchestration, typed pipeline context, stage scheduling,</text>
+  <text x="468" y="242" class="core-copy">I/O helpers, and numerical stage implementations.</text>
+
+  <path d="M 332 162 C 370 162, 386 162, 420 188" class="line" />
+  <path d="M 870 162 C 832 162, 816 162, 780 188" class="line" />
+  <path d="M 332 320 C 370 320, 386 320, 420 248" class="line" />
+  <path d="M 870 320 C 832 320, 816 320, 780 248" class="line" />
+
+  <rect x="56" y="118" width="276" height="98" class="cardA" />
+  <text x="84" y="148" class="mini">INTERFACE</text>
+  <text x="84" y="176" class="label">Inspect and control</text>
+  <text x="84" y="200" class="copy">Commands such as status and run give a clear view</text>
+  <text x="84" y="220" class="copy">of what pySTAMPS sees before expensive work begins.</text>
+
+  <rect x="868" y="118" width="276" height="98" class="cardA" />
+  <text x="896" y="148" class="mini">VERIFICATION</text>
+  <text x="896" y="176" class="label">Compare outputs</text>
+  <text x="896" y="200" class="copy">Verification checks generated .mat artifacts against</text>
+  <text x="896" y="220" class="copy">reference datasets with explicit tolerance rules.</text>
+
+  <rect x="56" y="272" width="276" height="98" class="cardB" />
+  <text x="84" y="302" class="mini">DATA MODEL</text>
+  <text x="84" y="330" class="label">Dataset-aware workflow</text>
+  <text x="84" y="354" class="copy">The dataset directory is the working unit for stage</text>
+  <text x="84" y="374" class="copy">inputs, outputs, and stage state discovery.</text>
+
+  <rect x="868" y="272" width="276" height="98" class="cardB" />
+  <text x="896" y="302" class="mini">ACCELERATION</text>
+  <text x="896" y="330" class="label">Runtime and kernels</text>
+  <text x="896" y="354" class="copy">Thread, process, and optional GPU paths help the</text>
+  <text x="896" y="374" class="copy">heaviest numerical stages scale more cleanly.</text>
+</svg>

@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="title desc">
+  <title id="title">pySTAMPS workflow overview</title>
+  <desc id="desc">A professional workflow diagram showing dataset inspection, dry-run, execution, and verification.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1420" />
+      <stop offset="100%" stop-color="#132235" />
+    </linearGradient>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#27c1b7" />
+      <stop offset="100%" stop-color="#6c8dff" />
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#081019" flood-opacity="0.35" />
+    </filter>
+    <style>
+      .panel { fill: #101b2b; stroke: #24405f; stroke-width: 1.4; rx: 24; }
+      .step { fill: #13263c; stroke: #325a83; stroke-width: 1.4; rx: 18; filter: url(#shadow); }
+      .arrow { stroke: url(#accent); stroke-width: 6; fill: none; stroke-linecap: round; }
+      .num { fill: #08131f; font: 700 24px Arial, Helvetica, sans-serif; }
+      .title { fill: #eff6ff; font: 700 34px Arial, Helvetica, sans-serif; }
+      .subtitle { fill: #9eb3c8; font: 500 16px Arial, Helvetica, sans-serif; }
+      .label { fill: #f7fbff; font: 700 20px Arial, Helvetica, sans-serif; }
+      .copy { fill: #aac0d8; font: 500 14px Arial, Helvetica, sans-serif; }
+      .chip { fill: #1b3350; stroke: #3d6c9c; stroke-width: 1; rx: 999; }
+      .chip-text { fill: #d7e9ff; font: 600 12px Arial, Helvetica, sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="360" fill="url(#bg)" rx="30" />
+  <rect x="24" y="24" width="1152" height="312" class="panel" />
+
+  <text x="56" y="72" class="title">pySTAMPS workflow at a glance</text>
+  <text x="56" y="100" class="subtitle">A safe path for exploring a dataset before you commit to long processing runs.</text>
+
+  <rect x="56" y="142" width="220" height="146" class="step" />
+  <circle cx="92" cy="176" r="18" fill="url(#accent)" />
+  <text x="85" y="184" class="num">1</text>
+  <text x="56" y="216" class="label">Inspect the dataset</text>
+  <text x="56" y="240" class="copy">Use status to confirm the folder layout,</text>
+  <text x="56" y="260" class="copy">patch directories, and current stage state.</text>
+  <rect x="56" y="274" width="108" height="26" class="chip" />
+  <text x="74" y="292" class="chip-text">pystamps status</text>
+
+  <path d="M 286 216 C 320 216, 332 216, 364 216" class="arrow" />
+  <polygon points="364,216 346,206 346,226" fill="#6c8dff" />
+
+  <rect x="384" y="142" width="220" height="146" class="step" />
+  <circle cx="420" cy="176" r="18" fill="url(#accent)" />
+  <text x="413" y="184" class="num">2</text>
+  <text x="384" y="216" class="label">Preview the run</text>
+  <text x="384" y="240" class="copy">Dry-run first so you can see what would</text>
+  <text x="384" y="260" class="copy">execute without writing heavy outputs.</text>
+  <rect x="384" y="274" width="154" height="26" class="chip" />
+  <text x="402" y="292" class="chip-text">pystamps run --dry-run</text>
+
+  <path d="M 614 216 C 648 216, 660 216, 692 216" class="arrow" />
+  <polygon points="692,216 674,206 674,226" fill="#6c8dff" />
+
+  <rect x="712" y="142" width="220" height="146" class="step" />
+  <circle cx="748" cy="176" r="18" fill="url(#accent)" />
+  <text x="741" y="184" class="num">3</text>
+  <text x="712" y="216" class="label">Execute selected stages</text>
+  <text x="712" y="240" class="copy">Run only the stage range you need on a</text>
+  <text x="712" y="260" class="copy">working copy of the dataset directory.</text>
+  <rect x="712" y="274" width="146" height="26" class="chip" />
+  <text x="730" y="292" class="chip-text">pystamps run 1..8</text>
+
+  <path d="M 942 216 C 976 216, 988 216, 1020 216" class="arrow" />
+  <polygon points="1020,216 1002,206 1002,226" fill="#6c8dff" />
+
+  <rect x="1040" y="142" width="120" height="146" class="step" />
+  <circle cx="1076" cy="176" r="18" fill="url(#accent)" />
+  <text x="1069" y="184" class="num">4</text>
+  <text x="1040" y="216" class="label">Verify</text>
+  <text x="1040" y="240" class="copy">Compare generated outputs</text>
+  <text x="1040" y="260" class="copy">against a reference dataset.</text>
+  <rect x="1040" y="274" width="94" height="26" class="chip" />
+  <text x="1058" y="292" class="chip-text">verify</text>
+</svg>
