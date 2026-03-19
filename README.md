@@ -9,9 +9,9 @@ Python-first StaMPS migration runtime for structured InSAR processing, verificat
 Run pipeline stages, inspect dataset state, and verify outputs against reference datasets.
 
 <p align="center">
-  <a href="docs/index.html"><img src="https://img.shields.io/badge/-Documentation-0f172a?style=for-the-badge&logo=readme&logoColor=white&labelColor=0f172a" alt="Documentation" style="height: 34px;" /></a>
-  <a href="docs/quickstart.html"><img src="https://img.shields.io/badge/-Quick%20Start-0f172a?style=for-the-badge&logo=firefoxbrowser&logoColor=white&labelColor=0f172a" alt="Quick Start" style="height: 34px;" /></a>
-  <a href="docs/api/pystamps.html"><img src="https://img.shields.io/badge/-API%20Reference-0f172a?style=for-the-badge&logo=python&logoColor=white&labelColor=0f172a" alt="API Reference" style="height: 34px;" /></a>
+  <a href="https://sirbastiano.github.io/pystamps/"><img src="https://img.shields.io/badge/-Documentation-0f172a?style=for-the-badge&logo=readme&logoColor=white&labelColor=0f172a" alt="Documentation" style="height: 34px;" /></a>
+  <a href="https://sirbastiano.github.io/pystamps/quickstart.html"><img src="https://img.shields.io/badge/-Quick%20Start-0f172a?style=for-the-badge&logo=firefoxbrowser&logoColor=white&labelColor=0f172a" alt="Quick Start" style="height: 34px;" /></a>
+  <a href="https://sirbastiano.github.io/pystamps/api/pystamps.html"><img src="https://img.shields.io/badge/-API%20Reference-0f172a?style=for-the-badge&logo=python&logoColor=white&labelColor=0f172a" alt="API Reference" style="height: 34px;" /></a>
   <a href="examples/00_pystamps_beginner_walkthrough.ipynb"><img src="https://img.shields.io/badge/-Beginner%20Notebook-0f172a?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=0f172a" alt="Beginner Notebook" style="height: 34px;" /></a>
 </p>
 
@@ -44,15 +44,15 @@ python -m pip install -e ".[dev]"
 
 ## Read the full docs
 
-- [Introduction (docs index)](docs/index.html)
-- [Quick Start](docs/quickstart.html)
-- [Getting Started](docs/getting_started.md)
-- [Usage and command patterns](docs/usage.html)
-- [Configuration](docs/configuration.html)
-- [Architecture](docs/architecture.md)
-- [Verification](docs/verification.html)
-- [API Reference](docs/api/pystamps.html)
-- [Release workflow](docs/release.md)
+- [Introduction (docs index)](https://sirbastiano.github.io/pystamps/)
+- [Quick Start](https://sirbastiano.github.io/pystamps/quickstart.html)
+- [Getting Started](https://sirbastiano.github.io/pystamps/getting-started.html)
+- [Usage and command patterns](https://sirbastiano.github.io/pystamps/usage.html)
+- [Configuration](https://sirbastiano.github.io/pystamps/configuration.html)
+- [Architecture](https://sirbastiano.github.io/pystamps/architecture.html)
+- [Verification](https://sirbastiano.github.io/pystamps/verification.html)
+- [API Reference](https://sirbastiano.github.io/pystamps/api/pystamps.html)
+- [Release workflow](https://sirbastiano.github.io/pystamps/release.md)
 
 ## External notebooks
 
