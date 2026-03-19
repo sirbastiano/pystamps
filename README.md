@@ -24,8 +24,8 @@ pySTAMPS works with StaMPS-style dataset folders by orchestrating stage executio
 ## Install
 
 ```bash
-git clone <repo-url>
-cd <repo>
+git clone https://github.com/sirbastiano/pystamps.git
+cd pystamps
 python -m pip install -e .
 ```
 
