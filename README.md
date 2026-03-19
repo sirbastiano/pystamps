@@ -6,13 +6,18 @@
 
 Python-first StaMPS migration runtime for structured InSAR processing, verification, and reproducible parity workflows.
 
-Run pipeline stages. Inspect dataset state. Verify outputs against reference datasets.
+Run pipeline stages, inspect dataset state, and verify outputs against reference datasets.
 
-[HTML Docs](docs/index.html) · [Quick Start](docs/quickstart.html) ·
-[API Reference](docs/api/pystamps.html) ·
-[Beginner Notebook](examples/00_pystamps_beginner_walkthrough.ipynb)
+<p align="center">
+  <a href="docs/index.html"><img src="https://img.shields.io/badge/-Documentation-0f172a?style=for-the-badge&logo=readme&logoColor=white&labelColor=0f172a" alt="Documentation"></a>
+  <a href="docs/quickstart.html"><img src="https://img.shields.io/badge/-Quick%20Start-0f172a?style=for-the-badge&logo=firefoxbrowser&logoColor=white&labelColor=0f172a" alt="Quick Start"></a>
+  <a href="docs/api/pystamps.html"><img src="https://img.shields.io/badge/-API%20Reference-0f172a?style=for-the-badge&logo=python&logoColor=white&labelColor=0f172a" alt="API Reference"></a>
+  <a href="examples/00_pystamps_beginner_walkthrough.ipynb"><img src="https://img.shields.io/badge/-Beginner%20Notebook-0f172a?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=0f172a" alt="Beginner Notebook"></a>
+</p>
 
 </div>
+
+**Author:** Roberto Del Prete
 
 pySTAMPS runs StaMPS-style persistent-scatterer pipelines on a dataset folder, and it can compare generated outputs with a reference run for deterministic validation.
 
@@ -300,6 +305,11 @@ Build outputs are written to `dist/` as one wheel and one sdist. Generated relea
 - `examples/00_pystamps_beginner_walkthrough.ipynb`
 - [docs/architecture.md](docs/architecture.md)
 - [docs/release.md](docs/release.md)
+
+## Governance
+
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [License](LICENSE) (Apache License 2.0)
 
 ## Notes
 
