@@ -1,6 +1,6 @@
 <div align="center">
 
-![pySTAMPS](docs/assets/pystamps-logo.svg)
+<img src="docs/assets/pystamps-logo.svg" alt="pySTAMPS" style="width: 72px; height: auto; max-width: 100%;" />
 
 # pySTAMPS
 
@@ -22,7 +22,7 @@ Run pipeline stages, inspect dataset state, and verify outputs against reference
 pySTAMPS runs StaMPS-style persistent-scatterer pipelines on a dataset folder, and it can compare generated outputs with a reference run for deterministic validation.
 
 <p align="center">
-  <img src="docs/assets/pystamps-workflow.svg" alt="pySTAMPS workflow overview" style="max-width: 980px; width: 100%; height: auto;" />
+  <img src="docs/assets/pystamps-workflow.svg" alt="pySTAMPS workflow overview" style="max-width: 860px; width: 100%; height: auto;" />
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@ pySTAMPS runs StaMPS-style persistent-scatterer pipelines on a dataset folder, a
 </p>
 
 <p align="center">
-  <img src="docs/assets/pystamps-capabilities.svg" alt="pySTAMPS capability map" style="max-width: 980px; width: 100%; height: auto;" />
+  <img src="docs/assets/pystamps-capabilities.svg" alt="pySTAMPS capability map" style="max-width: 860px; width: 100%; height: auto;" />
 </p>
 
 <p align="center">
