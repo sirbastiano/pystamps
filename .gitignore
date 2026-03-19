@@ -20,6 +20,7 @@ __pycache__/
 *.egg-info/
 
 # Large repo-only assets not shipped in the package
+/build/
 inputs_and_outputs/
 tmp/
 StaMPS/
