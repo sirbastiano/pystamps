@@ -24,9 +24,15 @@ pySTAMPS works with StaMPS-style dataset folders by orchestrating stage executio
 ## Install
 
 ```bash
-pip install pystamps
-# optional GPU extras
-pip install "pystamps[gpu]"
+git clone <repo-url>
+cd <repo>
+python -m pip install -e .
+```
+
+For local development (including docs and tests), use:
+
+```bash
+python -m pip install -e ".[dev]"
 ```
 
 ## What pySTAMPS does
