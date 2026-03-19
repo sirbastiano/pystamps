@@ -9,10 +9,10 @@ Python-first StaMPS migration runtime for structured InSAR processing, verificat
 Run pipeline stages, inspect dataset state, and verify outputs against reference datasets.
 
 <p align="center">
-  <a href="docs/index.html"><img src="https://img.shields.io/badge/-Documentation-0f172a?style=for-the-badge&logo=readme&logoColor=white&labelColor=0f172a" alt="Documentation"></a>
-  <a href="docs/quickstart.html"><img src="https://img.shields.io/badge/-Quick%20Start-0f172a?style=for-the-badge&logo=firefoxbrowser&logoColor=white&labelColor=0f172a" alt="Quick Start"></a>
-  <a href="docs/api/pystamps.html"><img src="https://img.shields.io/badge/-API%20Reference-0f172a?style=for-the-badge&logo=python&logoColor=white&labelColor=0f172a" alt="API Reference"></a>
-  <a href="examples/00_pystamps_beginner_walkthrough.ipynb"><img src="https://img.shields.io/badge/-Beginner%20Notebook-0f172a?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=0f172a" alt="Beginner Notebook"></a>
+  <a href="docs/index.html"><img src="https://img.shields.io/badge/-Documentation-0f172a?style=for-the-badge&logo=readme&logoColor=white&labelColor=0f172a" alt="Documentation" style="height: 34px;" /></a>
+  <a href="docs/quickstart.html"><img src="https://img.shields.io/badge/-Quick%20Start-0f172a?style=for-the-badge&logo=firefoxbrowser&logoColor=white&labelColor=0f172a" alt="Quick Start" style="height: 34px;" /></a>
+  <a href="docs/api/pystamps.html"><img src="https://img.shields.io/badge/-API%20Reference-0f172a?style=for-the-badge&logo=python&logoColor=white&labelColor=0f172a" alt="API Reference" style="height: 34px;" /></a>
+  <a href="examples/00_pystamps_beginner_walkthrough.ipynb"><img src="https://img.shields.io/badge/-Beginner%20Notebook-0f172a?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=0f172a" alt="Beginner Notebook" style="height: 34px;" /></a>
 </p>
 
 </div>
@@ -22,7 +22,7 @@ Run pipeline stages, inspect dataset state, and verify outputs against reference
 pySTAMPS runs StaMPS-style persistent-scatterer pipelines on a dataset folder, and it can compare generated outputs with a reference run for deterministic validation.
 
 <p align="center">
-  <img src="docs/assets/pystamps-workflow.svg" alt="pySTAMPS workflow overview" width="920" />
+  <img src="docs/assets/pystamps-workflow.svg" alt="pySTAMPS workflow overview" style="max-width: 980px; width: 100%; height: auto;" />
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@ pySTAMPS runs StaMPS-style persistent-scatterer pipelines on a dataset folder, a
 </p>
 
 <p align="center">
-  <img src="docs/assets/pystamps-capabilities.svg" alt="pySTAMPS capability map" width="920" />
+  <img src="docs/assets/pystamps-capabilities.svg" alt="pySTAMPS capability map" style="max-width: 980px; width: 100%; height: auto;" />
 </p>
 
 <p align="center">
