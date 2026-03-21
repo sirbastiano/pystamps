@@ -1,0 +1,32 @@
+{
+  "archive_base": "stage1.tar.gz",
+  "parts": [
+    {
+      "name": "stage1.tar.gz.part-aa",
+      "sha256": "a83fc437a005836f50d2d59bc23cf5dbcf06fce07b7801cb4c4014f866d9420b",
+      "size_bytes": 99614720
+    },
+    {
+      "name": "stage1.tar.gz.part-ab",
+      "sha256": "3caf42d10a4d4b5cb80aa88783dc2d71dc72a853eff00218aa201891c03f01ac",
+      "size_bytes": 99614720
+    },
+    {
+      "name": "stage1.tar.gz.part-ac",
+      "sha256": "675c4762e5298067c13798043809d678622c5d7c0ee028e1f8116846592bddb4",
+      "size_bytes": 99614720
+    },
+    {
+      "name": "stage1.tar.gz.part-ad",
+      "sha256": "3b62c7404af8f64f5127bb3d995f1f9c7f937b71c5f9f0dc2305b4a4ba18a898",
+      "size_bytes": 99614720
+    },
+    {
+      "name": "stage1.tar.gz.part-ae",
+      "sha256": "0280705b88dd0eb8c961a80247cc739fd2f47f7c34ac5e0bde919caa162efa70",
+      "size_bytes": 95761881
+    }
+  ],
+  "reconstruct": "cat stage1.tar.gz.part-* > stage1.tar.gz && tar -xzf stage1.tar.gz",
+  "stage_dir": "stage1"
+}

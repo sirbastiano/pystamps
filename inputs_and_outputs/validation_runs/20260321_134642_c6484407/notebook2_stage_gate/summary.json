@@ -1,0 +1,10 @@
+{
+  "stages": [
+    {
+      "failed": 0,
+      "ok": true,
+      "report": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/20260321_134642_c6484407/notebook2_stage_gate/stage1/stage1_report.json",
+      "stage": 1
+    }
+  ]
+}

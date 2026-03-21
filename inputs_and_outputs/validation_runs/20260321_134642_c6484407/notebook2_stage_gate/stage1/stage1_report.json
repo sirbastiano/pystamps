@@ -1,0 +1,71 @@
+{
+  "copied_artifacts": [
+    "PATCH_1/bp1.mat",
+    "PATCH_1/da1.mat",
+    "PATCH_1/hgt1.mat",
+    "PATCH_1/ph1.mat",
+    "PATCH_1/ps1.mat",
+    "PATCH_2/bp1.mat",
+    "PATCH_2/da1.mat",
+    "PATCH_2/hgt1.mat",
+    "PATCH_2/ph1.mat",
+    "PATCH_2/ps1.mat",
+    "PATCH_3/bp1.mat",
+    "PATCH_3/da1.mat",
+    "PATCH_3/hgt1.mat",
+    "PATCH_3/ph1.mat",
+    "PATCH_3/ps1.mat",
+    "PATCH_4/bp1.mat",
+    "PATCH_4/da1.mat",
+    "PATCH_4/hgt1.mat",
+    "PATCH_4/ph1.mat",
+    "PATCH_4/ps1.mat"
+  ],
+  "run": {
+    "payload": [
+      {
+        "details": "Stage 1 created ps1/ph1 for 81428 candidates",
+        "duration_sec": 1.5280335280112922,
+        "scope": "patch",
+        "stage": 1,
+        "status": "completed",
+        "target": "PATCH_1"
+      },
+      {
+        "details": "Stage 1 created ps1/ph1 for 223357 candidates",
+        "duration_sec": 4.1969198358710855,
+        "scope": "patch",
+        "stage": 1,
+        "status": "completed",
+        "target": "PATCH_2"
+      },
+      {
+        "details": "Stage 1 created ps1/ph1 for 165271 candidates",
+        "duration_sec": 3.1612870029639453,
+        "scope": "patch",
+        "stage": 1,
+        "status": "completed",
+        "target": "PATCH_3"
+      },
+      {
+        "details": "Stage 1 created ps1/ph1 for 170420 candidates",
+        "duration_sec": 3.156411971896887,
+        "scope": "patch",
+        "stage": 1,
+        "status": "completed",
+        "target": "PATCH_4"
+      }
+    ],
+    "returncode": 0,
+    "stderr": ""
+  },
+  "stage": 1,
+  "timestamp": "2026-03-21T13:47:04.723141+00:00",
+  "verify": {
+    "checked": 20,
+    "classified": [],
+    "failed": 0,
+    "failures": [],
+    "ok": true
+  }
+}
