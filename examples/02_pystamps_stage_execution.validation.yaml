@@ -1,0 +1,3 @@
+runtime:
+  stage2_kernel_backend: native
+  stage2_native_threads: 8
