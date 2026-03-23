@@ -2,7 +2,7 @@
 
 This guide explains how to run pySTAMPS if you are new both to the package and to interferometry.
 
-If you want a slower, more tutorial-style introduction first, read [docs/getting_started.md](docs/getting_started.md) and then open `examples/pystamps_beginner_walkthrough.ipynb`.
+If you want a slower, more tutorial-style introduction first, read [docs/getting_started.md](docs/getting_started.md) and then open `notebooks/00_pystamps_beginner_walkthrough.ipynb`.
 
 ## What pySTAMPS is doing
 
@@ -127,12 +127,18 @@ If you want to control backend choice or chunk sizes, create a config file like 
 ```yaml
 runtime:
   backend: auto
+  stage2_kernel_backend: auto
+  stage2_native_threads: 0
   io_workers: 8
   cpu_workers: 0
   stage7_chunk_ps: 100000
   stage8_chunk_edges: 200000
   enable_mat_stage_cache: true
+  stage2_checkpoint_mode: final
+  stage2_checkpoint_interval: 1
 ```
+
+Use `stage2_kernel_backend: native` to require the compiled stage-2 kernels, or `python` to keep the reference implementation even when the extension is installed. Leave `stage2_native_threads: 0` to let pySTAMPS give stage 2 the full detected CPU budget by default; it will then run stage-2 patches one at a time to avoid oversubscription. `cpu_workers: 0` now uses all detected CPU workers by default. Set a positive value to force a fixed OpenMP team size instead.
 
 Then run:
 
@@ -213,7 +219,7 @@ If a run fails:
 2. Try a smaller stage range first, for example `--start-step 6 --end-step 8`
 3. Confirm `triangle` and `snaphu` are installed and on `PATH`
 4. Run on a fresh dataset copy if old outputs may be interfering
-5. Use the reference notebook `examples/pystamps_beginner_walkthrough.ipynb` to compare your local steps with the example flow
+5. Use the notebook `notebooks/00_pystamps_beginner_walkthrough.ipynb` to compare your local steps with the guided flow
 
 ## Short version
 
