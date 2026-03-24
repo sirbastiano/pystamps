@@ -5,6 +5,7 @@ import os
 
 import numpy as np
 
+from pystamps.notebooks import inspect_stage1_inputs
 from pystamps.notebooks.plots import point_count, sample_points, select_points
 from pystamps.notebooks.stage_execution import StageNotebookContext, _execution_env, stage3_indices, stage4_indices
 from pystamps.config import RunConfig
@@ -133,3 +134,38 @@ def test_non_stage2_execution_env_limits_threads() -> None:
     assert env['OMP_NUM_THREADS'] == '1'
     assert env['OPENBLAS_NUM_THREADS'] == '1'
     assert env['MKL_NUM_THREADS'] == '1'
+
+
+def test_inspect_stage1_inputs_summarizes_raw_patch_inputs(tmp_path: Path) -> None:
+    dataset = tmp_path / 'dataset'
+    patch = dataset / 'PATCH_1'
+    patch.mkdir(parents=True)
+    (dataset / 'width.txt').write_text('20\n', encoding='utf-8')
+    (dataset / 'len.txt').write_text('10\n', encoding='utf-8')
+
+    np.savetxt(
+        patch / 'pscands.1.ij',
+        np.array([[1, 10, 20], [2, 11, 21]], dtype=float),
+        fmt='%.0f',
+    )
+    np.savetxt(patch / 'pscands.1.da', np.array([0.2, 0.3], dtype=float))
+    np.asarray([[11.0, 44.0], [12.0, 45.0]], dtype='>f4').tofile(patch / 'pscands.1.ll')
+    np.asarray(
+        [
+            [1.0, 0.0, 0.5, 0.5],
+            [0.0, 1.0, -0.5, 0.5],
+            [1.0, 1.0, -1.0, 0.0],
+        ],
+        dtype='<f4',
+    ).tofile(patch / 'pscands.1.ph')
+
+    summary = inspect_stage1_inputs(dataset, patch_name='PATCH_1')
+
+    assert summary['metadata_mode'] == 'missing'
+    assert len(summary['overview_rows']) >= 4
+    assert len(summary['consistency_rows']) >= 4
+    assert len(summary['preview_rows']) == 2
+    assert summary['phase_preview']['angle'].shape == (2, 3)
+    assert summary['phase_preview']['magnitude'].shape == (2, 3)
+    assert any(row['file'] == 'pscands.1.ph' for row in summary['input_rows'])
+    assert any('time axis' in warning for warning in summary['warnings'])

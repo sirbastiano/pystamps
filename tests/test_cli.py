@@ -198,6 +198,48 @@ def test_cmd_list_legacy_prints_discovered_commands(
     assert _payload(capsys) == ["/opt/stamps/mt_prep", "/opt/stamps/ps_plot"]
 
 
+def test_cmd_describe_inputs_prints_stage_contracts(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = cli._cmd_describe_inputs("1", dataset=None, patch="PATCH_1")
+
+    payload = _payload(capsys)
+    assert exit_code == 0
+    assert [stage["stage"] for stage in payload["stages"]] == [1]
+    assert any(item["array_name"] == "ph" for item in payload["stages"][0]["inputs"])
+
+
+def test_cmd_describe_inputs_includes_dataset_check(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "inspect_stage1_inputs",
+        lambda dataset, patch_name: {
+            "metadata_mode": "direct patch metadata files",
+            "overview_rows": [{"metric": "candidate count", "value": 10, "meaning": "count"}],
+            "consistency_rows": [{"check": "candidate rows in pscands.1.ij", "status": "ok"}],
+            "warnings": ["example warning"],
+        },
+    )
+
+    exit_code = cli._cmd_describe_inputs("1", dataset="/tmp/dataset", patch="PATCH_2")
+
+    payload = _payload(capsys)
+    assert exit_code == 0
+    assert payload["stage1_dataset_check"] == {
+        "dataset": "dataset",
+        "patch": "PATCH_2",
+        "metadata_mode": "direct patch metadata files",
+        "overview": [{"metric": "candidate count", "value": 10, "meaning": "count"}],
+        "consistency": [{"check": "candidate rows in pscands.1.ij", "status": "ok"}],
+        "warnings": ["example warning"],
+    }
+
+
+def test_cmd_describe_inputs_rejects_unknown_stage() -> None:
+    with pytest.raises(SystemExit, match="Config error: Unsupported stage: 99"):
+        cli._cmd_describe_inputs("99", dataset=None, patch="PATCH_1")
+
+
 def test_main_dispatches_verify_command(monkeypatch: pytest.MonkeyPatch) -> None:
     args = argparse.Namespace(command="verify", config="cfg.yml", run="/run", golden="/golden")
     run_config = _run_config()
@@ -218,3 +260,25 @@ def test_main_dispatches_verify_command(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert exit_code == 17
     assert captured == {"run": "/run", "golden": "/golden", "config": run_config}
+
+
+def test_main_dispatches_describe_inputs_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    args = argparse.Namespace(command="describe-inputs", config="cfg.yml", stage="all", dataset=None, patch="PATCH_1")
+    run_config = _run_config()
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(cli, "_parse_args", lambda: args)
+    monkeypatch.setattr(cli, "_load_run_config", lambda path: run_config)
+
+    def fake_cmd_describe_inputs(stage: str, dataset: str | None, patch: str) -> int:
+        captured["stage"] = stage
+        captured["dataset"] = dataset
+        captured["patch"] = patch
+        return 23
+
+    monkeypatch.setattr(cli, "_cmd_describe_inputs", fake_cmd_describe_inputs)
+
+    exit_code = cli.main()
+
+    assert exit_code == 23
+    assert captured == {"stage": "all", "dataset": None, "patch": "PATCH_1"}

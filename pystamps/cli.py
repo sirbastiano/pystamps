@@ -7,6 +7,8 @@ from pathlib import Path
 
 from pystamps.compat.legacy import discover_legacy_commands
 from pystamps.config import ConfigError, RunConfig, load_config
+from pystamps.input_contracts import describe_stage_inputs, parse_stage_spec
+from pystamps.notebooks.dataset_inspection import inspect_stage1_inputs
 from pystamps.pipeline.stages import run_pipeline
 from pystamps.pipeline.types import PipelineContext
 from pystamps.status import collect_status
@@ -40,6 +42,29 @@ def _parse_args() -> argparse.Namespace:
         type=str,
         default=None,
         help="Explicit StaMPS checkout root. Defaults to $STAMPS_ROOT when set.",
+    )
+
+    describe_parser = subparsers.add_parser(
+        "describe-inputs",
+        help="Describe the logical inputs required by one stage or all stages",
+    )
+    describe_parser.add_argument(
+        "--stage",
+        type=str,
+        default="all",
+        help="Stage number, comma-separated stage numbers, or 'all'",
+    )
+    describe_parser.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Optional dataset root for a real Stage-1 input check",
+    )
+    describe_parser.add_argument(
+        "--patch",
+        type=str,
+        default="PATCH_1",
+        help="Patch name used with --dataset for Stage-1 checks",
     )
 
     return parser.parse_args()
@@ -122,6 +147,29 @@ def _cmd_list_legacy(stamps_root: str | None) -> int:
     return 0
 
 
+def _cmd_describe_inputs(stage: str, dataset: str | None, patch: str) -> int:
+    try:
+        stages = parse_stage_spec(stage)
+    except ValueError as exc:
+        raise SystemExit(f"Config error: {exc}") from exc
+
+    payload: dict[str, object] = {
+        "stages": describe_stage_inputs(stage),
+    }
+    if dataset is not None and 1 in stages:
+        summary = inspect_stage1_inputs(dataset, patch_name=patch)
+        payload["stage1_dataset_check"] = {
+            "dataset": Path(dataset).name or str(dataset),
+            "patch": patch,
+            "metadata_mode": summary["metadata_mode"],
+            "overview": summary["overview_rows"],
+            "consistency": summary["consistency_rows"],
+            "warnings": summary["warnings"],
+        }
+    print(json.dumps(payload, indent=2))
+    return 0
+
+
 def main() -> int:
     args = _parse_args()
     run_config = _load_run_config(args.config)
@@ -134,6 +182,8 @@ def main() -> int:
         return _cmd_verify(args.run, args.golden, run_config)
     if args.command == "list-legacy":
         return _cmd_list_legacy(args.stamps_root)
+    if args.command == "describe-inputs":
+        return _cmd_describe_inputs(args.stage, args.dataset, args.patch)
 
     raise SystemExit(f"Unknown command: {args.command}")
 

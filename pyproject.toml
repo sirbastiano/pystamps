@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77", "setuptools-scm[toml]>=8", "wheel"]
+requires = ["setuptools>=77", "setuptools-scm[toml]>=8", "wheel", "Cython>=3.0", "numpy>=1.26"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -22,6 +22,7 @@ classifiers = [
 keywords = ["insar", "stamps", "geodesy", "remote-sensing"]
 dependencies = [
   "numpy>=1.26",
+  "pandas>=2.2",
   "scipy>=1.11",
   "h5py>=3.11",
   "mat73>=0.65",

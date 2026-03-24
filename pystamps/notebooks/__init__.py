@@ -1,6 +1,6 @@
 """Public notebook helpers for the packaged pySTAMPS tutorials."""
 
-from .dataset_inspection import inspect_dataset
+from .dataset_inspection import inspect_dataset, inspect_stage1_inputs
 from .plots import (
     footprint_compare,
     heatmap_compare,
@@ -42,6 +42,7 @@ __all__ = [
     "heatmap_compare",
     "hist_compare",
     "inspect_dataset",
+    "inspect_stage1_inputs",
     "normalize_points",
     "patch_n_ps",
     "patch_paths",
