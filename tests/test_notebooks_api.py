@@ -164,6 +164,8 @@ def test_inspect_stage1_inputs_summarizes_raw_patch_inputs(tmp_path: Path) -> No
     assert summary['metadata_mode'] == 'missing'
     assert len(summary['overview_rows']) >= 4
     assert len(summary['consistency_rows']) >= 4
+    assert summary['preparation_rows'][0]['step'] == 1
+    assert any(row['mat_file'] == 'ps1.mat' for row in summary['mat_output_rows'])
     assert len(summary['preview_rows']) == 2
     assert summary['phase_preview']['angle'].shape == (2, 3)
     assert summary['phase_preview']['magnitude'].shape == (2, 3)

@@ -464,6 +464,89 @@ def inspect_stage1_inputs(dataset_root: str | Path, patch_name: str = "PATCH_1")
         }
         for index, (master, slave, base_file) in enumerate(snap_records)
     ]
+    preparation_rows = [
+        {
+            "step": 1,
+            "action": "Load the required raw candidate arrays",
+            "reads": "pscands.1.ij, pscands.1.ph, pscands.1.ll",
+            "produces": "candidate index table, raw complex phase stack, lon/lat table",
+            "why_it_matters": "these are the irreducible Stage-1 inputs",
+        },
+        {
+            "step": 2,
+            "action": "Resolve patch geometry metadata",
+            "reads": "width.txt, len.txt",
+            "produces": "patch width and patch length scalars",
+            "why_it_matters": "later geometry products need the raster dimensions",
+        },
+        {
+            "step": 3,
+            "action": "Resolve timing and baseline metadata",
+            "reads": "day.1.in, master_day.1.in, bperp.1.in or diff0/rslc metadata",
+            "produces": "sorted day vector, master day, baseline vector, master index",
+            "why_it_matters": "Stage 1 must align the phase stack with acquisition order",
+        },
+        {
+            "step": 4,
+            "action": "Reorder the phase stack and insert the master image",
+            "reads": "raw pscands.1.ph plus the sorted interferogram metadata",
+            "produces": "phase stack with columns sorted in time and the master column inserted",
+            "why_it_matters": "later stages expect a Stage-1-aligned phase cube",
+        },
+        {
+            "step": 5,
+            "action": "Convert longitude/latitude into local XY coordinates",
+            "reads": "pscands.1.ll and heading/geometry metadata when available",
+            "produces": "local XY coordinates and ll0 reference origin",
+            "why_it_matters": "later stages use local metric coordinates, not only lon/lat",
+        },
+        {
+            "step": 6,
+            "action": "Sort candidates consistently across all candidate-linked arrays",
+            "reads": "ij, lonlat, xy, ph and optional D_A/hgt arrays",
+            "produces": "sort_ix and a common candidate ordering",
+            "why_it_matters": "all Stage-1 MATLAB payloads must refer to the same candidate order",
+        },
+        {
+            "step": 7,
+            "action": "Write MATLAB outputs for downstream stages",
+            "reads": "the fully aligned Stage-1 arrays",
+            "produces": "ps1.mat, ph1.mat, bp1.mat and optional da1.mat/hgt1.mat",
+            "why_it_matters": "Stage 2 and later stages consume these structured MATLAB files",
+        },
+    ]
+    mat_output_rows = [
+        {
+            "mat_file": "ps1.mat",
+            "contains": "candidate geometry, sorted indices, time axis, baseline vector, local XY coordinates, master metadata",
+            "source_arrays": "ij, lonlat, xy, day, master_day, master_ix, bperp, sort_ix, ll0",
+        },
+        {
+            "mat_file": "ph1.mat",
+            "contains": "the complex phase stack after time sorting and master-column insertion",
+            "source_arrays": "ph",
+        },
+        {
+            "mat_file": "bp1.mat",
+            "contains": "per-candidate baseline matrix aligned with the phase stack",
+            "source_arrays": "bperp_mat or tiled bperp-derived matrix",
+        },
+        {
+            "mat_file": "da1.mat",
+            "contains": "optional candidate stability values after the common Stage-1 sort",
+            "source_arrays": "D_A",
+        },
+        {
+            "mat_file": "hgt1.mat",
+            "contains": "optional candidate height prior after the common Stage-1 sort",
+            "source_arrays": "hgt",
+        },
+        {
+            "mat_file": "psver.mat",
+            "contains": "Stage-1 payload version marker",
+            "source_arrays": "psver",
+        },
+    ]
 
     return {
         "dataset_root": root,
@@ -475,6 +558,8 @@ def inspect_stage1_inputs(dataset_root: str | Path, patch_name: str = "PATCH_1")
         "preview_rows": preview_rows,
         "acquisition_rows": acquisition_rows,
         "interferogram_rows": interferogram_rows,
+        "preparation_rows": preparation_rows,
+        "mat_output_rows": mat_output_rows,
         "patch": patch,
         "phase_preview": phase_preview,
         "height_values": hgt,
