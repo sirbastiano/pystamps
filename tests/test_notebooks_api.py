@@ -5,6 +5,7 @@ import os
 
 import numpy as np
 
+from pystamps.input_contracts import describe_stage1_snap2stamps_flow
 from pystamps.notebooks import inspect_stage1_inputs
 from pystamps.notebooks.plots import point_count, sample_points, select_points
 from pystamps.notebooks.stage_execution import StageNotebookContext, _execution_env, stage3_indices, stage4_indices
@@ -134,6 +135,13 @@ def test_non_stage2_execution_env_limits_threads() -> None:
     assert env['OMP_NUM_THREADS'] == '1'
     assert env['OPENBLAS_NUM_THREADS'] == '1'
     assert env['MKL_NUM_THREADS'] == '1'
+
+
+def test_describe_stage1_snap2stamps_flow_mentions_export_step() -> None:
+    rows = describe_stage1_snap2stamps_flow()
+
+    assert any("stamps export" in row["upstream_stage"].lower() for row in rows)
+    assert any("pscands.1.ph" in row["why_stage1_cares"] for row in rows)
 
 
 def test_inspect_stage1_inputs_summarizes_raw_patch_inputs(tmp_path: Path) -> None:

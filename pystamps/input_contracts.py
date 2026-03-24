@@ -195,6 +195,34 @@ STAGE_INPUT_CONTRACTS: dict[int, dict[str, Any]] = {
 }
 
 
+STAGE1_SNAP2STAMPS_FLOW: list[dict[str, str]] = [
+    {
+        "upstream_stage": "stack preparation",
+        "tool_or_script": "auto_run.py or the step-by-step SNAP2StaMPS workflow",
+        "what_happens": "The SNAP-side workflow prepares the Sentinel-1 or stripmap stack and optionally chooses the master scene.",
+        "why_stage1_cares": "Stage 1 later needs a stable master/slave chronology and a consistent image stack.",
+    },
+    {
+        "upstream_stage": "scene splitting",
+        "tool_or_script": "topsar_step_1_splitting_master_multi_IW.py and topsar_step_2_splitting_secondaries.py",
+        "what_happens": "The selected bursts or subswaths are split into the analysis area so later products refer to the same footprint.",
+        "why_stage1_cares": "The patch geometry and candidate coordinates must refer to one common spatial subset.",
+    },
+    {
+        "upstream_stage": "coregistration and interferogram generation",
+        "tool_or_script": "topsar_step_3_coreg_ifg_topsar_smart.py",
+        "what_happens": "Secondary scenes are coregistered to the master and interferograms are formed.",
+        "why_stage1_cares": "The complex phase stack and the associated acquisition/baseline metadata originate from this interferometric stack.",
+    },
+    {
+        "upstream_stage": "StaMPS export",
+        "tool_or_script": "topsar_step_5_stamps_export_multiIW.py or stripmap_step_5_stamps_export.py",
+        "what_happens": "SNAP2StaMPS exports the processed SNAP products into a StaMPS-compatible dataset tree.",
+        "why_stage1_cares": "This export step is what creates the patch-level Stage-1 raw inputs such as pscands.1.ij, pscands.1.ph, pscands.1.ll, optional pscands.1.da/hgt, plus metadata files or derivation context in diff0 and rslc.",
+    },
+]
+
+
 def parse_stage_spec(stage: str | int) -> list[int]:
     if isinstance(stage, int):
         if stage not in STAGE_INPUT_CONTRACTS:
@@ -219,3 +247,7 @@ def describe_stage_inputs(stage: str | int = "all") -> list[dict[str, Any]]:
         {"stage": stage_id, **deepcopy(STAGE_INPUT_CONTRACTS[stage_id])}
         for stage_id in parse_stage_spec(stage)
     ]
+
+
+def describe_stage1_snap2stamps_flow() -> list[dict[str, str]]:
+    return deepcopy(STAGE1_SNAP2STAMPS_FLOW)
