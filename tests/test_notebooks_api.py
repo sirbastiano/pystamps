@@ -6,7 +6,16 @@ import os
 import numpy as np
 
 from pystamps.input_contracts import describe_stage1_snap2stamps_flow
-from pystamps.notebooks import inspect_stage1_inputs
+from pystamps.io.mat import write_mat
+from pystamps.notebooks import (
+    compare_fields,
+    compute_field_statistics,
+    inspect_stage1_inputs,
+    load_velocity_diagnostics,
+    match_diagnostic_points,
+    plot_mode_from_step8,
+)
+from pystamps.notebooks import diagnostics as diagnostics_module
 from pystamps.notebooks.plots import point_count, sample_points, select_points
 from pystamps.notebooks.stage_execution import StageNotebookContext, _execution_env, stage3_indices, stage4_indices
 from pystamps.config import RunConfig
@@ -179,3 +188,133 @@ def test_inspect_stage1_inputs_summarizes_raw_patch_inputs(tmp_path: Path) -> No
     assert summary['phase_preview']['magnitude'].shape == (2, 3)
     assert any(row['file'] == 'pscands.1.ph' for row in summary['input_rows'])
     assert any('time axis' in warning for warning in summary['warnings'])
+
+
+def test_plot_mode_from_step8_defaults_and_override() -> None:
+    assert plot_mode_from_step8(True) == 'dos'
+    assert plot_mode_from_step8(False) == 'do'
+    assert plot_mode_from_step8(True, 'do') == 'do'
+
+
+def test_load_velocity_diagnostics_falls_back_to_stage7_stability_proxy(tmp_path: Path) -> None:
+    write_mat(
+        tmp_path / 'ps2.mat',
+        {
+            'lonlat': np.array([[11.0, 44.0], [12.0, 45.0], [13.0, 46.0]], dtype=np.float64),
+            'day': np.array([10.0, 20.0, 30.0], dtype=np.float64),
+            'master_ix': np.asarray(2.0, dtype=np.float64),
+        },
+    )
+    write_mat(tmp_path / 'pm2.mat', {'coh_ps': np.array([0.9, 0.8, 0.7], dtype=np.float64)})
+    write_mat(
+        tmp_path / 'mean_v.mat',
+        {'m': np.array([[1.0, 2.0, 3.0], [0.1, 0.2, 0.3]], dtype=np.float32)},
+    )
+    write_mat(
+        tmp_path / 'mv2.mat',
+        {
+            'mean_v': np.array([0.1, 0.2, 0.3], dtype=np.float32),
+            'mean_v_std': np.zeros(3, dtype=np.float32),
+        },
+    )
+    write_mat(tmp_path / 'scla2.mat', {'C_ps_uw': np.array([-2.0, 0.5, 1.5], dtype=np.float32)})
+
+    diag = load_velocity_diagnostics(tmp_path, apply_step8=False)
+
+    assert diag.plot_mode == 'do'
+    assert diag.velocity_source == 'mv2.mean_v'
+    assert diag.stability_source == 'abs(scla2.C_ps_uw) stability proxy'
+    np.testing.assert_allclose(diag.time_axis_days, [-10.0, 0.0, 10.0])
+    np.testing.assert_allclose(diag.stability, [2.0, 0.5, 1.5])
+    np.testing.assert_allclose(diag.slope, [0.1, 0.2, 0.3])
+
+
+def test_load_velocity_diagnostics_skips_stage7_proxy_when_std_exists(monkeypatch) -> None:
+    payloads = {
+        'ps2.mat': {
+            'lonlat': np.array([[11.0, 44.0], [12.0, 45.0]], dtype=np.float64),
+            'day': np.array([10.0, 20.0, 30.0], dtype=np.float64),
+            'master_ix': np.asarray(2.0, dtype=np.float64),
+        },
+        'mean_v.mat': {'m': np.array([[1.0, 2.0], [0.1, 0.2]], dtype=np.float32)},
+        'mv2.mat': {
+            'mean_v': np.array([0.1, 0.2], dtype=np.float32),
+            'mean_v_std': np.array([0.01, 0.02], dtype=np.float32),
+        },
+    }
+
+    def fake_read_mat(path):
+        name = Path(path).name
+        if name == 'scla2.mat':
+            raise AssertionError('scla2.mat should not be loaded when mean_v_std is populated')
+        return payloads[name]
+
+    monkeypatch.setattr(diagnostics_module, 'read_mat', fake_read_mat)
+
+    diag = load_velocity_diagnostics('ignored', apply_step8=True)
+
+    assert diag.stability_source == 'mv2.mean_v_std'
+    np.testing.assert_allclose(diag.stability, [0.01, 0.02])
+
+
+def test_match_diagnostic_points_uses_lonlat_alignment() -> None:
+    run_diag = diagnostics_module.VelocityDiagnostics(
+        root=Path('.'),
+        plot_mode='dos',
+        lonlat=np.array([[10.0, 40.0], [20.0, 50.0]], dtype=float),
+        day=np.array([0.0, 12.0], dtype=float),
+        master_ix=1,
+        time_axis_days=np.array([0.0, 12.0], dtype=float),
+        coherence=np.ones(2, dtype=float),
+        velocity=np.array([1.0, 2.0], dtype=np.float32),
+        velocity_source='mv2.mean_v',
+        stability=np.array([0.1, 0.2], dtype=np.float32),
+        stability_source='mv2.mean_v_std',
+        intercept=np.zeros(2, dtype=np.float32),
+        slope=np.array([1.0, 2.0], dtype=np.float32),
+    )
+    stamps_diag = diagnostics_module.VelocityDiagnostics(
+        root=Path('.'),
+        plot_mode='dos',
+        lonlat=np.array([[99.0, 99.0], [20.0, 50.0], [10.0, 40.0]], dtype=float),
+        day=np.array([0.0, 12.0], dtype=float),
+        master_ix=1,
+        time_axis_days=np.array([0.0, 12.0], dtype=float),
+        coherence=np.ones(3, dtype=float),
+        velocity=np.array([9.0, 2.5, 1.5], dtype=np.float32),
+        velocity_source='mv2.mean_v',
+        stability=np.array([0.9, 0.25, 0.15], dtype=np.float32),
+        stability_source='mv2.mean_v_std',
+        intercept=np.zeros(3, dtype=np.float32),
+        slope=np.array([9.0, 2.5, 1.5], dtype=np.float32),
+    )
+
+    matched = match_diagnostic_points(run_diag, stamps_diag)
+
+    np.testing.assert_array_equal(matched.run_indices, [0, 1])
+    np.testing.assert_array_equal(matched.stamps_indices, [2, 1])
+
+    report = diagnostics_module.build_velocity_report(run_diag, stamps_diag)
+    comparison = {row['field']: row for row in report['comparison_rows']}
+    assert comparison['v-dos']['count'] == 2.0
+    assert np.isclose(comparison['v-dos']['bias'], -0.5)
+
+
+def test_compute_field_statistics_and_compare_fields() -> None:
+    stats = compute_field_statistics(
+        np.array([1.0, 2.0, 3.0, 100.0], dtype=float),
+        compute_percentiles=True,
+        percentiles=(5.0, 95.0),
+        outlier_filter='iqr',
+    )
+    comparison = compare_fields(
+        np.array([1.0, 2.0, 3.0], dtype=float),
+        np.array([1.5, 2.5, 3.5], dtype=float),
+        metrics=('RMSE', 'MAE', 'bias'),
+    )
+
+    assert stats['count'] == 3.0
+    assert stats['mean'] == 2.0
+    assert np.isclose(comparison['bias'], -0.5)
+    assert np.isclose(comparison['mae'], 0.5)
+    assert np.isclose(comparison['rmse'], 0.5)

@@ -97,19 +97,39 @@ def sample_matrix(matrix, max_rows: int = MAX_MATRIX_ROWS, max_cols: int = MAX_M
     return array[np.ix_(row_ix, col_ix)]
 
 
-def scatter_compare(ax_run, ax_stamps, lonlat_run, values_run, lonlat_stamps, values_stamps, title: str, cmap: str = "viridis") -> None:
+def scatter_compare(
+    ax_run,
+    ax_stamps,
+    lonlat_run,
+    values_run,
+    lonlat_stamps,
+    values_stamps,
+    title: str,
+    cmap: str = "viridis",
+    *,
+    vmin: float | None = None,
+    vmax: float | None = None,
+) -> None:
     pts_run, val_run = sample_points(lonlat_run, values_run)
     pts_stamps, val_stamps = sample_points(lonlat_stamps, values_stamps)
 
     sc_run = None
     sc_stamps = None
     if pts_run.ndim == 2 and pts_run.shape[0] > 0:
-        sc_run = ax_run.scatter(pts_run[:, 1], pts_run[:, 0], c=val_run, s=3, cmap=cmap)
+        sc_run = ax_run.scatter(pts_run[:, 1], pts_run[:, 0], c=val_run, s=3, cmap=cmap, vmin=vmin, vmax=vmax)
     else:
         ax_run.text(0.5, 0.5, "No pySTAMPS points to plot", ha="center", va="center", transform=ax_run.transAxes)
 
     if pts_stamps.ndim == 2 and pts_stamps.shape[0] > 0:
-        sc_stamps = ax_stamps.scatter(pts_stamps[:, 1], pts_stamps[:, 0], c=val_stamps, s=3, cmap=cmap)
+        sc_stamps = ax_stamps.scatter(
+            pts_stamps[:, 1],
+            pts_stamps[:, 0],
+            c=val_stamps,
+            s=3,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+        )
     else:
         ax_stamps.text(0.5, 0.5, "No STAMPS points to plot", ha="center", va="center", transform=ax_stamps.transAxes)
 

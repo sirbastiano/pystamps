@@ -109,6 +109,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--replay-config")
     parser.add_argument("--replay-stages", default="2,3,4,5,6,7,8")
     parser.add_argument("--timeout", type=int, default=None)
+    parser.add_argument("--startup-timeout", type=int, default=180)
     return parser.parse_args()
 
 
@@ -138,6 +139,7 @@ def main() -> int:
         client = NotebookClient(
             notebook,
             timeout=None if args.timeout is None or args.timeout <= 0 else args.timeout,
+            startup_timeout=max(1, int(args.startup_timeout)),
             kernel_name="python3",
             resources={"metadata": {"path": str(exec_cwd)}},
         )
