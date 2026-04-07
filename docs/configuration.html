@@ -31,6 +31,8 @@
   stage7_chunk_ps: 100000
   stage8_chunk_edges: 200000
   enable_mat_stage_cache: true
+  stage2_checkpoint_mode: final
+  stage2_checkpoint_interval: 1
   stage2_debug: false
   stage4_debug: false
 
@@ -74,6 +76,8 @@ compat:
         <li>Default values come from dataclass defaults in <span class="code-inline">RuntimeConfig</span>, <span class="code-inline">ToleranceConfig</span>, <span class="code-inline">ExternalToolsConfig</span>, and <span class="code-inline">CompatibilityConfig</span>.</li>
         <li>CLI overrides runtime values directly for workers in command handlers before run begins.</li>
         <li><span class="code-inline">runtime.cpu_workers</span> values &lt;= 0 are replaced by auto-selection in executor initialization.</li>
+        <li><span class="code-inline">runtime.stage2_checkpoint_mode</span> defaults to <span class="code-inline">final</span>, which writes <span class="code-inline">pm1.mat</span> once after convergence to reduce stage-2 I/O without changing the final artifact contract.</li>
+        <li>Use <span class="code-inline">periodic</span> with <span class="code-inline">runtime.stage2_checkpoint_interval</span> for restart-friendly snapshots, or <span class="code-inline">always</span> to preserve the older per-iteration checkpoint pattern.</li>
       </ul>
     </section>
 

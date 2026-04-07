@@ -7,7 +7,7 @@
 <h1 id="module">pystamps.config</h1>
 <section class="card" id="data-types"><h2>Data classes</h2>
 <table><thead><tr><th>Name</th><th>Fields</th><th>Defaults</th></tr></thead><tbody>
-<tr><td>RuntimeConfig</td><td>io_workers:int, cpu_workers:int, backend:str, stage7_chunk_ps:int, stage8_chunk_edges:int, enable_mat_stage_cache:bool, stage2_debug:bool, stage4_debug:bool</td><td>8, 0, "auto", 100000, 200000, True, False, False</td></tr>
+<tr><td>RuntimeConfig</td><td>io_workers:int, cpu_workers:int, backend:str, stage7_chunk_ps:int, stage8_chunk_edges:int, enable_mat_stage_cache:bool, stage2_checkpoint_mode:str, stage2_checkpoint_interval:int, stage2_debug:bool, stage4_debug:bool</td><td>8, 0, "auto", 100000, 200000, True, "final", 1, False, False</td></tr>
 <tr><td>ToleranceConfig</td><td>rtol:float, atol:float, wrap_equivalence:bool, wrap_period:float, wrap_keys:tuple[str,...]</td><td>1e-5,1e-7,True,2π, ("ph_uw","ph","dph_noise","dph_space_uw")</td></tr>
 <tr><td>ExternalToolsConfig</td><td>triangle:str, snaphu:str</td><td>"triangle", "snaphu"</td></tr>
 <tr><td>CompatibilityConfig</td><td>reference_root:str|None, strict_reference:bool</td><td>None, False</td></tr>

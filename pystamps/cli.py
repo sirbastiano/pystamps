@@ -8,6 +8,7 @@ from pathlib import Path
 from pystamps.compat.legacy import discover_legacy_commands
 from pystamps.config import ConfigError, RunConfig, load_config
 from pystamps.input_contracts import describe_stage_inputs, parse_stage_spec
+from pystamps.kernels import describe_backend_matrix
 from pystamps.notebooks.dataset_inspection import inspect_stage1_inputs
 from pystamps.pipeline.stages import run_pipeline
 from pystamps.pipeline.types import PipelineContext
@@ -65,6 +66,10 @@ def _parse_args() -> argparse.Namespace:
         type=str,
         default="PATCH_1",
         help="Patch name used with --dataset for Stage-1 checks",
+    )
+    subparsers.add_parser(
+        "describe-backends",
+        help="Describe registered kernel backends and current backend coverage",
     )
 
     return parser.parse_args()
@@ -170,6 +175,11 @@ def _cmd_describe_inputs(stage: str, dataset: str | None, patch: str) -> int:
     return 0
 
 
+def _cmd_describe_backends() -> int:
+    print(json.dumps(describe_backend_matrix(), indent=2))
+    return 0
+
+
 def main() -> int:
     args = _parse_args()
     run_config = _load_run_config(args.config)
@@ -184,6 +194,8 @@ def main() -> int:
         return _cmd_list_legacy(args.stamps_root)
     if args.command == "describe-inputs":
         return _cmd_describe_inputs(args.stage, args.dataset, args.patch)
+    if args.command == "describe-backends":
+        return _cmd_describe_backends()
 
     raise SystemExit(f"Unknown command: {args.command}")
 

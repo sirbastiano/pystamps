@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 from pathlib import Path
 from types import SimpleNamespace
@@ -223,6 +224,61 @@ def test_validate_audit_rejects_unsupported_dataset_selection(monkeypatch, tmp_p
     assert payload["interruption"]["extra_datasets"] == ["rogue_dataset"]
 
 
+def test_validate_audit_allows_required_subset_when_flag_enabled(monkeypatch, tmp_path: Path) -> None:
+    module = _load_validate_audit_module()
+    inputs_root = tmp_path / "inputs_and_outputs"
+    dataset_a = inputs_root / "InSAR_dataset_test_stage8diag"
+    dataset_b = inputs_root / "InSAR_dataset_test"
+    dataset_a.mkdir(parents=True)
+    dataset_b.mkdir(parents=True)
+    output = tmp_path / "latest_audit.json"
+
+    contract = {
+        "required_dataset_paths": [
+            "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+            "inputs_and_outputs/InSAR_dataset_test",
+        ]
+    }
+
+    monkeypatch.setattr(module, "_resolve_contract", lambda: contract)
+    monkeypatch.setattr(module, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        module,
+        "_parse_args",
+        lambda: SimpleNamespace(
+            datasets=[str(dataset_a)],
+            golden_root=None,
+            output=str(output),
+            allow_subset=True,
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "_prepare_run_selection",
+        lambda dataset_root, golden_base, audit_stamp: (dataset_root, dataset_root, "test_run_root", None),
+    )
+    monkeypatch.setattr(
+        module,
+        "verify_run_against_golden",
+        lambda run_root, golden_root, tolerance: SimpleNamespace(ok=True, comparisons=[object()]),
+    )
+    monkeypatch.setattr(
+        module,
+        "summarize_failures",
+        lambda report: {"failed": 0, "failures": [], "groups": [], "trace": {}},
+    )
+
+    exit_code = module.main()
+
+    assert exit_code == 0
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["ok"] is True
+    assert payload["completed"] is True
+    assert payload["missing_datasets"] == []
+    assert payload["interrupted"] is False
+    assert [audit["dataset"] for audit in payload["audits"]] == ["InSAR_dataset_test_stage8diag"]
+
+
 def test_validate_audit_fails_when_required_run_copy_is_missing(monkeypatch, tmp_path: Path) -> None:
     module = _load_validate_audit_module()
     inputs_root = tmp_path / "inputs_and_outputs"
@@ -403,3 +459,65 @@ def test_build_run_copy_uses_run_full_gate_seed_for_dataset_test(monkeypatch, tm
     assert not (run_root / "PATCH_1" / "pm2.mat").exists()
     assert not (run_root / "pm2.mat").exists()
     assert not (run_root / "phuw2.mat").exists()
+
+
+def test_build_run_copy_prefers_stage2_when_run_full_gate_seed_has_stage1_artifacts(
+    monkeypatch, tmp_path: Path
+) -> None:
+    module = _load_validate_audit_module()
+    inputs_root = tmp_path / "inputs_and_outputs"
+    dataset = inputs_root / "InSAR_dataset_test"
+    dataset.mkdir(parents=True)
+    (dataset / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    seed = inputs_root / "RUN_FULL_GATE_1e10"
+    patch = seed / "PATCH_1"
+    patch.mkdir(parents=True)
+    (seed / "patch.list").write_text("PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n", encoding="utf-8")
+    (seed / "PATCH_2").mkdir(parents=True)
+    for filename in (
+        "ps1.mat",
+        "ph1.mat",
+        "bp1.mat",
+        "da1.mat",
+        "hgt1.mat",
+        "pm1.mat",
+        "select1.mat",
+        "weed1.mat",
+    ):
+        (patch / filename).write_text("stub", encoding="utf-8")
+
+    monkeypatch.setattr(module, "_inputs_root", lambda: inputs_root)
+    monkeypatch.setattr(module, "_seed_root_for_dataset", lambda dataset_root: seed.resolve())
+    monkeypatch.setattr(module, "_copy_dataset", lambda src, dst: shutil.copytree(src, dst))
+    monkeypatch.setattr(module, "run_pipeline", lambda context: SimpleNamespace(failures=[]))
+
+    run_root, generation = module._build_run_copy(dataset, "20260314_120000")
+
+    assert run_root.name == "InSAR_dataset_test_stage2_8"
+    assert generation["start_step"] == 2
+    assert generation["end_step"] == 8
+    assert generation["seed_name"] == "RUN_FULL_GATE_1e10"
+    assert Path(generation["seed_root"]) == seed.resolve()
+    assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\n"
+    assert not (run_root / "PATCH_2").exists()
+    assert not (run_root / "PATCH_1" / "pm1.mat").exists()
+    assert not (run_root / "PATCH_1" / "select1.mat").exists()
+    assert not (run_root / "PATCH_1" / "weed1.mat").exists()
+
+
+def test_align_run_copy_replaces_hardlinked_patch_list(monkeypatch, tmp_path: Path) -> None:
+    module = _load_validate_audit_module()
+    dataset = tmp_path / "dataset"
+    run_root = tmp_path / "run"
+    (dataset / "PATCH_1").mkdir(parents=True)
+    (dataset / "PATCH_2").mkdir(parents=True)
+    (dataset / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    shutil.copytree(dataset, run_root, copy_function=os.link)
+
+    assert os.path.samefile(dataset / "patch.list", run_root / "patch.list")
+
+    module._align_run_copy_with_dataset(run_root, dataset)
+
+    assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\n"
+    assert not os.path.samefile(dataset / "patch.list", run_root / "patch.list")
+    assert not (run_root / "PATCH_2").exists()

@@ -28,7 +28,7 @@ Package version exported from `pystamps._version`.
 
 ## `pystamps.cli`
 
-Purpose: command-line interface for inspecting datasets, running stages, verifying outputs, and listing legacy commands.
+Purpose: command-line interface for inspecting datasets, running stages, verifying outputs, listing legacy commands, and reporting backend coverage.
 
 ### `_parse_args() -> argparse.Namespace`
 Builds and parses the CLI arguments.
@@ -51,6 +51,9 @@ Resolves the StaMPS root by preferring an explicit argument and then `STAMPS_ROO
 ### `_cmd_list_legacy(stamps_root: str | None) -> int`
 Discovers legacy StaMPS commands and prints them as JSON.
 
+### `_cmd_describe_backends() -> int`
+Prints the registered backend providers and per-kernel coverage manifest as JSON.
+
 ### `main() -> int`
 Top-level CLI dispatcher.
 
@@ -69,6 +72,9 @@ Purpose: structured configuration for runtime behavior, numeric tolerances, exte
 - `ConfigError`: raised when the config file is invalid
 
 ### Functions
+- `normalize_runtime_backend(name: str) -> str`: normalize runtime backend aliases
+- `normalize_kernel_backend(name: str) -> str`: normalize generic kernel backend aliases
+- `normalize_stage2_kernel_backend(name: str) -> str`: restrict stage-2 kernel backends to `auto|python|native`
 - `_load_raw(path: Path) -> dict[str, Any]`: read a YAML or JSON config payload
 - `_as_dict(payload: dict[str, Any], key: str) -> dict[str, Any]`: helper for safe nested-dict extraction
 - `load_config(path: str | Path | None = None) -> RunConfig`: load a config file or defaults into a `RunConfig`
@@ -155,6 +161,7 @@ Purpose: orchestration layer for deciding which stages run, in what order, and w
 ### Functions
 - `_normalize_backend(name: str) -> str`: normalize backend naming
 - `_task_kind_for_stage(stage: StageDef, context: PipelineContext, patch_count: int = 0) -> str`: classify execution mode for scheduling
+- `_stage2_uses_full_cpu_default(stage: StageDef, context: PipelineContext) -> bool`: decide when stage 2 should claim the full detected CPU budget by default
 - `_replay_from_reference(...)`: reuse or replay outputs from a reference root when compatibility mode requests it
 - `_run_ported_patch_stage(...)`: run one Python-ported patch stage
 - `_run_patch_stage(...)`: run one patch-level stage
@@ -178,7 +185,7 @@ Purpose: Python implementations of the stage logic and the internal numerical he
 ### Public stage entrypoints
 - `resolve_stage1_metadata(...) -> Stage1MetadataResolution`
 - `stage1_load_initial(patch_dir: Path, backend: str = "auto") -> str`
-- `stage2_estimate_gamma(patch_dir: Path, backend: str = "auto", debug: bool = False) -> str`
+- `stage2_estimate_gamma(patch_dir: Path, backend: str = "auto", kernel_backend: str = "auto", kernel_backend_overrides: dict[str, str] | None = None, native_threads: int = 0, checkpoint_mode: str = "final", checkpoint_interval: int = 1, debug: bool = False) -> str`
 - `stage3_select_ps(patch_dir: Path, backend: str = "auto") -> str`
 - `stage4_weed_ps(...) -> str`
 - `stage5_correct_and_promote(patch_dir: Path, backend: str = "auto") -> str`
@@ -208,6 +215,17 @@ Examples:
 - `_coerce_1d`
 - `_coerce_complex`
 - `_mat_scalar`
+
+#### Stage-2 kernel helpers
+Examples:
+- `_normalize_stage2_kernel_backend`
+- `_normalize_kernel_backend_override_map`
+- `_normalize_stage2_native_threads`
+- `_normalize_stage2_checkpoint_mode`
+- `_ps_topofit_batch`
+- `run_stage2_grid_accumulate_kernel`
+- `run_stage2_histogram_kernel`
+- `run_stage2_topofit_kernel`
 - `_mat_text`
 - `_matlab_col`
 - `_matlab_row`
@@ -263,22 +281,39 @@ Purpose: accelerated CPU and GPU kernels used by later numerical stages.
 ### Functions
 - `_cupy() -> Any | None`: lazy CuPy resolver
 - `_resolve_backend(backend: str) -> str`: backend selection helper
+- `_resolve_stage2_kernel_backend(backend: str) -> str`: stage-2 backend selection helper
 - `_to_numpy(arr: Any) -> np.ndarray`: normalize backend arrays to NumPy
 - `_cov_from_accumulators(...) -> np.ndarray`: covariance helper
 - `_auto_chunk_size(...) -> int`: choose chunk sizes for memory-aware execution
+- `stage2_native_available() -> bool`: probe for the compiled stage-2 extension
+- `stage7_native_available() -> bool`: probe for the compiled native stage-7 export
+- `stage8_native_available() -> bool`: probe for the compiled native stage-8 export
+- `run_stage2_grid_accumulate_kernel(...)`: public stage-2 grid accumulation wrapper
+- `run_stage2_topofit_kernel(...)`: public stage-2 generic topofit wrapper
+- `run_stage2_topofit_row_invariant_kernel(...)`: public stage-2 row-invariant topofit wrapper
+- `run_stage2_topofit_coh_row_invariant_kernel(...)`: public stage-2 coherence-only row-invariant wrapper
+- `run_stage2_histogram_kernel(...)`: public stage-2 histogram wrapper
+- `_stage4_edge_stats_python(...)`
+- `_stage4_edge_stats_native(...)`
+- `run_stage4_edge_stats_kernel(ph_weed, node_a, node_b, bperp, day, time_win, small_baseline, backend='auto', threads=0) -> dict[str, np.ndarray]`: public stage-4 edge-statistics kernel wrapper
 - `_stage7_scla_cpu(...)`
 - `_stage7_scla_gpu(...)`
+- `_stage7_scla_native(...)`
 - `_stage8_edge_noise_cpu(...)`
 - `_stage8_edge_noise_gpu(...)`
-- `run_stage7_scla_kernel(...)`: public stage-7 kernel wrapper
-- `run_stage8_edge_noise_kernel(...)`: public stage-8 kernel wrapper
+- `_stage8_edge_noise_native(...)`
+- `run_stage7_scla_kernel(ph_proc, ph_mean_v, bperp_mat, unwrap_ix, solve_ix, day, master_ix, ifg_std, backend='auto', chunk_ps=0) -> dict[str, np.ndarray]`: public stage-7 kernel wrapper
+- `run_stage8_edge_noise_kernel(uw_ph, node_a, node_b, backend='auto', chunk_edges=0) -> dict[str, np.ndarray]`: public stage-8 kernel wrapper
+- `describe_backend_matrix() -> dict[str, Any]`: report providers and per-kernel backend coverage
 
 ## `pystamps.kernels.registry`
 
 Purpose: register and resolve kernel implementations.
 
 ### Dataclasses
+- `BackendProvider`
 - `KernelImplementation`
+- `ResolvedKernel`
 - `KernelRegistry`
 
 ## `pystamps.runtime.executor`

@@ -65,7 +65,9 @@ pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 1 --end-step 8</
   cpu_workers: 0
   stage7_chunk_ps: 100000
   stage8_chunk_edges: 200000
-  enable_mat_stage_cache: true</code></pre>
+  enable_mat_stage_cache: true
+  stage2_checkpoint_mode: final
+  stage2_checkpoint_interval: 1</code></pre>
       </article>
       <article class="action-card">
         <h3>Need the visual flow?</h3>

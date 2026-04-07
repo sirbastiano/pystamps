@@ -7,7 +7,8 @@ import os
 import re
 import tempfile
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from multiprocessing import get_context
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -17,14 +18,17 @@ from scipy import sparse, spatial
 from scipy import ndimage
 from scipy import signal
 
+from pystamps.config import ConfigError, normalize_kernel_backend, normalize_stage2_kernel_backend
 from pystamps.io.mat import read_mat, write_mat
 from pystamps.kernels import (
     BackendUnavailableError,
+    run_stage4_edge_stats_kernel,
     run_stage2_grid_accumulate_kernel,
     run_stage2_histogram_kernel,
     run_stage2_topofit_coh_row_invariant_kernel,
     run_stage2_topofit_kernel,
     run_stage2_topofit_row_invariant_kernel,
+    run_stage7_scla_kernel,
     run_stage8_edge_noise_kernel,
 )
 
@@ -34,9 +38,10 @@ class PortedStageError(RuntimeError):
 
 
 _CANONICAL_STAGE2_WEIGHTING_SNAPSHOT = Path("inputs_and_outputs/validation_runs/stage2_weighting_snapshot.json")
-# Bump when any stage-2 random histogram semantics change, otherwise old cached
-# Nr/Nr_max_nz_ix values can outlive parity fixes and poison later reruns.
-_STAGE2_RANDOM_HIST_CACHE_VERSION = 9
+# Bump when any stage-2 semantics change that can affect the downstream use of
+# the cached random baseline histogram, otherwise old Nr/Nr_max_nz_ix values can
+# outlive parity fixes and poison later reruns.
+_STAGE2_RANDOM_HIST_CACHE_VERSION = 13
 _STAGE2_TOPOFIT_NEAR_MAX_COH_TOL = 2.0e-4
 
 
@@ -728,9 +733,21 @@ def _stage2_bperp_rows_are_invariant(bperp_mat: np.ndarray | None) -> bool:
     chunk_rows = 20000
     for start in range(1, bp.shape[0], chunk_rows):
         stop = min(start + chunk_rows, bp.shape[0])
-        if not np.array_equal(bp[start:stop, :], ref):
+        if not np.all(bp[start:stop, :] == ref):
             return False
     return True
+
+
+def _stage2_row_invariant_bperp_vector(bperp_nm: np.ndarray, bperp_mat: np.ndarray | None) -> np.ndarray:
+    bperp_vec = np.asarray(bperp_nm).reshape(-1)
+    if bperp_mat is None:
+        return bperp_vec
+    bp = np.asarray(bperp_mat)
+    if bp.ndim != 2 or bp.shape[1] != bperp_vec.size:
+        return bperp_vec
+    if _stage2_bperp_rows_are_invariant(bp):
+        return np.asarray(bp[0], dtype=bperp_vec.dtype).reshape(-1)
+    return bperp_vec
 
 
 def _stage2_random_hist_cache_path(
@@ -810,6 +827,51 @@ def _write_stage2_random_hist_cache(
     tmp_path.replace(cache_path)
 
 
+def _load_stage2_pm_random_hist(
+    patch_dir: Path,
+    *,
+    coh_bins: np.ndarray,
+    n_trial_wraps: float,
+) -> tuple[np.ndarray, float] | None:
+    pm_path = patch_dir / "pm1.mat"
+    if not pm_path.exists():
+        return None
+    try:
+        payload = read_mat(pm_path)
+    except Exception:
+        return None
+
+    nr_raw = payload.get("Nr")
+    nr_max_raw = payload.get("Nr_max_nz_ix")
+    bins_raw = payload.get("coh_bins")
+    wraps_raw = payload.get("n_trial_wraps")
+    if nr_raw is None or nr_max_raw is None or bins_raw is None or wraps_raw is None:
+        return None
+
+    nr = np.asarray(nr_raw, dtype=np.float64).reshape(-1)
+    saved_bins = np.asarray(bins_raw, dtype=np.float64).reshape(-1)
+    saved_wraps = float(_mat_scalar(wraps_raw, np.nan))
+    expected_bins = np.asarray(coh_bins, dtype=np.float64).reshape(-1)
+    if nr.shape != coh_bins.shape or saved_bins.shape != coh_bins.shape:
+        return None
+    if not np.allclose(saved_bins, expected_bins, rtol=0.0, atol=1e-12):
+        return None
+    expected_wraps = float(n_trial_wraps)
+    expected_wraps_f32 = float(np.asarray(expected_wraps, dtype=np.float32))
+    if not np.isfinite(saved_wraps) or (
+        saved_wraps != expected_wraps_f32
+        and not math.isclose(saved_wraps, expected_wraps, rel_tol=0.0, abs_tol=1e-12)
+    ):
+        return None
+    if not np.all(np.isfinite(nr)):
+        return None
+
+    nr_max_nz_ix = float(_mat_scalar(nr_max_raw, np.nan))
+    if not np.isfinite(nr_max_nz_ix):
+        return None
+    return nr.copy(), nr_max_nz_ix
+
+
 def _stage2_grid_accumulate_matlab(
     ph_weight: np.ndarray,
     grid_lin: np.ndarray,
@@ -817,13 +879,15 @@ def _stage2_grid_accumulate_matlab(
     n_j: int,
     *,
     out: np.ndarray | None = None,
+    preserve_precision: bool = False,
 ) -> np.ndarray:
-    ph = np.asarray(ph_weight, dtype=np.complex64)
+    dtype = np.complex128 if preserve_precision else np.complex64
+    ph = np.asarray(ph_weight, dtype=dtype)
     grid = np.asarray(grid_lin, dtype=np.int64).reshape(-1)
     if out is None:
-        grid_out = np.zeros((int(n_i), int(n_j), ph.shape[1]), dtype=np.complex64)
+        grid_out = np.zeros((int(n_i), int(n_j), ph.shape[1]), dtype=dtype)
     else:
-        grid_out = out
+        grid_out = np.asarray(out, dtype=dtype)
         grid_out.fill(0)
     flat = grid_out.reshape(-1, ph.shape[1])
     for row, idx in enumerate(grid):
@@ -837,17 +901,35 @@ def _stage2_ph_weight_block(
     bperp: np.ndarray,
     k_ps: np.ndarray,
     weighting: np.ndarray,
+    *,
+    preserve_precision: bool = False,
 ) -> np.ndarray:
+    if preserve_precision:
+        ph_chunk = np.asarray(ph_nm, dtype=np.complex64)
+        bp_chunk = np.asarray(bperp, dtype=np.float64)
+        k_chunk = np.asarray(k_ps, dtype=np.float64).reshape(-1, 1)
+        weight_chunk = np.asarray(weighting, dtype=np.float64).reshape(-1, 1)
+        phase_ramp = np.exp(-1j * (bp_chunk * k_chunk))
+        out = ph_chunk.astype(np.complex128) * phase_ramp
+        out = out * weight_chunk
+        return out
     ph_chunk = np.asarray(ph_nm, dtype=np.complex64)
     bp_chunk = np.asarray(bperp, dtype=np.float64)
     k_chunk = np.asarray(k_ps, dtype=np.float64).reshape(-1, 1)
     weight_chunk = np.asarray(weighting, dtype=np.float64).reshape(-1, 1)
-    # Preserve the phase ramp in complex128 until the final cast. Rounding the
-    # ramp early leaves a visible residue in the saved pm1.ph_weight artifact.
     phase_ramp = np.exp(-1j * (bp_chunk * k_chunk))
     out = ph_chunk.astype(np.complex128) * phase_ramp
     out = out * weight_chunk
     return out.astype(np.complex64, copy=False)
+
+
+def _normalize_complex_unit_magnitude_inplace(values: np.ndarray, *, preserve_precision: bool = False) -> np.ndarray:
+    arr = np.asarray(values, dtype=np.complex128 if preserve_precision else np.complex64)
+    abs_arr = np.abs(arr).astype(np.float64 if preserve_precision else np.float32, copy=False)
+    np.divide(arr, abs_arr, out=arr, where=abs_arr != 0)
+    return arr
+
+
 def _polyfit_eval_centered(x: np.ndarray, y: np.ndarray, deg: int, x_eval: float) -> float:
     x = np.asarray(x, dtype=np.float64).reshape(-1)
     y = np.asarray(y, dtype=np.float64).reshape(-1)
@@ -899,8 +981,10 @@ def _clap_filt_grid(
     n_win: int,
     n_pad: int = 0,
     low_pass: np.ndarray | None = None,
+    preserve_precision: bool = False,
 ) -> np.ndarray:
-    ph_arr = np.asarray(ph, dtype=np.complex64).copy()
+    out_dtype = np.complex128 if preserve_precision else np.complex64
+    ph_arr = np.asarray(ph, dtype=np.complex128 if preserve_precision else np.complex64).copy()
     if ph_arr.ndim != 2:
         raise PortedStageError("clap_filt_grid expects a 2-D complex grid")
 
@@ -966,7 +1050,24 @@ def _clap_filt_grid(
             ph_filt = np.fft.ifft2(ph_fft * G)
             ph_out[i1:i2, j1:j2] = ph_out[i1:i2, j1:j2] + (ph_filt[:n_win_int, :n_win_int] * wf2)
 
-    return ph_out.astype(np.complex64)
+    return ph_out.astype(out_dtype, copy=False)
+
+
+_CLAP_IFG_PARALLEL_SHARED: dict[str, Any] = {}
+
+
+def _clap_filt_grid_ifg_parallel_worker(i_ifg: int) -> tuple[int, np.ndarray]:
+    shared = _CLAP_IFG_PARALLEL_SHARED
+    ph_stack = shared["ph_stack"]
+    return i_ifg, _clap_filt_grid(
+        ph_stack[:, :, i_ifg],
+        alpha=shared["alpha"],
+        beta=shared["beta"],
+        n_win=shared["n_win"],
+        n_pad=shared["n_pad"],
+        low_pass=shared["low_pass"],
+        preserve_precision=bool(shared.get("preserve_precision", False)),
+    )
 
 
 def _clap_filt_grid_stack(
@@ -976,9 +1077,18 @@ def _clap_filt_grid_stack(
     n_win: int,
     n_pad: int = 0,
     low_pass: np.ndarray | None = None,
+    workers: int = 1,
+    preserve_precision: bool = False,
 ) -> np.ndarray:
     prepared = _prepare_clap_filt_grid_stack(ph_stack.shape, n_win=n_win, n_pad=n_pad, low_pass=low_pass)
-    return _clap_filt_grid_stack_prepared(ph_stack, alpha=alpha, beta=beta, prepared=prepared)
+    return _clap_filt_grid_stack_prepared(
+        ph_stack,
+        alpha=alpha,
+        beta=beta,
+        prepared=prepared,
+        workers=workers,
+        preserve_precision=preserve_precision,
+    )
 
 
 def _prepare_clap_filt_grid_stack(
@@ -1066,8 +1176,10 @@ def _clap_filt_grid_stack_prepared(
     beta: float,
     prepared: _PreparedClapGridStack,
     out: np.ndarray | None = None,
+    workers: int = 1,
+    preserve_precision: bool = False,
 ) -> np.ndarray:
-    ph_arr = np.asarray(ph_stack, dtype=np.complex64)
+    ph_arr = np.asarray(ph_stack, dtype=np.complex128 if preserve_precision else np.complex64)
     if ph_arr.ndim != 3:
         raise PortedStageError("clap_filt_grid_stack expects a 3-D complex stack")
     if ph_arr.shape != (prepared.n_i, prepared.n_j, prepared.n_ifg):
@@ -1081,14 +1193,17 @@ def _clap_filt_grid_stack_prepared(
         ph_out = np.zeros(ph_arr.shape, dtype=np.complex128)
         out_view: np.ndarray | None = None
     else:
-        out_view = np.asarray(out, dtype=np.complex64)
+        out_view = np.asarray(out, dtype=np.complex128 if preserve_precision else np.complex64)
         if out_view.shape != ph_arr.shape:
             raise PortedStageError("prepared clap output buffer has incompatible shape")
         out_view.fill(0)
         ph_out = np.zeros(ph_arr.shape, dtype=np.complex128)
 
     if not prepared.windows:
-        return ph_out
+        if out is None:
+            return ph_out
+        out_view[...] = ph_out.astype(out_view.dtype, copy=False)
+        return out_view
 
     ph_bit = prepared.ph_bit
     h_smooth = prepared.h_smooth
@@ -1119,8 +1234,8 @@ def _clap_filt_grid_stack_prepared(
         )
 
     if out is None:
-        return ph_out.astype(np.complex64)
-    out_view[...] = ph_out.astype(np.complex64)
+        return ph_out if preserve_precision else ph_out.astype(np.complex64)
+    out_view[...] = ph_out.astype(out_view.dtype, copy=False)
     return out_view
 
 
@@ -1158,8 +1273,6 @@ def _matlab_interp(x: np.ndarray, factor: int) -> np.ndarray:
     wc = 0.5
     y = np.zeros(arr.size * q + q * n + 1, dtype=np.float64)
     y[: arr.size * q : q] = arr
-    # Octave/MATLAB interp uses fir1(2*q*n+1, Wc/q) before discarding the
-    # initial q*n+1 delay samples.
     b = signal.firwin(
         2 * q * n + 2,
         wc / q,
@@ -1693,8 +1806,14 @@ def _stage2_trial_values(n_trial_wraps: float) -> np.ndarray:
 
 
 def _ps_topofit_single(cpxphase: np.ndarray, bperp: np.ndarray, n_trial_wraps: float) -> tuple[float, float, float, np.ndarray]:
-    cpxphase = np.asarray(cpxphase, dtype=np.complex128).reshape(-1)
-    bperp = np.asarray(bperp, dtype=np.float64).reshape(-1)
+    cpx_input = np.asarray(cpxphase)
+    bperp_input = np.asarray(bperp)
+    use_single = cpx_input.dtype == np.complex64 or bperp_input.dtype == np.float32
+    complex_dtype = np.complex64 if use_single else np.complex128
+    real_dtype = np.float32 if use_single else np.float64
+
+    cpxphase = np.asarray(cpxphase, dtype=complex_dtype).reshape(-1)
+    bperp = np.asarray(bperp, dtype=real_dtype).reshape(-1)
     if cpxphase.size != bperp.size:
         raise PortedStageError("ps_topofit single expects vectors with matching lengths")
 
@@ -1706,25 +1825,28 @@ def _ps_topofit_single(cpxphase: np.ndarray, bperp: np.ndarray, n_trial_wraps: f
     cpx = cpxphase[valid]
     bp = bperp[valid]
 
-    trial_mult = _stage2_trial_values(float(n_trial_wraps))
+    trial_mult = _stage2_trial_values(float(n_trial_wraps)).astype(real_dtype, copy=False)
     bperp_range = float(np.max(bp) - np.min(bp))
     if bperp_range == 0.0:
         bperp_range = 1.0
 
-    trial_phase = bp / bperp_range * (np.pi / 4.0)
-    trial_phase_mat = np.exp(-1j * (trial_phase[:, None] * trial_mult[None, :])).astype(np.complex128)
-    phaser_sum = np.sum(trial_phase_mat * cpx[:, None], axis=0, dtype=np.complex128)
-    coh_trial = np.abs(phaser_sum).astype(np.float64)
-    denom = float(np.sum(np.abs(cpx), dtype=np.float64))
+    trial_phase = bp / real_dtype(bperp_range) * real_dtype(np.pi / 4.0)
+    trial_phase_mat = np.exp(-1j * (trial_phase[:, None] * trial_mult[None, :])).astype(complex_dtype)
+    phaser_sum = np.sum(trial_phase_mat * cpx[:, None], axis=0, dtype=complex_dtype)
+    coh_trial = np.abs(phaser_sum).astype(real_dtype)
+    denom = float(np.sum(np.abs(cpx), dtype=real_dtype))
     if denom == 0.0:
         denom = 1.0
     coh_trial = coh_trial / denom
-    candidate_ix = _ps_topofit_near_max_trial_indices(coh_trial)
+    if use_single:
+        candidate_ix = np.asarray([int(np.argmax(np.asarray(coh_trial, dtype=np.float64)))], dtype=np.int64)
+    else:
+        candidate_ix = _ps_topofit_near_max_trial_indices(np.asarray(coh_trial, dtype=np.float64))
 
-    bp64 = bp.astype(np.float64, copy=False)
-    weighting = np.abs(cpx).astype(np.float64)
-    wb = weighting * bp64
-    den_lin = float(np.sum(wb * wb))
+    bp_work = bp.astype(real_dtype, copy=False)
+    weighting = np.abs(cpx).astype(real_dtype)
+    wb = weighting * bp_work
+    den_lin = float(np.sum(wb * wb, dtype=real_dtype))
     if den_lin == 0.0:
         den_lin = 1.0
 
@@ -1732,7 +1854,7 @@ def _ps_topofit_single(cpxphase: np.ndarray, bperp: np.ndarray, n_trial_wraps: f
         coarse_k0 = (np.pi / 4.0) / float(bperp_range) * float(trial_mult[int(candidate_ix[0])])
         K0, C0, coh0, valid_phase_residual = _ps_topofit_refine_candidate(
             cpx,
-            bp64,
+            bp_work,
             weighting,
             wb,
             den_lin,
@@ -1745,7 +1867,7 @@ def _ps_topofit_single(cpxphase: np.ndarray, bperp: np.ndarray, n_trial_wraps: f
             refined.append(
                 _ps_topofit_refine_candidate(
                     cpx,
-                    bp64,
+                    bp_work,
                     weighting,
                     wb,
                     den_lin,
@@ -1799,9 +1921,6 @@ def _ps_topofit_select_candidate(
     if candidate_arr.size == 1:
         return coarse_best_trial_ix
 
-    # When both symmetric endpoint wraps survive, preserve the sign implied by
-    # the slightly larger coarse peak. Otherwise the refined candidate with the
-    # strongest coherence matches the saved StaMPS artifacts.
     endpoint_symmetric = (
         candidate_arr.size == 2
         and int(candidate_arr[0]) == 0
@@ -1809,6 +1928,7 @@ def _ps_topofit_select_candidate(
     )
     if endpoint_symmetric:
         return coarse_best_trial_ix
+
     refined_best_local = int(np.argmax(refined_arr))
     return int(candidate_arr[refined_best_local])
 
@@ -1821,21 +1941,32 @@ def _ps_topofit_refine_candidate(
     den_lin: float,
     coarse_k0: float,
 ) -> tuple[float, float, float, np.ndarray]:
-    K0 = float(coarse_k0)
-    resphase = cpx * np.exp(-1j * (K0 * bp64))
-    offset_phase = np.sum(resphase)
-    resphase_angle = np.angle(resphase * np.conj(offset_phase))
-    mopt = float(np.sum(wb * (weighting * resphase_angle)) / den_lin)
-    K0 = K0 + mopt
+    cpx_arr = np.asarray(cpx)
+    bp_arr = np.asarray(bp64)
+    use_single = cpx_arr.dtype == np.complex64 or bp_arr.dtype == np.float32
+    complex_dtype = np.complex64 if use_single else np.complex128
+    real_dtype = np.float32 if use_single else np.float64
 
-    phase_residual = cpx * np.exp(-1j * (K0 * bp64))
-    mean_phase_residual = np.sum(phase_residual)
+    cpx_work = np.asarray(cpx_arr, dtype=complex_dtype)
+    bp_work = np.asarray(bp_arr, dtype=real_dtype)
+    weighting_work = np.asarray(weighting, dtype=real_dtype)
+    wb_work = np.asarray(wb, dtype=real_dtype)
+    K0 = real_dtype(coarse_k0)
+
+    resphase = cpx_work * np.exp(-1j * (K0 * bp_work)).astype(complex_dtype)
+    offset_phase = np.sum(resphase, dtype=complex_dtype)
+    resphase_angle = np.angle(resphase * np.conj(offset_phase)).astype(real_dtype)
+    mopt = float(np.sum(wb_work * (weighting_work * resphase_angle), dtype=real_dtype) / real_dtype(den_lin))
+    K0 = real_dtype(K0 + mopt)
+
+    phase_residual = cpx_work * np.exp(-1j * (K0 * bp_work)).astype(complex_dtype)
+    mean_phase_residual = np.sum(phase_residual, dtype=complex_dtype)
     C0 = float(np.angle(mean_phase_residual))
-    denom2 = float(np.sum(np.abs(phase_residual)))
+    denom2 = float(np.sum(np.abs(phase_residual), dtype=real_dtype))
     if denom2 == 0.0:
         denom2 = 1.0
     coh0 = float(np.abs(mean_phase_residual) / denom2)
-    return float(K0), C0, coh0, phase_residual
+    return float(K0), C0, coh0, phase_residual.astype(np.complex64, copy=False)
 
 
 def _ps_topofit_batch_generic(
@@ -1932,8 +2063,10 @@ def _ps_topofit_batch(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     if cpxphase.ndim != 2 or bperp.ndim != 2 or cpxphase.shape != bperp.shape:
         raise PortedStageError("ps_topofit batch expects cpxphase and bperp with matching 2-D shapes")
-    cpxphase = np.asarray(cpxphase, dtype=np.complex128)
-    bperp = np.asarray(bperp, dtype=np.float64)
+    cpx_dtype = np.complex64 if np.asarray(cpxphase).dtype == np.complex64 else np.complex128
+    bperp_dtype = np.float32 if np.asarray(bperp).dtype == np.float32 else np.float64
+    cpxphase = np.asarray(cpxphase, dtype=cpx_dtype)
+    bperp = np.asarray(bperp, dtype=bperp_dtype)
     n_row, n_col = cpxphase.shape
     if n_row == 0:
         empty = np.asarray([], dtype=np.float64)
@@ -2538,14 +2671,30 @@ def _normalize_stage2_checkpoint_mode(mode: str) -> str:
 
 
 def _normalize_stage2_kernel_backend(backend: str) -> str:
-    normalized = (backend or "auto").strip().lower()
-    if normalized in {"auto", "native", "python"}:
-        return normalized
-    if normalized == "cpu":
-        return "python"
-    raise PortedStageError(
-        f"Unsupported stage-2 kernel backend '{backend}'. Use: auto, python, or native"
-    )
+    try:
+        return normalize_stage2_kernel_backend(backend)
+    except ConfigError as exc:
+        raise PortedStageError(str(exc)) from exc
+
+
+def _normalize_kernel_backend_override_map(overrides: dict[str, str] | None) -> dict[str, str]:
+    if not overrides:
+        return {}
+    out: dict[str, str] = {}
+    for key, value in overrides.items():
+        kernel_name = str(key)
+        normalizer = normalize_kernel_backend
+        if kernel_name.startswith("stage2_"):
+            normalizer = normalize_stage2_kernel_backend
+        try:
+            out[kernel_name] = normalizer(str(value))
+        except ConfigError as exc:
+            raise PortedStageError(str(exc)) from exc
+    return out
+
+
+def _kernel_backend_for_name(overrides: dict[str, str], kernel_name: str, default_backend: str) -> str:
+    return overrides.get(kernel_name, default_backend)
 
 
 def _normalize_stage2_native_threads(value: int) -> int:
@@ -2580,20 +2729,20 @@ def _stage2_prepare_replay_context(
     if parms.small_baseline_flag.lower() == "y":
         if bp_file.exists():
             bp = read_mat(bp_file)
-            bperp_mat = _as_ps_matrix(bp.get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float64)
+            bperp_mat = _as_ps_matrix(bp.get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float32)
         else:
-            bperp = np.asarray(ps.get("bperp"), dtype=np.float64).reshape(-1)
+            bperp = np.asarray(ps.get("bperp"), dtype=np.float32).reshape(-1)
             no_master = np.arange(bperp.size) != (master_ix - 1)
-            bperp_mat = np.tile(bperp[no_master], (ph.shape[0], 1)).astype(np.float64)
+            bperp_mat = np.tile(bperp[no_master], (ph.shape[0], 1)).astype(np.float32)
         ph_nm = ph.astype(np.complex64, copy=False)
-        bperp_nm = np.asarray(ps.get("bperp"), dtype=np.float64).reshape(-1)
+        bperp_nm = np.asarray(ps.get("bperp"), dtype=np.float32).reshape(-1)
     else:
         no_master = np.arange(n_ifg_full) != (master_ix - 1)
         ph_nm = ph[:, no_master].astype(np.complex64, copy=False)
-        bperp_nm = np.asarray(ps.get("bperp"), dtype=np.float64).reshape(-1)[no_master]
+        bperp_nm = np.asarray(ps.get("bperp"), dtype=np.float32).reshape(-1)[no_master]
         if bp_file.exists():
             bp = read_mat(bp_file)
-            bperp_mat = _as_ps_matrix(bp.get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float64)
+            bperp_mat = _as_ps_matrix(bp.get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float32)
             if bperp_mat.shape[1] == n_ifg_full:
                 bperp_mat = bperp_mat[:, no_master]
             elif bperp_mat.shape[1] != ph_nm.shape[1]:
@@ -2601,6 +2750,11 @@ def _stage2_prepare_replay_context(
                     f"bp1.bperp_mat has incompatible shape {bperp_mat.shape} for stage-2 ph shape {ph_nm.shape}"
                 )
     row_invariant_bperp = _stage2_bperp_rows_are_invariant(bperp_mat)
+    row_bperp_nm = np.asarray(bperp_nm, copy=False)
+    if row_invariant_bperp:
+        # StaMPS uses ps.bperp to size the trial-wrap search, but uses the
+        # invariant bp1 row for the actual phase ramp/topofit path.
+        row_bperp_nm = _stage2_row_invariant_bperp_vector(bperp_nm, bperp_mat)
 
     amp = np.abs(ph_nm).astype(np.float32)
     amp[amp == 0] = 1.0
@@ -2627,7 +2781,7 @@ def _stage2_prepare_replay_context(
         patch_dir=patch_dir,
         ph_nm=ph_nm,
         amp=amp,
-        bperp_nm=bperp_nm.astype(np.float64, copy=False),
+        bperp_nm=np.asarray(bperp_nm, copy=False),
         bperp_mat=bperp_mat,
         row_invariant_bperp=row_invariant_bperp,
         grid_ij=grid_ij.astype(np.int64, copy=False),
@@ -2682,16 +2836,16 @@ def _stage2_replay_iteration_from_payload(
         beta=context.clap_beta,
         prepared=context.clap_prepared,
         out=ph_filt,
+        workers=context.native_threads,
     )
     ph_patch_all = ph_filt[context.grid_rows, context.grid_cols, :].astype(np.complex64, copy=False)
-    ph_patch_abs = np.abs(ph_patch_all).astype(np.float32, copy=False)
-    np.divide(ph_patch_all, ph_patch_abs, out=ph_patch_all, where=ph_patch_abs != 0)
+    _normalize_complex_unit_magnitude_inplace(ph_patch_all)
 
     ph_patch = ph_patch_all[selected_rows, :].copy()
     psdph = np.conjugate(ph_patch).astype(np.complex64)
     psdph *= context.ph_nm[selected_rows, :]
-    # `_ps_topofit_batch` already falls back to the single-row path when a row
-    # contains partial zeros. Only skip rows that are entirely zero here.
+    # Match the live stage-2 path: partially zero rows still go through the
+    # batch wrapper, which falls back to the single-row solve for those rows.
     valid = np.any(psdph != 0, axis=1)
 
     K_ps = np.full(selected_rows.size, np.nan, dtype=np.float64)
@@ -2700,23 +2854,17 @@ def _stage2_replay_iteration_from_payload(
     ph_res = np.zeros((selected_rows.size, n_ifg), dtype=np.float32)
     if np.any(valid):
         if context.row_invariant_bperp:
-            K_chunk, C_chunk, coh_chunk, phase_residual = run_stage2_topofit_row_invariant_kernel(
-                psdph[valid].astype(np.complex128),
-                context.bperp_nm,
-                n_trial_wraps,
-                backend=context.kernel_backend,
-                threads=context.native_threads,
-                cpu_fallback=_ps_topofit_batch_row_invariant,
-            )
+            bperp_fit = np.broadcast_to(context.bperp_nm, (selected_rows.size, n_ifg))
         else:
             assert context.bperp_mat is not None
-            K_chunk, C_chunk, coh_chunk, phase_residual = _ps_topofit_batch(
-                psdph[valid].astype(np.complex128),
-                context.bperp_mat[selected_rows, :][valid].astype(np.float64),
-                n_trial_wraps,
-                kernel_backend=context.kernel_backend,
-                native_threads=context.native_threads,
-            )
+            bperp_fit = context.bperp_mat[selected_rows, :]
+        K_chunk, C_chunk, coh_chunk, phase_residual = _ps_topofit_batch(
+            psdph[valid].astype(np.complex128),
+            np.asarray(bperp_fit[valid], dtype=np.float64),
+            n_trial_wraps,
+            kernel_backend=context.kernel_backend,
+            native_threads=context.native_threads,
+        )
         out_ix = np.flatnonzero(valid)
         K_ps[out_ix] = K_chunk
         C_ps[out_ix] = C_chunk
@@ -2786,6 +2934,7 @@ def stage2_estimate_gamma(
     patch_dir: Path,
     backend: str = "auto",
     kernel_backend: str = "auto",
+    kernel_backend_overrides: dict[str, str] | None = None,
     native_threads: int = 0,
     checkpoint_mode: str = "final",
     checkpoint_interval: int = 1,
@@ -2812,21 +2961,21 @@ def stage2_estimate_gamma(
     if parms.small_baseline_flag.lower() == "y":
         if bp_file.exists():
             bp = read_mat(bp_file)
-            bperp_mat = _as_ps_matrix(bp.get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float64)
+            bperp_mat = _as_ps_matrix(bp.get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float32)
         else:
-            bperp = np.asarray(ps.get("bperp"), dtype=np.float64).reshape(-1)
+            bperp = np.asarray(ps.get("bperp"), dtype=np.float32).reshape(-1)
             no_master = np.arange(bperp.size) != (master_ix - 1)
-            bperp_mat = np.tile(bperp[no_master], (ph.shape[0], 1)).astype(np.float64)
+            bperp_mat = np.tile(bperp[no_master], (ph.shape[0], 1)).astype(np.float32)
             write_mat(bp_file, {"bperp_mat": bperp_mat.astype(np.float32)})
         ph_nm = ph.astype(np.complex64, copy=False)
-        bperp_nm = np.asarray(ps.get("bperp"), dtype=np.float64).reshape(-1)
+        bperp_nm = np.asarray(ps.get("bperp"), dtype=np.float32).reshape(-1)
     else:
         no_master = np.arange(n_ifg_full) != (master_ix - 1)
         ph_nm = ph[:, no_master].astype(np.complex64, copy=False)
-        bperp_nm = np.asarray(ps.get("bperp"), dtype=np.float64).reshape(-1)[no_master]
+        bperp_nm = np.asarray(ps.get("bperp"), dtype=np.float32).reshape(-1)[no_master]
         if bp_file.exists():
             bp = read_mat(bp_file)
-            bperp_mat = _as_ps_matrix(bp.get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float64)
+            bperp_mat = _as_ps_matrix(bp.get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float32)
             if bperp_mat.shape[1] == n_ifg_full:
                 bperp_mat = bperp_mat[:, no_master]
             elif bperp_mat.shape[1] != ph_nm.shape[1]:
@@ -2834,6 +2983,11 @@ def stage2_estimate_gamma(
                     f"bp1.bperp_mat has incompatible shape {bperp_mat.shape} for stage-2 ph shape {ph_nm.shape}"
                 )
     row_invariant_bperp = _stage2_bperp_rows_are_invariant(bperp_mat)
+    row_bperp_nm = np.asarray(bperp_nm, copy=False)
+    if row_invariant_bperp:
+        # StaMPS sizes the trial-wrap search from ps.bperp but still uses the
+        # invariant bp1 row for the row-invariant phase-ramp fit.
+        row_bperp_nm = _stage2_row_invariant_bperp_vector(bperp_nm, bperp_mat)
 
     amp = np.abs(ph_nm).astype(np.float32)
     amp[amp == 0] = 1.0
@@ -2852,9 +3006,21 @@ def stage2_estimate_gamma(
     grid_size = float(_mat_scalar(parms_raw.get("filter_grid_size", options.grid_size), options.grid_size))
     filter_weighting = str(parms_raw.get("filter_weighting", "P-square"))
     kernel_backend_norm = _normalize_stage2_kernel_backend(kernel_backend)
+    kernel_backend_overrides_norm = _normalize_kernel_backend_override_map(kernel_backend_overrides)
     native_threads_norm = _normalize_stage2_native_threads(native_threads)
     checkpoint_mode_norm = _normalize_stage2_checkpoint_mode(checkpoint_mode)
     checkpoint_interval_norm = max(1, int(checkpoint_interval))
+    kernel_backend_cache_token = json.dumps(
+        {
+            "default": kernel_backend_norm,
+            "overrides": kernel_backend_overrides_norm,
+        },
+        sort_keys=True,
+    )
+
+    def _stage2_backend_for(kernel_name: str) -> str:
+        return _kernel_backend_for_name(kernel_backend_overrides_norm, kernel_name, kernel_backend_norm)
+
     gamma_change_convergence = float(
         _mat_scalar(parms_raw.get("gamma_change_convergence", 1e-4), 1e-4)
     )
@@ -2882,6 +3048,7 @@ def stage2_estimate_gamma(
             "patch": patch_dir.name,
             "backend": backend,
             "kernel_backend": kernel_backend_norm,
+            "kernel_backend_overrides": kernel_backend_overrides_norm,
             "native_threads": native_threads_norm,
             "status": "started",
             "phase": "setup",
@@ -2972,7 +3139,7 @@ def stage2_estimate_gamma(
         n_image = None
     random_hist_cache_hit = False
     random_hist_cache_path = _stage2_random_hist_cache_path(
-        kernel_backend=kernel_backend_norm,
+        kernel_backend=kernel_backend_cache_token,
         bperp_nm=rand_bp,
         coh_bins=coh_bins,
         ifgday_ix=ifgday_ix,
@@ -2982,6 +3149,9 @@ def stage2_estimate_gamma(
         n_trial_wraps=n_trial_wraps,
         small_baseline=small_baseline,
     )
+    # pm1.mat stores the last scaled P-square histogram, not the reusable
+    # random baseline histogram. Reusing it here perturbs later stage-2
+    # weighting on copied validation datasets.
     random_hist_cache = _load_stage2_random_hist_cache(random_hist_cache_path, coh_bins=coh_bins)
     if random_hist_cache is None:
         Nr = np.zeros(coh_bins.size, dtype=np.float64)
@@ -2999,7 +3169,7 @@ def stage2_estimate_gamma(
                     rand_phase,
                     rand_bp,
                     n_trial_wraps,
-                    backend=kernel_backend_norm,
+                    backend=_stage2_backend_for("stage2_topofit_coh_row_invariant"),
                     threads=native_threads_norm,
                     cpu_fallback=_ps_topofit_batch_row_invariant_coh,
                 )
@@ -3008,7 +3178,7 @@ def stage2_estimate_gamma(
             Nr += run_stage2_histogram_kernel(
                 coh_chunk.astype(np.float64, copy=False),
                 coh_bins,
-                backend=kernel_backend_norm,
+                backend=_stage2_backend_for("stage2_histogram"),
             )
         nonzero_bins = np.where(Nr > 0)[0]
         Nr_max_nz_ix = float(nonzero_bins[-1] + 1) if nonzero_bins.size > 0 else 1.0
@@ -3023,7 +3193,7 @@ def stage2_estimate_gamma(
         random_hist_cache_hit = True
     random_hist_dt = time.perf_counter() - random_hist_t0
     Nr_base = np.asarray(Nr, dtype=np.float64).copy()
-    Nr_scaled_last = Nr_base
+    Nr_scaled_last = Nr_base.copy()
     clap_prepared = _prepare_clap_filt_grid_stack((n_i, n_j, n_ifg), clap_window, clap_pad, low_pass)
 
     _emit_stage2(
@@ -3045,7 +3215,7 @@ def stage2_estimate_gamma(
     ph_res = np.zeros((n_ps, n_ifg), dtype=np.float32)
     ph_patch = np.zeros((n_ps, n_ifg), dtype=np.complex64)
     ph_grid = np.zeros((n_i, n_j, n_ifg), dtype=np.complex64)
-    ph_filt = np.zeros((n_i, n_j, n_ifg), dtype=np.complex64)
+    ph_filt = np.zeros_like(ph_grid)
     ph_weight_curr = np.zeros((n_ps, n_ifg), dtype=np.complex64)
     i_loop = 1
     last_gamma_change_change = np.nan
@@ -3053,16 +3223,11 @@ def stage2_estimate_gamma(
 
     def _stage2_ph_weight_chunk(start: int, stop: int) -> np.ndarray:
         if row_invariant_bperp:
-            bperp_chunk = np.broadcast_to(bperp_nm.astype(np.float64, copy=False), (stop - start, n_ifg))
+            bperp_chunk = np.broadcast_to(row_bperp_nm, (stop - start, n_ifg))
         else:
             assert bperp_mat is not None
             bperp_chunk = bperp_mat[start:stop, :]
-        return _stage2_ph_weight_block(
-            ph_nm[start:stop, :],
-            bperp_chunk,
-            K_ps[start:stop],
-            weighting[start:stop],
-        )
+        return _stage2_ph_weight_block(ph_nm[start:stop, :], bperp_chunk, K_ps[start:stop], weighting[start:stop])
 
     def _stage2_full_ph_weight() -> np.ndarray:
         out = np.empty((n_ps, n_ifg), dtype=np.complex64)
@@ -3078,15 +3243,15 @@ def stage2_estimate_gamma(
             "coh_ps": _matlab_col(coh_ps, np.float64),
             "N_opt": _matlab_col(N_opt, np.float64),
             "ph_res": ph_res,
-            "ph_patch": ph_patch,
+            "ph_patch": ph_patch.astype(np.complex64),
             "step_number": np.asarray(1.0, dtype=np.float64),
-            "ph_grid": ph_grid,
+            "ph_grid": ph_grid.astype(np.complex64),
             "n_trial_wraps": np.asarray(n_trial_wraps, dtype=np.float32),
             "grid_ij": grid_ij,
             "grid_size": np.asarray(grid_size, dtype=np.float64),
             "low_pass": low_pass,
             "i_loop": np.asarray(float(loop_value), dtype=np.float64),
-            "ph_weight": ph_weight_curr,
+            "ph_weight": ph_weight_curr.astype(np.complex64),
             "Nr": _matlab_row(Nr_scaled_last, np.float64),
             "Nr_max_nz_ix": np.asarray(Nr_max_nz_ix, dtype=np.float64),
             "coh_bins": _matlab_row(coh_bins, np.float64),
@@ -3174,6 +3339,7 @@ def stage2_estimate_gamma(
             beta=options.clap_beta,
             prepared=clap_prepared,
             out=ph_filt,
+            workers=native_threads_norm,
         )
         filt_dt = time.perf_counter() - filt_t0
         _emit_stage2(
@@ -3191,9 +3357,7 @@ def stage2_estimate_gamma(
         ph_patch[:, :] = ph_filt[grid_rows, grid_cols, :]
         for start in range(0, n_ps, stage2_row_chunk):
             stop = min(start + stage2_row_chunk, n_ps)
-            ph_patch_chunk = ph_patch[start:stop, :]
-            ph_patch_abs_chunk = np.abs(ph_patch_chunk).astype(np.float32, copy=False)
-            np.divide(ph_patch_chunk, ph_patch_abs_chunk, out=ph_patch_chunk, where=ph_patch_abs_chunk != 0)
+            _normalize_complex_unit_magnitude_inplace(ph_patch[start:stop, :])
         patch_dt = time.perf_counter() - patch_t0
 
         topofit_t0 = time.perf_counter()
@@ -3205,7 +3369,7 @@ def stage2_estimate_gamma(
         ph_res.fill(0.0)
         for start in range(0, n_ps, stage2_row_chunk):
             stop = min(start + stage2_row_chunk, n_ps)
-            psdph_chunk = np.conjugate(ph_patch[start:stop, :]).astype(np.complex64)
+            psdph_chunk = np.conjugate(ph_patch[start:stop, :]).astype(np.complex64, copy=True)
             psdph_chunk *= ph_nm[start:stop, :]
             # Preserve partially zero rows for `_ps_topofit_batch`, which
             # mirrors MATLAB by recomputing those rows via the single-row path.
@@ -3214,26 +3378,17 @@ def stage2_estimate_gamma(
             if not np.any(valid_chunk):
                 continue
             if row_invariant_bperp:
-                try:
-                    K_chunk, C_chunk, coh_chunk, phase_residual = run_stage2_topofit_row_invariant_kernel(
-                        psdph_chunk[valid_chunk].astype(np.complex128),
-                        bperp_nm,
-                        n_trial_wraps,
-                        backend=kernel_backend_norm,
-                        threads=native_threads_norm,
-                        cpu_fallback=_ps_topofit_batch_row_invariant,
-                    )
-                except BackendUnavailableError as exc:
-                    raise PortedStageError(str(exc)) from exc
+                bperp_fit = np.broadcast_to(row_bperp_nm, (stop - start, n_ifg))
             else:
                 assert bperp_mat is not None
-                K_chunk, C_chunk, coh_chunk, phase_residual = _ps_topofit_batch(
-                    psdph_chunk[valid_chunk].astype(np.complex128),
-                    bperp_mat[start:stop, :][valid_chunk].astype(np.float64),
-                    n_trial_wraps,
-                    kernel_backend=kernel_backend_norm,
-                    native_threads=native_threads_norm,
-                )
+                bperp_fit = bperp_mat[start:stop, :]
+            K_chunk, C_chunk, coh_chunk, phase_residual = _ps_topofit_batch(
+                psdph_chunk[valid_chunk].astype(np.complex128),
+                np.asarray(bperp_fit[valid_chunk], dtype=np.float64),
+                n_trial_wraps,
+                kernel_backend=_stage2_backend_for("stage2_topofit"),
+                native_threads=native_threads_norm,
+            )
             out_ix = np.flatnonzero(valid_chunk) + start
             K_ps[out_ix] = K_chunk
             C_ps[out_ix] = C_chunk
@@ -3276,7 +3431,11 @@ def stage2_estimate_gamma(
         if not should_stop:
             weight_t0 = time.perf_counter()
             if filter_weighting.lower() == "p-square":
-                Na = run_stage2_histogram_kernel(coh_ps, coh_bins, backend=kernel_backend_norm).astype(np.float64)
+                Na = run_stage2_histogram_kernel(
+                    coh_ps,
+                    coh_bins,
+                    backend=_stage2_backend_for("stage2_histogram"),
+                ).astype(np.float64)
                 denom = np.sum(Nr_base[:low_coh_thresh])
                 scale = np.sum(Na[:low_coh_thresh]) / denom if denom > 0 else 1.0
                 Nr_weight = Nr_base * scale
@@ -3973,140 +4132,50 @@ def stage4_weed_ps(
                     },
                 )
 
-            dph_space = ph_weed[edges[:, 1], :] * np.conj(ph_weed[edges[:, 0], :])
-            dph_space = dph_space[:, ifg_index_ix]
-            n_use = dph_space.shape[1]
+            ph_weed_use = ph_weed[:, ifg_index_ix]
+            n_use = ph_weed_use.shape[1]
             b_use = bperp[ifg_index_ix].astype(np.float64)
-
-            if parms.small_baseline_flag.lower() != "y":
-                day = np.asarray(ps.get("day"), dtype=np.float64).reshape(-1)
-                time_win = max(float(parms.weed_time_win), 1e-6)
-                day_use = day[ifg_index_ix].astype(np.float64)
-                time_diff_all = day_use[:, None] - day_use[None, :]
-                weight_all = np.exp(-(time_diff_all**2) / (2.0 * time_win**2))
-                weight_sums = np.sum(weight_all, axis=1, keepdims=True)
-                zero_rows = weight_sums[:, 0] <= 0
-                if np.any(zero_rows):
-                    weight_all[zero_rows, :] = 1.0 / float(max(1, n_use))
-                    weight_sums = np.sum(weight_all, axis=1, keepdims=True)
-                weight_all = weight_all / weight_sums
-                diag_weights = np.diag(weight_all).copy()
-                dph_smooth = dph_space @ weight_all.T
-                dph_smooth2 = dph_smooth - (dph_space * diag_weights[None, :])
-                checkpoint_every = max(1, n_use // 20)
-                if debug_payload is not None:
-                    debug_payload["smoothing_ifg_count"] = int(n_use)
-                    debug_payload["smoothing_checkpoint_every"] = int(checkpoint_every)
-                    _stage4_checkpoint(
-                        patch_dir,
-                        debug_payload,
-                        phase="smoothing_started",
-                        timings={
-                            "adjacency": adjacency_dt,
-                            "zero_elevation": zero_elev_dt,
-                            "duplicate_removal": duplicate_dt,
-                            "edge_build": edge_build_dt,
-                            "ph_prepare": ph_prep_dt,
-                            "total": time.perf_counter() - stage4_t0,
-                        },
-                    )
-                smooth_t0 = time.perf_counter()
-                max_workers = min(4, max(1, os.cpu_count() or 1), n_use)
-
-                def _smooth_one_ifg(i1: int) -> int:
-                    time_diff = time_diff_all[i1]
-                    weight = weight_all[i1]
-                    dph_mean = dph_smooth[:, i1].copy()
-                    dph_mean_adj = np.angle(dph_space * np.conj(dph_mean)[:, None])
-                    m0, m1 = _weighted_affine_fit(time_diff, dph_mean_adj, weight)
-                    detrended = dph_mean_adj - (m0[:, None] + m1[:, None] * time_diff[None, :])
-                    dph_mean_adj2 = np.angle(np.exp(1j * detrended))
-                    m20, _m21 = _weighted_affine_fit(time_diff, dph_mean_adj2, weight)
-                    dph_smooth[:, i1] = dph_mean * np.exp(1j * (m0 + m20))
-                    return i1 + 1
-
-                completed_ifg = 0
-                if max_workers <= 1:
-                    for i1 in range(n_use):
-                        completed_ifg = _smooth_one_ifg(i1)
-                        if debug_payload is not None and (
-                            (completed_ifg % checkpoint_every) == 0 or completed_ifg == n_use
-                        ):
-                            _stage4_checkpoint(
-                                patch_dir,
-                                debug_payload,
-                                phase="smoothing_in_progress",
-                                last_completed_ifg=completed_ifg,
-                                timings={
-                                    "adjacency": adjacency_dt,
-                                    "zero_elevation": zero_elev_dt,
-                                    "duplicate_removal": duplicate_dt,
-                                    "edge_build": edge_build_dt,
-                                    "ph_prepare": ph_prep_dt,
-                                    "smoothing": time.perf_counter() - smooth_t0,
-                                    "total": time.perf_counter() - stage4_t0,
-                                },
-                            )
-                else:
-                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        for completed_ifg in executor.map(_smooth_one_ifg, range(n_use)):
-                            if debug_payload is not None and (
-                                (completed_ifg % checkpoint_every) == 0 or completed_ifg == n_use
-                            ):
-                                _stage4_checkpoint(
-                                    patch_dir,
-                                    debug_payload,
-                                    phase="smoothing_in_progress",
-                                    last_completed_ifg=completed_ifg,
-                                    timings={
-                                        "adjacency": adjacency_dt,
-                                        "zero_elevation": zero_elev_dt,
-                                        "duplicate_removal": duplicate_dt,
-                                        "edge_build": edge_build_dt,
-                                        "ph_prepare": ph_prep_dt,
-                                        "smoothing": time.perf_counter() - smooth_t0,
-                                        "total": time.perf_counter() - stage4_t0,
-                                    },
-                                )
-                smooth_dt = time.perf_counter() - smooth_t0
-
-                dph_noise = np.angle(dph_space * np.conj(dph_smooth)).astype(np.float64)
-                dph_noise2 = np.angle(dph_space * np.conj(dph_smooth2)).astype(np.float64)
-                ddof_var = 1 if dph_noise2.shape[0] > 1 else 0
-                ifg_var = np.var(dph_noise2, axis=0, ddof=ddof_var)
-                w_ifg = np.divide(
-                    1.0,
-                    ifg_var,
-                    out=np.full_like(ifg_var, np.inf, dtype=np.float64),
-                    where=ifg_var != 0,
+            small_baseline = parms.small_baseline_flag.lower() == "y"
+            day_use = (
+                np.asarray([], dtype=np.float64)
+                if small_baseline
+                else np.asarray(ps.get("day"), dtype=np.float64).reshape(-1)[ifg_index_ix].astype(np.float64)
+            )
+            checkpoint_every = max(1, n_use // 20)
+            if debug_payload is not None and not small_baseline:
+                debug_payload["smoothing_ifg_count"] = int(n_use)
+                debug_payload["smoothing_checkpoint_every"] = int(checkpoint_every)
+                _stage4_checkpoint(
+                    patch_dir,
+                    debug_payload,
+                    phase="smoothing_started",
+                    timings={
+                        "adjacency": adjacency_dt,
+                        "zero_elevation": zero_elev_dt,
+                        "duplicate_removal": duplicate_dt,
+                        "edge_build": edge_build_dt,
+                        "ph_prepare": ph_prep_dt,
+                        "total": time.perf_counter() - stage4_t0,
+                    },
                 )
-                K_edge = _weighted_slope_fit(b_use, dph_noise, w_ifg.astype(np.float64))
-                dph_noise = dph_noise - K_edge[:, None] * b_use[None, :]
-                ddof = 1 if n_use > 1 else 0
-                edge_std = np.std(dph_noise, axis=1, ddof=ddof)
-                edge_max = np.max(np.abs(dph_noise), axis=1)
-            else:
-                ddof_var = 1 if dph_space.shape[0] > 1 else 0
-                ifg_var = np.var(dph_space, axis=0, ddof=ddof_var)
-                w_ifg = np.divide(
-                    1.0,
-                    ifg_var,
-                    out=np.full_like(ifg_var, np.inf, dtype=np.float64),
-                    where=ifg_var != 0,
+            smooth_t0 = time.perf_counter()
+            try:
+                edge_payload = run_stage4_edge_stats_kernel(
+                    ph_weed=ph_weed_use,
+                    node_a=edges[:, 0],
+                    node_b=edges[:, 1],
+                    bperp=b_use,
+                    day=day_use,
+                    time_win=float(parms.weed_time_win),
+                    small_baseline=small_baseline,
+                    backend=backend,
                 )
-                K_edge = _weighted_slope_fit(b_use, dph_space, w_ifg.astype(np.float64))
-                dph_adj = dph_space - K_edge[:, None] * b_use[None, :]
-                ang = np.angle(dph_adj)
-                ddof = 1 if n_use > 1 else 0
-                edge_std = np.std(ang, axis=1, ddof=ddof)
-                edge_max = np.max(np.abs(ang), axis=1)
-
-            reduce_t0 = time.perf_counter()
-            np.minimum.at(ps_std, edges[:, 0], edge_std)
-            np.minimum.at(ps_std, edges[:, 1], edge_std)
-            np.minimum.at(ps_max, edges[:, 0], edge_max)
-            np.minimum.at(ps_max, edges[:, 1], edge_max)
-            edge_reduce_dt = time.perf_counter() - reduce_t0
+            except BackendUnavailableError as exc:
+                raise PortedStageError(str(exc)) from exc
+            smooth_dt = time.perf_counter() - smooth_t0
+            ps_std = np.asarray(edge_payload["ps_std"], dtype=np.float64)
+            ps_max = np.asarray(edge_payload["ps_max"], dtype=np.float64)
+            edge_reduce_dt = 0.0
             if debug_payload is not None:
                 _stage4_checkpoint(
                     patch_dir,
@@ -5109,8 +5178,6 @@ def stage7_calc_scla(
             parms_raw = {}
 
     small_baseline = _mat_text(parms_raw.get("small_baseline_flag", "n"), "n").lower() == "y"
-    if small_baseline:
-        raise PortedStageError("stage7_calc_scla parity path currently supports single-master stacks only")
 
     bp2_file = dataset_root / "bp2.mat"
     if bp2_file.exists():
@@ -5119,17 +5186,23 @@ def stage7_calc_scla(
         ).astype(np.float64)
     else:
         bperp = _as_ps_vector(ps2.get("bperp"), n_ifg, "ps2.bperp").astype(np.float64)
-        bp_nm = np.tile(bperp[no_master][None, :], (n_ps, 1))
+        if small_baseline:
+            bp_nm = np.tile(bperp[None, :], (n_ps, 1))
+        else:
+            bp_nm = np.tile(bperp[no_master][None, :], (n_ps, 1))
         write_mat(bp2_file, {"bperp_mat": bp_nm.astype(np.float32)})
         _cache_mat_payload(bp2_file, {"bperp_mat": bp_nm.astype(np.float32)}, cache, enabled=enable_mat_cache)
-    bperp_mat = np.concatenate(
-        [
-            bp_nm[:, : master_ix - 1],
-            np.zeros((n_ps, 1), dtype=np.float64),
-            bp_nm[:, master_ix - 1 :],
-        ],
-        axis=1,
-    )
+    if small_baseline:
+        bperp_mat = bp_nm
+    else:
+        bperp_mat = np.concatenate(
+            [
+                bp_nm[:, : master_ix - 1],
+                np.zeros((n_ps, 1), dtype=np.float64),
+                bp_nm[:, master_ix - 1 :],
+            ],
+            axis=1,
+        )
 
     ref_ix = _select_reference_ps(ps2, parms_raw)
     ph_raw = ph_uw.astype(np.float64)
@@ -5144,41 +5217,43 @@ def stage7_calc_scla(
     drop_ifg = _normalize_drop_index(parms_raw.get("drop_ifg_index", None))
     scla_drop_ifg = _normalize_drop_index(parms_raw.get("scla_drop_index", None))
     drop_set = set(int(v) for v in drop_ifg.tolist()) | set(int(v) for v in scla_drop_ifg.tolist())
-    unwrap_ifg, solve_ifg = _stage7_unwrap_ifg_sets(n_ifg, master_ix, drop_set)
+    if small_baseline:
+        unwrap_ifg = np.asarray([i for i in range(1, n_ifg + 1) if i not in drop_set], dtype=np.int64)
+        solve_ifg = unwrap_ifg
+    else:
+        unwrap_ifg, solve_ifg = _stage7_unwrap_ifg_sets(n_ifg, master_ix, drop_set)
     if solve_ifg.size < 2:
+        if small_baseline:
+            raise PortedStageError("stage7_calc_scla requires at least two interferograms after drops")
         raise PortedStageError("stage7_calc_scla requires at least two non-master interferograms")
     unwrap_ix = unwrap_ifg - 1
     solve_ix = solve_ifg - 1
 
     day = np.asarray(ps2["day"], dtype=np.float64).reshape(-1)
-    ph_seq = np.diff(ph_proc[:, unwrap_ix], axis=1)
-    bperp_seq = np.diff(bperp_mat[:, unwrap_ix], axis=1)
-    day_seq = np.diff(day[unwrap_ix])
-    coest_mean_vel = solve_ifg.size >= 4
-
-    mean_bperp = np.mean(bperp_seq, axis=0)
-    if coest_mean_vel:
-        G_seq = np.column_stack((np.ones(day_seq.size, dtype=np.float64), mean_bperp, day_seq))
-    else:
-        G_seq = np.column_stack((np.ones(day_seq.size, dtype=np.float64), mean_bperp))
-    coeffs_seq = _weighted_lstsq_shared_design(G_seq, ph_seq.T, cov=None)
-    K_ps_uw = coeffs_seq[1, :].astype(np.float64)
-    ph_scla = (K_ps_uw[:, None] * bperp_mat).astype(np.float32)
-
     ifgstd = _read_mat_cached(dataset_root / "ifgstd2.mat", cache, enabled=enable_mat_cache)
     ifg_std = _as_ps_vector(ifgstd.get("ifg_std"), n_ifg, "ifgstd2.ifg_std").astype(np.float64)
-    ifg_vcm = np.diag((ifg_std * np.pi / 180.0) ** 2)
+    try:
+        stage7_payload = run_stage7_scla_kernel(
+            ph_proc=ph_proc,
+            ph_mean_v=ph_mean_v,
+            bperp_mat=bperp_mat,
+            unwrap_ix=unwrap_ix,
+            solve_ix=solve_ix,
+            day=day,
+            master_ix=master_ix,
+            ifg_std=ifg_std,
+            backend=backend,
+            chunk_ps=chunk_ps,
+        )
+    except BackendUnavailableError as exc:
+        raise PortedStageError(str(exc)) from exc
 
-    resid_full = ph_proc[:, solve_ix] - ph_scla[:, solve_ix].astype(np.float64)
-    if coest_mean_vel:
-        G_c = np.column_stack((np.ones(solve_ifg.size, dtype=np.float64), day[solve_ix] - day[master_ix - 1]))
-        coeffs_c = _weighted_lstsq_shared_design(G_c, resid_full.T, cov=ifg_vcm[np.ix_(solve_ix, solve_ix)])
-        C_ps_uw = coeffs_c[0, :].astype(np.float32)
-    else:
-        C_ps_uw = np.mean(resid_full, axis=1).astype(np.float32)
-
-    mean_v_m = _stage7_mean_velocity_fit(ph_mean_v, day, master_ix, ifg_std)
-    mean_v = mean_v_m[1, :].astype(np.float32)
+    K_ps_uw = np.asarray(stage7_payload["K_ps_uw"], dtype=np.float64).reshape(-1)
+    C_ps_uw = np.asarray(stage7_payload["C_ps_uw"], dtype=np.float32).reshape(-1)
+    ph_scla = np.asarray(stage7_payload["ph_scla"], dtype=np.float32)
+    ifg_vcm = np.asarray(stage7_payload["ifg_vcm"], dtype=np.float64)
+    mean_v = np.asarray(stage7_payload["mean_v"], dtype=np.float32).reshape(-1)
+    mean_v_m = np.asarray(stage7_payload["m"], dtype=np.float32)
 
     payload = {
         "K_ps_uw": _matlab_col(K_ps_uw, np.float32),

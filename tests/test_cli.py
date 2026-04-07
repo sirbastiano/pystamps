@@ -240,6 +240,28 @@ def test_cmd_describe_inputs_rejects_unknown_stage() -> None:
         cli._cmd_describe_inputs("99", dataset=None, patch="PATCH_1")
 
 
+def test_cmd_describe_backends_prints_backend_matrix(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "describe_backend_matrix",
+        lambda: {
+            "providers": {"python": {"available": True}},
+            "kernels": {"stage8_edge_noise": {"supported_backends": ["python", "cuda"]}},
+        },
+    )
+
+    exit_code = cli._cmd_describe_backends()
+
+    assert exit_code == 0
+    assert _payload(capsys) == {
+        "providers": {"python": {"available": True}},
+        "kernels": {"stage8_edge_noise": {"supported_backends": ["python", "cuda"]}},
+    }
+
+
 def test_main_dispatches_verify_command(monkeypatch: pytest.MonkeyPatch) -> None:
     args = argparse.Namespace(command="verify", config="cfg.yml", run="/run", golden="/golden")
     run_config = _run_config()
@@ -282,3 +304,18 @@ def test_main_dispatches_describe_inputs_command(monkeypatch: pytest.MonkeyPatch
 
     assert exit_code == 23
     assert captured == {"stage": "all", "dataset": None, "patch": "PATCH_1"}
+
+
+def test_main_dispatches_describe_backends_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    args = argparse.Namespace(command="describe-backends", config="cfg.yml")
+    run_config = _run_config()
+    called: list[str] = []
+
+    monkeypatch.setattr(cli, "_parse_args", lambda: args)
+    monkeypatch.setattr(cli, "_load_run_config", lambda path: run_config)
+    monkeypatch.setattr(cli, "_cmd_describe_backends", lambda: called.append("describe") or 29)
+
+    exit_code = cli.main()
+
+    assert exit_code == 29
+    assert called == ["describe"]

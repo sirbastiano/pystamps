@@ -8,14 +8,42 @@ from typing import Any
 import yaml
 
 
+_RUNTIME_BACKEND_ALIASES = {
+    "auto": "auto",
+    "threads": "threads",
+    "thread": "threads",
+    "io": "threads",
+    "processes": "processes",
+    "process": "processes",
+    "cpu": "processes",
+    "gpu": "gpu",
+    "native": "native",
+}
+
+_KERNEL_BACKEND_ALIASES = {
+    "auto": "auto",
+    "python": "python",
+    "cpu": "python",
+    "native": "native",
+    "gpu": "cuda",
+    "cuda": "cuda",
+}
+
+
 @dataclass(slots=True)
 class RuntimeConfig:
     io_workers: int = 8
     cpu_workers: int = 0
     backend: str = "auto"
+    stage2_kernel_backend: str = "auto"
+    stage2_patch_backend_overrides: dict[str, str] = field(default_factory=dict)
+    kernel_backend_overrides: dict[str, str] = field(default_factory=dict)
+    stage2_native_threads: int = 0
     stage7_chunk_ps: int = 100_000
     stage8_chunk_edges: int = 200_000
     enable_mat_stage_cache: bool = True
+    stage2_checkpoint_mode: str = "final"
+    stage2_checkpoint_interval: int = 1
     stage2_debug: bool = False
     stage4_debug: bool = False
 
@@ -53,6 +81,49 @@ class ConfigError(ValueError):
     """Raised when configuration is malformed."""
 
 
+def _normalize_backend_override_map(
+    payload: Any,
+    *,
+    field_name: str,
+    normalizer: Any,
+) -> dict[str, str]:
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise ConfigError(f"'{field_name}' must be an object")
+    return {
+        str(key): normalizer(str(value))
+        for key, value in payload.items()
+    }
+
+
+def normalize_runtime_backend(name: str) -> str:
+    normalized = _RUNTIME_BACKEND_ALIASES.get((name or "auto").strip().lower())
+    if normalized is None:
+        raise ConfigError(
+            f"Unsupported runtime backend '{name}'. Use: auto, threads, processes, gpu, or native"
+        )
+    return normalized
+
+
+def normalize_kernel_backend(name: str) -> str:
+    normalized = _KERNEL_BACKEND_ALIASES.get((name or "auto").strip().lower())
+    if normalized is None:
+        raise ConfigError(
+            f"Unsupported kernel backend '{name}'. Use: auto, python, native, or cuda"
+        )
+    return normalized
+
+
+def normalize_stage2_kernel_backend(name: str) -> str:
+    normalized = normalize_kernel_backend(name)
+    if normalized == "cuda":
+        raise ConfigError(
+            f"Unsupported stage-2 kernel backend '{name}'. Use: auto, python, or native"
+        )
+    return normalized
+
+
 def _load_raw(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise ConfigError(f"Config file does not exist: {path}")
@@ -83,7 +154,28 @@ def load_config(path: str | Path | None = None) -> RunConfig:
         return RunConfig()
 
     raw = _load_raw(Path(path))
-    runtime = RuntimeConfig(**_as_dict(raw, "runtime"))
+    runtime_payload = _as_dict(raw, "runtime")
+    runtime_norm = dict(runtime_payload)
+    if "backend" in runtime_norm:
+        runtime_norm["backend"] = normalize_runtime_backend(str(runtime_norm["backend"]))
+    if "stage2_kernel_backend" in runtime_norm:
+        runtime_norm["stage2_kernel_backend"] = normalize_stage2_kernel_backend(
+            str(runtime_norm["stage2_kernel_backend"])
+        )
+    if "stage2_patch_backend_overrides" in runtime_norm:
+        runtime_norm["stage2_patch_backend_overrides"] = _normalize_backend_override_map(
+            runtime_norm.get("stage2_patch_backend_overrides"),
+            field_name="runtime.stage2_patch_backend_overrides",
+            normalizer=normalize_stage2_kernel_backend,
+        )
+    if "kernel_backend_overrides" in runtime_norm:
+        runtime_norm["kernel_backend_overrides"] = _normalize_backend_override_map(
+            runtime_norm.get("kernel_backend_overrides"),
+            field_name="runtime.kernel_backend_overrides",
+            normalizer=normalize_kernel_backend,
+        )
+
+    runtime = RuntimeConfig(**runtime_norm)
     tol_payload = _as_dict(raw, "tolerance")
     wrap_keys = tol_payload.get("wrap_keys")
     if isinstance(wrap_keys, list):

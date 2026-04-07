@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 
+from pystamps.pipeline import ported
 from pystamps.pipeline.ported import (
     _deramp_unwrapped_phase,
     _select_reference_ps,
@@ -125,3 +128,217 @@ def test_stage7_mean_velocity_fit_uses_full_stack_weights() -> None:
     )
 
     np.testing.assert_allclose(m, expected, atol=1e-10, rtol=0.0)
+
+
+def test_stage7_calc_scla_small_baseline_uses_bp2_matrix_as_is(monkeypatch: object, tmp_path: Path) -> None:
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    for filename in ("phuw2.mat", "ps2.mat", "bp2.mat", "ifgstd2.mat", "parms.mat"):
+        (dataset_root / filename).touch()
+
+    captured: dict[str, np.ndarray] = {}
+    written: dict[str, dict[str, np.ndarray]] = {}
+
+    def fake_resolve_file(root: Path, name: str) -> Path | None:
+        if root == dataset_root and name == "parms.mat":
+            return dataset_root / name
+        return None
+
+    def fake_read_mat_cached(path: Path, cache: dict[Path, dict[str, np.ndarray]], enabled: bool = True) -> dict[str, np.ndarray]:
+        if path.name == "ps2.mat":
+            return {
+                "n_ps": np.asarray(2.0),
+                "master_ix": np.asarray(2.0),
+                "day": np.asarray([10.0, 20.0, 30.0], dtype=np.float64),
+            }
+        if path.name == "phuw2.mat":
+            return {
+                "ph_uw": np.asarray(
+                    [
+                        [0.1, 0.2, 0.3],
+                        [0.4, 0.5, 0.6],
+                    ],
+                    dtype=np.float32,
+                )
+            }
+        if path.name == "bp2.mat":
+            return {
+                "bperp_mat": np.asarray(
+                    [
+                        [11.0, 12.0, 13.0],
+                        [21.0, 22.0, 23.0],
+                    ],
+                    dtype=np.float32,
+                )
+            }
+        if path.name == "ifgstd2.mat":
+            return {"ifg_std": np.asarray([1.0, 2.0, 3.0], dtype=np.float64)}
+        if path.name == "parms.mat":
+            return {
+                "small_baseline_flag": "y",
+                "drop_ifg_index": np.asarray([], dtype=np.int64),
+                "scla_drop_index": np.asarray([], dtype=np.int64),
+                "scla_deramp": "n",
+            }
+        raise AssertionError(f"unexpected cached read: {path}")
+
+    def fake_select_reference_ps(ps: dict[str, np.ndarray], parms_raw: dict[str, np.ndarray]) -> np.ndarray:
+        return np.asarray([], dtype=np.int64)
+
+    def fake_run_stage7_scla_kernel(
+        *,
+        ph_proc: np.ndarray,
+        ph_mean_v: np.ndarray,
+        bperp_mat: np.ndarray,
+        unwrap_ix: np.ndarray,
+        solve_ix: np.ndarray,
+        day: np.ndarray,
+        master_ix: int,
+        ifg_std: np.ndarray,
+        backend: str,
+        chunk_ps: int,
+    ) -> dict[str, np.ndarray]:
+        captured["ph_proc"] = np.asarray(ph_proc)
+        captured["ph_mean_v"] = np.asarray(ph_mean_v)
+        captured["bperp_mat"] = np.asarray(bperp_mat)
+        captured["unwrap_ix"] = np.asarray(unwrap_ix)
+        captured["solve_ix"] = np.asarray(solve_ix)
+        captured["day"] = np.asarray(day)
+        captured["ifg_std"] = np.asarray(ifg_std)
+        captured["master_ix"] = np.asarray(master_ix)
+        captured["backend"] = np.asarray(backend)
+        captured["chunk_ps"] = np.asarray(chunk_ps)
+        n_ps, n_ifg = np.asarray(ph_proc).shape
+        return {
+            "K_ps_uw": np.full(n_ps, 1.0, dtype=np.float64),
+            "C_ps_uw": np.full(n_ps, 2.0, dtype=np.float32),
+            "ph_scla": np.zeros((n_ps, n_ifg), dtype=np.float32),
+            "ph_ramp": np.zeros((n_ps, n_ifg), dtype=np.float64),
+            "ifg_vcm": np.eye(n_ifg, dtype=np.float64),
+            "mean_v": np.full(n_ps, 3.0, dtype=np.float32),
+            "m": np.zeros((2, n_ps), dtype=np.float32),
+        }
+
+    def fake_write_mat(path: Path, payload: dict[str, np.ndarray]) -> None:
+        written[path.name] = payload
+
+    monkeypatch.setattr(ported, "_resolve_file", fake_resolve_file)
+    monkeypatch.setattr(ported, "_read_mat_cached", fake_read_mat_cached)
+    monkeypatch.setattr(ported, "_select_reference_ps", fake_select_reference_ps)
+    monkeypatch.setattr(ported, "run_stage7_scla_kernel", fake_run_stage7_scla_kernel)
+    monkeypatch.setattr(ported, "write_mat", fake_write_mat)
+    monkeypatch.setattr(ported, "_cache_mat_payload", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ported, "stage6_unwrap", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("stage6_unwrap should not run")))
+
+    result = ported.stage7_calc_scla(dataset_root, backend="native", chunk_ps=0, enable_mat_cache=True, io_workers=0)
+
+    assert result == "Stage 7 estimated SCLA and mean velocity for 2 PS"
+    np.testing.assert_array_equal(
+        captured["bperp_mat"],
+        np.asarray([[11.0, 12.0, 13.0], [21.0, 22.0, 23.0]], dtype=np.float64),
+    )
+    np.testing.assert_array_equal(captured["unwrap_ix"], np.asarray([0, 1, 2], dtype=np.int64))
+    np.testing.assert_array_equal(captured["solve_ix"], np.asarray([0, 1, 2], dtype=np.int64))
+    np.testing.assert_array_equal(captured["master_ix"], np.asarray(2))
+    assert "scla2.mat" in written
+
+
+def test_stage7_calc_scla_small_baseline_rebuilds_bp2_from_full_ps2_bperp_when_missing(
+    monkeypatch: object,
+    tmp_path: Path,
+) -> None:
+    dataset_root = tmp_path / "dataset"
+    dataset_root.mkdir()
+    for filename in ("phuw2.mat", "ps2.mat", "ifgstd2.mat", "parms.mat"):
+        (dataset_root / filename).touch()
+
+    captured: dict[str, np.ndarray] = {}
+    written: dict[str, dict[str, np.ndarray]] = {}
+
+    def fake_resolve_file(root: Path, name: str) -> Path | None:
+        if root == dataset_root and name == "parms.mat":
+            return dataset_root / name
+        return None
+
+    def fake_read_mat_cached(path: Path, cache: dict[Path, dict[str, np.ndarray]], enabled: bool = True) -> dict[str, np.ndarray]:
+        if path.name == "ps2.mat":
+            return {
+                "n_ps": np.asarray(2.0),
+                "master_ix": np.asarray(2.0),
+                "bperp": np.asarray([31.0, 32.0, 33.0], dtype=np.float64),
+                "day": np.asarray([10.0, 20.0, 30.0], dtype=np.float64),
+            }
+        if path.name == "phuw2.mat":
+            return {
+                "ph_uw": np.asarray(
+                    [
+                        [0.1, 0.2, 0.3],
+                        [0.4, 0.5, 0.6],
+                    ],
+                    dtype=np.float32,
+                )
+            }
+        if path.name == "ifgstd2.mat":
+            return {"ifg_std": np.asarray([1.0, 2.0, 3.0], dtype=np.float64)}
+        if path.name == "parms.mat":
+            return {
+                "small_baseline_flag": "y",
+                "drop_ifg_index": np.asarray([], dtype=np.int64),
+                "scla_drop_index": np.asarray([], dtype=np.int64),
+                "scla_deramp": "n",
+            }
+        raise AssertionError(f"unexpected cached read: {path}")
+
+    def fake_select_reference_ps(ps: dict[str, np.ndarray], parms_raw: dict[str, np.ndarray]) -> np.ndarray:
+        return np.asarray([], dtype=np.int64)
+
+    def fake_run_stage7_scla_kernel(
+        *,
+        ph_proc: np.ndarray,
+        ph_mean_v: np.ndarray,
+        bperp_mat: np.ndarray,
+        unwrap_ix: np.ndarray,
+        solve_ix: np.ndarray,
+        day: np.ndarray,
+        master_ix: int,
+        ifg_std: np.ndarray,
+        backend: str,
+        chunk_ps: int,
+    ) -> dict[str, np.ndarray]:
+        captured["bperp_mat"] = np.asarray(bperp_mat)
+        captured["unwrap_ix"] = np.asarray(unwrap_ix)
+        captured["solve_ix"] = np.asarray(solve_ix)
+        captured["master_ix"] = np.asarray(master_ix)
+        n_ps, n_ifg = np.asarray(ph_proc).shape
+        return {
+            "K_ps_uw": np.full(n_ps, 1.0, dtype=np.float64),
+            "C_ps_uw": np.full(n_ps, 2.0, dtype=np.float32),
+            "ph_scla": np.zeros((n_ps, n_ifg), dtype=np.float32),
+            "ph_ramp": np.zeros((n_ps, n_ifg), dtype=np.float64),
+            "ifg_vcm": np.eye(n_ifg, dtype=np.float64),
+            "mean_v": np.full(n_ps, 3.0, dtype=np.float32),
+            "m": np.zeros((2, n_ps), dtype=np.float32),
+        }
+
+    def fake_write_mat(path: Path, payload: dict[str, np.ndarray]) -> None:
+        written[path.name] = payload
+
+    monkeypatch.setattr(ported, "_resolve_file", fake_resolve_file)
+    monkeypatch.setattr(ported, "_read_mat_cached", fake_read_mat_cached)
+    monkeypatch.setattr(ported, "_select_reference_ps", fake_select_reference_ps)
+    monkeypatch.setattr(ported, "run_stage7_scla_kernel", fake_run_stage7_scla_kernel)
+    monkeypatch.setattr(ported, "write_mat", fake_write_mat)
+    monkeypatch.setattr(ported, "_cache_mat_payload", lambda *args, **kwargs: None)
+    monkeypatch.setattr(ported, "stage6_unwrap", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("stage6_unwrap should not run")))
+
+    result = ported.stage7_calc_scla(dataset_root, backend="native", chunk_ps=0, enable_mat_cache=True, io_workers=0)
+
+    assert result == "Stage 7 estimated SCLA and mean velocity for 2 PS"
+    np.testing.assert_array_equal(
+        captured["bperp_mat"],
+        np.asarray([[31.0, 32.0, 33.0], [31.0, 32.0, 33.0]], dtype=np.float64),
+    )
+    np.testing.assert_array_equal(captured["unwrap_ix"], np.asarray([0, 1, 2], dtype=np.int64))
+    np.testing.assert_array_equal(captured["solve_ix"], np.asarray([0, 1, 2], dtype=np.int64))
+    np.testing.assert_array_equal(captured["master_ix"], np.asarray(2))
+    assert "scla2.mat" in written

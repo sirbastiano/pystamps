@@ -110,6 +110,8 @@ def _choose_clean_patterns(start_step: int, clean_profile: str) -> tuple[str, ..
 def _write_config(
     path: Path,
     backend: str,
+    stage2_kernel_backend: str,
+    stage2_native_threads: int,
     io_workers: int,
     cpu_workers: int,
     stage7_chunk_ps: int,
@@ -119,6 +121,8 @@ def _write_config(
     text = (
         "runtime:\n"
         f"  backend: {backend}\n"
+        f"  stage2_kernel_backend: {stage2_kernel_backend}\n"
+        f"  stage2_native_threads: {stage2_native_threads}\n"
         f"  io_workers: {io_workers}\n"
         f"  cpu_workers: {cpu_workers}\n"
         f"  stage7_chunk_ps: {stage7_chunk_ps}\n"
@@ -190,6 +194,8 @@ def main() -> int:
     )
     parser.add_argument("--io-workers", type=int, default=8)
     parser.add_argument("--cpu-workers", type=int, default=0)
+    parser.add_argument("--stage2-kernel-backend", default="auto")
+    parser.add_argument("--stage2-native-threads", type=int, default=0)
     parser.add_argument("--stage7-chunk-ps", type=int, default=100000)
     parser.add_argument("--stage8-chunk-edges", type=int, default=200000)
     parser.add_argument("--disable-stage-cache", action="store_true")
@@ -215,6 +221,8 @@ def main() -> int:
         _write_config(
             cfg,
             backend=backend,
+            stage2_kernel_backend=args.stage2_kernel_backend,
+            stage2_native_threads=args.stage2_native_threads,
             io_workers=args.io_workers,
             cpu_workers=args.cpu_workers,
             stage7_chunk_ps=args.stage7_chunk_ps,
@@ -248,6 +256,8 @@ def main() -> int:
 
         row: dict[str, Any] = {
             "backend": backend,
+            "stage2_kernel_backend": args.stage2_kernel_backend,
+            "stage2_native_threads": args.stage2_native_threads,
             "ok": len(errors) == 0 and len(runs) == args.repeat,
             "runs_sec": runs,
             "stage_runs_sec": stage_runs,

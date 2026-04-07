@@ -29,13 +29,19 @@ cd pystamps
 python -m pip install -e .
 ```
 
+Source and editable installs now compile the stage-2 native extension with Rust. Install a Rust toolchain first, for example with `rustup`.
+
 For local development (including docs and tests), use:
 
 ```bash
 python -m pip install -e ".[dev]"
 ```
 
-Stage 2 can use the compiled native kernels automatically when they are available. To force the reference path or require the native path, set `runtime.stage2_kernel_backend` to `python` or `native` in your run config. With the default `runtime.stage2_native_threads: 0`, pySTAMPS now gives each stage-2 patch the full detected CPU budget and runs stage-2 patches one at a time to avoid oversubscription. `runtime.cpu_workers: 0` now means “use all detected CPU workers” rather than reserving one core. Set a positive `runtime.stage2_native_threads` value to force a fixed OpenMP team size instead.
+Supported PyPI installs use platform wheels for the Rust extension. Source builds still require a local Rust toolchain.
+
+Stage 2 can use the compiled native kernels automatically when they are available. To force the reference path or require the native path, set `runtime.stage2_kernel_backend` to `python` or `native` in your run config. With the default `runtime.stage2_native_threads: 0`, pySTAMPS now gives each stage-2 patch the full detected CPU budget and runs stage-2 patches one at a time to avoid oversubscription. `runtime.cpu_workers: 0` now means “use all detected CPU workers” rather than reserving one core. Set a positive `runtime.stage2_native_threads` value to force a fixed native worker count instead.
+
+Built-in kernel backends are `python`, `native`, and `cuda`. Use `runtime.kernel_backend_overrides` to pin individual kernels without changing the runtime-wide backend, for example `stage7_scla: gpu` or `stage8_edge_noise: python`. Run `pystamps describe-backends` to print the registered backend providers and the current per-kernel coverage matrix.
 
 ## Fresh-clone validation commands:
 

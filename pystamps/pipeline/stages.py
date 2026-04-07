@@ -7,6 +7,7 @@ import os
 import shutil
 import time
 
+from pystamps.config import ConfigError, normalize_runtime_backend
 from pystamps.io.dataset import DatasetLayout, discover_dataset, expected_stage_artifact
 from pystamps.pipeline.ported import (
     PortedStageError,
@@ -64,18 +65,10 @@ MERGED_STAGE_BUNDLES: dict[int, list[str]] = {
 
 
 def _normalize_backend(name: str) -> str:
-    backend = (name or "auto").strip().lower()
-    if backend in {"auto"}:
-        return "auto"
-    if backend in {"threads", "thread", "io"}:
-        return "threads"
-    if backend in {"processes", "process", "cpu"}:
-        return "processes"
-    if backend in {"gpu"}:
-        return "gpu"
-    if backend in {"native"}:
-        return "native"
-    raise StageExecutionError(f"Unsupported runtime backend '{name}'. Use: auto, threads, processes, gpu, or native")
+    try:
+        return normalize_runtime_backend(name)
+    except ConfigError as exc:
+        raise StageExecutionError(str(exc)) from exc
 
 
 def _task_kind_for_stage(stage: StageDef, context: PipelineContext, patch_count: int = 0) -> str:
@@ -103,6 +96,46 @@ def _task_kind_for_stage(stage: StageDef, context: PipelineContext, patch_count:
     if stage.scope == "patch":
         return "cpu" if patch_count >= 2 else "io"
     return "io"
+
+
+def _default_cpu_workers() -> int:
+    return max(1, os.cpu_count() or 4)
+
+
+def _configured_cpu_workers(context: PipelineContext) -> int:
+    value = int(context.run_config.runtime.cpu_workers)
+    if value > 0:
+        return value
+    return _default_cpu_workers()
+
+
+def _stage2_uses_full_cpu_default(stage: StageDef, context: PipelineContext) -> bool:
+    runtime = context.run_config.runtime
+    if stage.stage_id != 2:
+        return False
+    if int(runtime.stage2_native_threads) > 0:
+        return False
+    backends = {runtime.stage2_kernel_backend, *runtime.stage2_patch_backend_overrides.values()}
+    return any(str(backend).strip().lower() in {"auto", "native"} for backend in backends)
+
+
+def _effective_stage2_native_threads(
+    stage: StageDef,
+    context: PipelineContext,
+    patch_count: int,
+    *,
+    stage2_kernel_backend: str | None = None,
+) -> int:
+    runtime = context.run_config.runtime
+    requested = int(runtime.stage2_native_threads)
+    if requested > 0:
+        return requested
+    if stage.stage_id != 2:
+        return 0
+    selected_backend = stage2_kernel_backend or runtime.stage2_kernel_backend
+    if selected_backend.strip().lower() not in {"auto", "native"}:
+        return 0
+    return _configured_cpu_workers(context)
 
 
 def _replay_from_reference(
@@ -152,6 +185,11 @@ def _run_ported_patch_stage(
     stage_id: int,
     patch_dir: Path,
     backend: str = "auto",
+    stage2_kernel_backend: str = "auto",
+    kernel_backend_overrides: dict[str, str] | None = None,
+    stage2_native_threads: int = 0,
+    stage2_checkpoint_mode: str = "final",
+    stage2_checkpoint_interval: int = 1,
     stage2_debug: bool = False,
     stage4_debug: bool = False,
     strict_reference: bool = False,
@@ -159,7 +197,16 @@ def _run_ported_patch_stage(
     if stage_id == 1:
         return stage1_load_initial(patch_dir, backend=backend)
     if stage_id == 2:
-        return stage2_estimate_gamma(patch_dir, backend=backend, debug=stage2_debug)
+        return stage2_estimate_gamma(
+            patch_dir,
+            backend=backend,
+            kernel_backend=stage2_kernel_backend,
+            kernel_backend_overrides=kernel_backend_overrides,
+            native_threads=stage2_native_threads,
+            checkpoint_mode=stage2_checkpoint_mode,
+            checkpoint_interval=stage2_checkpoint_interval,
+            debug=stage2_debug,
+        )
     if stage_id == 3:
         return stage3_select_ps(patch_dir, backend=backend)
     if stage_id == 4:
@@ -174,7 +221,21 @@ def _run_ported_patch_stage(
     raise PortedStageError(f"No ported patch implementation for stage {stage_id}")
 
 
-def _run_patch_stage(stage: StageDef, patch_dir: Path, context: PipelineContext) -> StageResult:
+def _stage2_kernel_backend_for_patch(context: PipelineContext, patch_dir: Path) -> str:
+    overrides = context.run_config.runtime.stage2_patch_backend_overrides
+    if not overrides:
+        return context.run_config.runtime.stage2_kernel_backend
+    return overrides.get(patch_dir.name, context.run_config.runtime.stage2_kernel_backend)
+
+
+def _kernel_backend_for_name(context: PipelineContext, kernel_name: str, default_backend: str) -> str:
+    overrides = context.run_config.runtime.kernel_backend_overrides
+    if not overrides:
+        return default_backend
+    return overrides.get(kernel_name, default_backend)
+
+
+def _run_patch_stage(stage: StageDef, patch_dir: Path, context: PipelineContext, patch_count: int) -> StageResult:
     expected = expected_stage_artifact(stage.stage_id, "patch")
     if expected is None:
         return StageResult(stage.stage_id, "patch", patch_dir.name, "skipped", "No expected artifact mapping")
@@ -191,10 +252,21 @@ def _run_patch_stage(stage: StageDef, patch_dir: Path, context: PipelineContext)
         return StageResult(stage.stage_id, "patch", patch_dir.name, "completed", replay_details)
 
     try:
+        stage2_kernel_backend = _stage2_kernel_backend_for_patch(context, patch_dir)
         details = _run_ported_patch_stage(
             stage.stage_id,
             patch_dir,
             backend=context.run_config.runtime.backend,
+            stage2_kernel_backend=stage2_kernel_backend,
+            kernel_backend_overrides=context.run_config.runtime.kernel_backend_overrides,
+            stage2_native_threads=_effective_stage2_native_threads(
+                stage,
+                context,
+                patch_count,
+                stage2_kernel_backend=stage2_kernel_backend,
+            ),
+            stage2_checkpoint_mode=context.run_config.runtime.stage2_checkpoint_mode,
+            stage2_checkpoint_interval=context.run_config.runtime.stage2_checkpoint_interval,
             stage2_debug=context.run_config.runtime.stage2_debug,
             stage4_debug=context.run_config.runtime.stage4_debug,
             strict_reference=context.run_config.compat.strict_reference,
@@ -208,9 +280,9 @@ def _run_patch_stage(stage: StageDef, patch_dir: Path, context: PipelineContext)
     return StageResult(stage.stage_id, "patch", patch_dir.name, "completed", details)
 
 
-def _run_patch_stage_timed(stage: StageDef, patch_dir: Path, context: PipelineContext) -> StageResult:
+def _run_patch_stage_timed(stage: StageDef, patch_dir: Path, context: PipelineContext, patch_count: int) -> StageResult:
     t0 = time.perf_counter()
-    result = _run_patch_stage(stage, patch_dir, context)
+    result = _run_patch_stage(stage, patch_dir, context, patch_count)
     result.duration_sec = time.perf_counter() - t0
     return result
 
@@ -258,7 +330,7 @@ def _run_merged_stage(stage: StageDef, dataset_root: Path, context: PipelineCont
         elif stage.stage_id == 7:
             details = stage7_calc_scla(
                 dataset_root,
-                backend=context.run_config.runtime.backend,
+                backend=_kernel_backend_for_name(context, "stage7_scla", context.run_config.runtime.backend),
                 chunk_ps=context.run_config.runtime.stage7_chunk_ps,
                 enable_mat_cache=context.run_config.runtime.enable_mat_stage_cache,
                 io_workers=context.run_config.runtime.io_workers,
@@ -266,7 +338,7 @@ def _run_merged_stage(stage: StageDef, dataset_root: Path, context: PipelineCont
         elif stage.stage_id == 8:
             details = stage8_filter_scn(
                 dataset_root,
-                backend=context.run_config.runtime.backend,
+                backend=_kernel_backend_for_name(context, "stage8_edge_noise", context.run_config.runtime.backend),
                 chunk_edges=context.run_config.runtime.stage8_chunk_edges,
                 chunk_ps=context.run_config.runtime.stage7_chunk_ps,
                 enable_mat_cache=context.run_config.runtime.enable_mat_stage_cache,
@@ -307,23 +379,38 @@ def run_pipeline(context: PipelineContext) -> PipelineReport:
         for stage in _selected_stages(context.start_step, context.end_step):
             task_kind = _task_kind_for_stage(stage, context, patch_count=patch_count)
             if stage.scope == "patch":
-                futures: list[Future] = [
-                    executor.submit(task_kind, _run_patch_stage_timed, stage, patch_dir, context)
-                    for patch_dir in dataset.patches
-                ]
-                for fut in futures:
-                    try:
-                        report.add(fut.result())
-                    except Exception as exc:  # pragma: no cover
-                        report.add(
-                            StageResult(
-                                stage_id=stage.stage_id,
-                                scope="patch",
-                                target="unknown",
-                                status="failed",
-                                details=str(exc),
+                if _stage2_uses_full_cpu_default(stage, context):
+                    for patch_dir in dataset.patches:
+                        try:
+                            report.add(_run_patch_stage_timed(stage, patch_dir, context, patch_count))
+                        except Exception as exc:  # pragma: no cover
+                            report.add(
+                                StageResult(
+                                    stage_id=stage.stage_id,
+                                    scope="patch",
+                                    target=patch_dir.name,
+                                    status="failed",
+                                    details=str(exc),
+                                )
                             )
-                        )
+                else:
+                    futures: list[Future] = [
+                        executor.submit(task_kind, _run_patch_stage_timed, stage, patch_dir, context, patch_count)
+                        for patch_dir in dataset.patches
+                    ]
+                    for fut in futures:
+                        try:
+                            report.add(fut.result())
+                        except Exception as exc:  # pragma: no cover
+                            report.add(
+                                StageResult(
+                                    stage_id=stage.stage_id,
+                                    scope="patch",
+                                    target="unknown",
+                                    status="failed",
+                                    details=str(exc),
+                                )
+                            )
                 if stage.stage_id == 5 and context.end_step >= 5:
                     try:
                         result = _run_merged_stage_timed(merged_stage5, dataset.root, context)

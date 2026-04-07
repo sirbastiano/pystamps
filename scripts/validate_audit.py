@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from pystamps.config import RunConfig
+from pystamps.config import RunConfig, load_config
 from pystamps.parity_contract import (
     STAGE1_VERIFY_PATTERNS,
     STAGE4_CLEAN_PATTERNS,
@@ -22,6 +22,8 @@ from pystamps.parity_contract import (
 from pystamps.pipeline.stages import run_pipeline
 from pystamps.pipeline.types import PipelineContext
 from pystamps.verify import summarize_failures, verify_run_against_golden
+
+_RUN_CONFIG_OVERRIDE: RunConfig | None = None
 
 
 def _parse_args() -> argparse.Namespace:
@@ -38,6 +40,12 @@ def _parse_args() -> argparse.Namespace:
         help="Optional base directory containing golden datasets with matching leaf names",
     )
     parser.add_argument("--output", default=None, help="Optional JSON output path")
+    parser.add_argument("--config", default=None, help="Optional run config path for generated run copies")
+    parser.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     return parser.parse_args()
 
 
@@ -99,6 +107,32 @@ def _clean_outputs(dataset_root: Path, patterns: tuple[str, ...]) -> None:
                 path.unlink()
 
 
+def _listed_patches(dataset_root: Path) -> list[str]:
+    patch_list = dataset_root / "patch.list"
+    if not patch_list.exists():
+        return []
+    return [
+        line.strip()
+        for line in patch_list.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _align_run_copy_with_dataset(run_root: Path, dataset_root: Path) -> None:
+    listed_patches = _listed_patches(dataset_root)
+    if not listed_patches:
+        return
+
+    target_patch_list = run_root / "patch.list"
+    if target_patch_list.exists():
+        target_patch_list.unlink()
+    shutil.copy2(dataset_root / "patch.list", target_patch_list)
+    allowed = set(listed_patches)
+    for patch_dir in run_root.glob("PATCH_*"):
+        if patch_dir.is_dir() and patch_dir.name not in allowed:
+            shutil.rmtree(patch_dir)
+
+
 def _has_stage1_artifacts(dataset_root: Path) -> bool:
     return all(any(dataset_root.glob(pattern)) for pattern in STAGE1_VERIFY_PATTERNS)
 
@@ -119,23 +153,30 @@ def _seed_root_for_dataset(dataset_root: Path) -> Path:
 def _run_profile(dataset_root: Path) -> tuple[Path, int, int, tuple[str, ...], str]:
     seed_root = _seed_root_for_dataset(dataset_root)
     if seed_root.name == "RUN_FULL_GATE_1e10":
+        if _has_stage1_artifacts(seed_root):
+            return seed_root, 2, 8, STAGE28_CLEAN_PATTERNS, "RUN_FULL_GATE_1e10"
         return seed_root, 4, 8, _stage48_clean_patterns(), "RUN_FULL_GATE_1e10"
     if _has_stage1_artifacts(dataset_root):
         return seed_root, 2, 8, STAGE28_CLEAN_PATTERNS, dataset_root.name
     return seed_root, 1, 8, FULL_CLEAN_PATTERNS, dataset_root.name
 
 
-def _build_run_copy(dataset_root: Path, audit_stamp: str) -> tuple[Path, dict[str, Any]]:
+def _build_run_copy(
+    dataset_root: Path,
+    audit_stamp: str,
+    run_config: RunConfig | None = None,
+) -> tuple[Path, dict[str, Any]]:
     seed_root, start_step, end_step, clean_patterns, seed_name = _run_profile(dataset_root)
     validation_dir = _validation_runs_root() / audit_stamp
     validation_dir.mkdir(parents=True, exist_ok=True)
     run_root = validation_dir / f"{dataset_root.name}_stage{start_step}_8"
     _copy_dataset(seed_root, run_root)
+    _align_run_copy_with_dataset(run_root, dataset_root)
     _clean_outputs(run_root, clean_patterns)
 
     context = PipelineContext(
         dataset_root=run_root.resolve(),
-        run_config=RunConfig(),
+        run_config=run_config or _RUN_CONFIG_OVERRIDE or RunConfig(),
         start_step=start_step,
         end_step=end_step,
         dry_run=False,
@@ -213,7 +254,9 @@ def _resolve_run_selection(dataset_root: Path, golden_base: Path | None) -> tupl
 
 
 def _prepare_run_selection(
-    dataset_root: Path, golden_base: Path | None, audit_stamp: str
+    dataset_root: Path,
+    golden_base: Path | None,
+    audit_stamp: str,
 ) -> tuple[Path, Path, str, dict[str, Any] | None]:
     if golden_base is not None:
         run_root, golden_root, run_source = _resolve_run_selection(dataset_root, golden_base)
@@ -224,9 +267,14 @@ def _prepare_run_selection(
 
 
 def _dataset_audit(
-    run_root: Path, golden_root: Path, run_source: str, generation: dict[str, Any] | None = None
+    run_root: Path,
+    golden_root: Path,
+    run_source: str,
+    run_config: RunConfig | None = None,
+    generation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    report = verify_run_against_golden(run_root, golden_root, RunConfig().tolerance)
+    active_run_config = run_config or _RUN_CONFIG_OVERRIDE or RunConfig()
+    report = verify_run_against_golden(run_root, golden_root, active_run_config.tolerance)
     summary = summarize_failures(report)
     payload = {
         "workflow": _workflow_name(golden_root),
@@ -281,75 +329,83 @@ def _emit_payload(payload: dict[str, Any], output: str | None) -> None:
 
 
 def main() -> int:
+    global _RUN_CONFIG_OVERRIDE
     args = _parse_args()
-    contract = _resolve_contract()
-    payload = _base_payload(contract)
-    datasets, missing_from_request, extra_request = _resolve_datasets(args, contract)
-    golden_base = Path(args.golden_root).expanduser().resolve() if args.golden_root else None
-    audit_stamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
-
-    missing = [str(dataset) for dataset in datasets if not dataset.exists()]
-    if missing_from_request or extra_request:
-        if missing_from_request:
-            payload["missing_datasets"].extend(missing_from_request)
-        if extra_request:
-            payload["interruption"] = {
-                "kind": "unsupported_dataset_selection",
-                "message": "The supported audit only accepts the contract-required datasets.",
-                "extra_datasets": extra_request,
-            }
-        _emit_payload(_finalize_payload(payload), args.output)
-        return 1
-
-    if missing:
-        payload["missing_datasets"] = missing
-        payload["interruption"] = {
-            "kind": "missing_dataset",
-            "message": "One or more required datasets are missing; audit aborted before verification.",
-        }
-        _emit_payload(_finalize_payload(payload), args.output)
-        return 1
-
+    config_path = getattr(args, "config", None)
+    run_config = load_config(config_path) if config_path else RunConfig()
+    _RUN_CONFIG_OVERRIDE = run_config
     try:
-        for dataset in datasets:
-            run_root, golden_root, run_source, generation = _prepare_run_selection(dataset, golden_base, audit_stamp)
-            payload["audits"].append(_dataset_audit(run_root, golden_root, run_source, generation))
-        payload["completed"] = True
-    except FileNotFoundError as exc:
-        payload["interrupted"] = True
-        payload["interruption"] = {
-            "kind": "missing_run_copy",
-            "message": str(exc),
-        }
-        _emit_payload(_finalize_payload(payload), args.output)
-        return 1
-    except RuntimeError as exc:
-        payload["interrupted"] = True
-        payload["interruption"] = {
-            "kind": "run_copy_generation_failed",
-            "message": str(exc),
-        }
-        _emit_payload(_finalize_payload(payload), args.output)
-        return 1
-    except KeyboardInterrupt:
-        payload["interrupted"] = True
-        payload["interruption"] = {
-            "kind": "keyboard_interrupt",
-            "message": "Audit interrupted before all dataset workflows completed.",
-        }
-        _emit_payload(_finalize_payload(payload), args.output)
-        return 1
-    except Exception as exc:
-        payload["interrupted"] = True
-        payload["interruption"] = {
-            "kind": "exception",
-            "message": str(exc),
-        }
-        _emit_payload(_finalize_payload(payload), args.output)
-        return 1
+        contract = _resolve_contract()
+        payload = _base_payload(contract)
+        datasets, missing_from_request, extra_request = _resolve_datasets(args, contract)
+        golden_base = Path(args.golden_root).expanduser().resolve() if args.golden_root else None
+        audit_stamp = time.strftime("%Y%m%d_%H%M%S", time.gmtime())
 
-    _emit_payload(_finalize_payload(payload), args.output)
-    return 0 if payload["ok"] else 1
+        missing = [str(dataset) for dataset in datasets if not dataset.exists()]
+        allow_subset = bool(getattr(args, "allow_subset", False))
+        if extra_request or (missing_from_request and not allow_subset):
+            if missing_from_request and not allow_subset:
+                payload["missing_datasets"].extend(missing_from_request)
+            if extra_request:
+                payload["interruption"] = {
+                    "kind": "unsupported_dataset_selection",
+                    "message": "The supported audit only accepts the contract-required datasets.",
+                    "extra_datasets": extra_request,
+                }
+            _emit_payload(_finalize_payload(payload), args.output)
+            return 1
+
+        if missing:
+            payload["missing_datasets"] = missing
+            payload["interruption"] = {
+                "kind": "missing_dataset",
+                "message": "One or more required datasets are missing; audit aborted before verification.",
+            }
+            _emit_payload(_finalize_payload(payload), args.output)
+            return 1
+
+        try:
+            for dataset in datasets:
+                run_root, golden_root, run_source, generation = _prepare_run_selection(dataset, golden_base, audit_stamp)
+                payload["audits"].append(_dataset_audit(run_root, golden_root, run_source, run_config, generation))
+            payload["completed"] = True
+        except FileNotFoundError as exc:
+            payload["interrupted"] = True
+            payload["interruption"] = {
+                "kind": "missing_run_copy",
+                "message": str(exc),
+            }
+            _emit_payload(_finalize_payload(payload), args.output)
+            return 1
+        except RuntimeError as exc:
+            payload["interrupted"] = True
+            payload["interruption"] = {
+                "kind": "run_copy_generation_failed",
+                "message": str(exc),
+            }
+            _emit_payload(_finalize_payload(payload), args.output)
+            return 1
+        except KeyboardInterrupt:
+            payload["interrupted"] = True
+            payload["interruption"] = {
+                "kind": "keyboard_interrupt",
+                "message": "Audit interrupted before all dataset workflows completed.",
+            }
+            _emit_payload(_finalize_payload(payload), args.output)
+            return 1
+        except Exception as exc:
+            payload["interrupted"] = True
+            payload["interruption"] = {
+                "kind": "exception",
+                "message": str(exc),
+            }
+            _emit_payload(_finalize_payload(payload), args.output)
+            return 1
+
+        _emit_payload(_finalize_payload(payload), args.output)
+        return 0 if payload["ok"] else 1
+    finally:
+        _RUN_CONFIG_OVERRIDE = None
 
 
 if __name__ == "__main__":

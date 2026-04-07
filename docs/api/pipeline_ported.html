@@ -6,7 +6,7 @@
 <section class="card"><h2 id="stage-apis">Stage functions</h2>
 <div class="table-wrap"><table><thead><tr><th>Function</th><th>Signature</th><th>Return</th><th>Notes</th></tr></thead><tbody>
 <tr><td>stage1_load_initial</td><td>stage1_load_initial(patch_dir: Path, backend: str='auto') -> str</td><td>status message</td><td>requires pscands files; writes ps1/ph1/bp1/psver/da1/hgt1 as available</td></tr>
-<tr><td>stage2_estimate_gamma</td><td>stage2_estimate_gamma(patch_dir: Path, backend: str='auto', debug: bool=False) -> str</td><td>status message</td><td>writes pm1, uses stage2 weighting and optional debug snapshot</td></tr>
+<tr><td>stage2_estimate_gamma</td><td>stage2_estimate_gamma(patch_dir: Path, backend: str='auto', checkpoint_mode: str='final', checkpoint_interval: int=1, debug: bool=False) -> str</td><td>status message</td><td>writes pm1, uses stage2 weighting and optional debug snapshot; default checkpoint mode is final-only</td></tr>
 <tr><td>stage3_select_ps</td><td>stage3_select_ps(patch_dir: Path, backend: str='auto') -> str</td><td>status message</td><td>reads pm1/ps1; writes select1</td></tr>
 <tr><td>stage4_weed_ps</td><td>stage4_weed_ps(patch_dir: Path, backend: str='auto', debug: bool=False, strict_reference: bool=False) -> str</td><td>status message</td><td>writes weed1 and optional debug</td></tr>
 <tr><td>stage5_correct_and_promote</td><td>stage5_correct_and_promote(patch_dir: Path, backend: str='auto') -> str</td><td>status message</td><td>writes ph2/pm2/other patch artifacts</td></tr>

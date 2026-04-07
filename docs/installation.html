@@ -25,6 +25,7 @@
       <h2>Prerequisites</h2>
       <ul>
         <li>Python 3.12+</li>
+        <li>Rust toolchain required for source and editable installs of the native stage-2 extension</li>
         <li>Optional: <span class="code-inline">triangle</span> binary on PATH (triangulation workflows)</li>
         <li>Optional: <span class="code-inline">snaphu</span> binary on PATH (legacy unwrap flow)</li>
       </ul>
@@ -37,6 +38,7 @@
 source .venv/bin/activate
 pip install -e .
 </code></pre>
+      <p>Editable installs compile the Rust-backed stage-2 native module locally.</p>
       <p>Developer profile:</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">pip install -e .[dev]</code></pre>
     </section>
@@ -44,6 +46,7 @@ pip install -e .
     <section class="card">
       <h2>Install from PyPI</h2>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">pip install pystamps</code></pre>
+      <p>Supported platforms use prebuilt wheels for the Rust extension and do not need a local compiler toolchain.</p>
       <p>Optional GPU backend:</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">pip install "pystamps[gpu]"</code></pre>
     </section>
@@ -60,6 +63,8 @@ pip install -e .
   io_workers: 8
   cpu_workers: 0
   enable_mat_stage_cache: true
+  stage2_checkpoint_mode: final
+  stage2_checkpoint_interval: 1
   stage7_chunk_ps: 100000
   stage8_chunk_edges: 200000
 compat:

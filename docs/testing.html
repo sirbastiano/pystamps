@@ -23,10 +23,11 @@
 
     <section class="card">
       <h2>Running tests</h2>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">python -m pytest -q</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">python -m build --sdist --wheel
-python -m twine check dist/*</code></pre>
-      <p>The repository includes committed unit tests. Dataset-backed parity tests are kept in-tree as optional checks and skip cleanly when the local validation datasets are absent, so <span class="code-inline">python -m pytest -q</span> remains the clean-checkout gate.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pytest -q</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run --with build python -m build --sdist --wheel
+uv run --with twine python -m twine check dist/*</code></pre>
+      <p>The repository includes committed unit tests. Dataset-backed parity tests are kept in-tree as optional checks and skip cleanly when the local validation datasets are absent, so <span class="code-inline">uv run pytest -q</span> remains the clean-checkout gate.</p>
+      <p>Release wheel production is separate from the smoke-build command and uses <span class="code-inline">cibuildwheel</span> on the release hosts.</p>
     </section>
 
     <section class="card">
@@ -40,7 +41,9 @@ python -m twine check dist/*</code></pre>
 
     <section class="card">
       <h2>Coverage</h2>
-      <p>There is no tracked CI workflow or Makefile in this standalone repo snapshot. Validation starts with <span class="code-inline">python -m pytest</span>, <span class="code-inline">python -m build</span>, and <span class="code-inline">python -m twine check</span>, then moves to parity-audit validation in <a href="verification.html">Verification</a>.</p>
+      <p>Validation starts with <span class="code-inline">uv run pytest -q</span>, <span class="code-inline">uv run --with build python -m build --sdist --wheel</span>, and <span class="code-inline">uv run --with twine python -m twine check dist/*</span>, then moves to parity-audit validation in <a href="verification.html">Verification</a>.</p>
+      <p>For PyPI wheel releases, use <span class="code-inline">uv run --with cibuildwheel python -m cibuildwheel --platform ... --output-dir dist</span> on the Linux, macOS, and Windows release hosts.</p>
+      <p>For parity workflows, do not guess a Makefile, CI wrapper, or reduced audit dataset list. Use the documented dataset pair, the generated <span class="code-inline">latest_audit.json</span>, and the explicit verify command shape.</p>
       <div class="callout info">In-code assertions and explicit exceptions define many behavior guarantees where test coverage is expected to assert failure conditions.</div>
     </section>
 
@@ -48,6 +51,8 @@ python -m twine check dist/*</code></pre>
       <h2>Validation workflow</h2>
       <p>Parity audits and explicit verify command patterns are described in <a href="verification.html">Verification</a>.</p>
       <p>The verification flow includes contract construction, script orchestration, and CLI comparison commands used by release quality checks.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run RUN_COPY --golden ./inputs_and_outputs/InSAR_dataset_test</code></pre>
+      <p>Carry the fresh <span class="code-inline">run_root</span> from <span class="code-inline">latest_audit.json</span> into that verify step; stale-output reuse keeps the validation gate red.</p>
   </section>
   </main>
 </div>

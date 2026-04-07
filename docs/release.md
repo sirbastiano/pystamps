@@ -5,10 +5,12 @@
 ## Prerequisites
 
 - Python 3.12+ and `pip`
+- Rust toolchain (`cargo`, `rustc`) available on any machine that builds source or wheel artifacts
 - PyPI credentials available to `twine`
 - a clean Git worktree
 - local access to the validation datasets required by the parity audit
 - the maintained run-copy seed `inputs_and_outputs/RUN_FULL_GATE_1e10` for the `InSAR_dataset_test` refresh
+- Docker available on the Linux release host for manylinux wheel builds via `cibuildwheel`
 
 ## Release Steps
 
@@ -21,7 +23,7 @@
 2. Run the test gate:
 
    ```bash
-   python -m pytest -q
+   uv run pytest -q
    ```
 
    Fresh-clone release prep stops here if the required local parity datasets are unavailable. Do not substitute a Makefile target, a hidden CI workflow, or a one-dataset audit command.
@@ -29,8 +31,8 @@
 3. Run the strict parity gate:
 
    ```bash
-   OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-     python scripts/validate_audit.py \
+    OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+     uv run python scripts/validate_audit.py \
        --datasets \
          inputs_and_outputs/InSAR_dataset_test_stage8diag \
          inputs_and_outputs/InSAR_dataset_test \
@@ -48,25 +50,43 @@
 6. Build the release artifacts from the tagged commit:
 
    ```bash
-   python -m build --sdist --wheel
+   uv run --with build python -m build --sdist
    ```
 
-7. Validate the built artifacts:
+7. Build Linux wheels on the Linux host:
 
    ```bash
-   python -m twine check dist/*
+   uv run --with cibuildwheel python -m cibuildwheel --platform linux --output-dir dist
    ```
 
-8. Upload to TestPyPI for rehearsal when needed:
+8. Build macOS wheels on the macOS host:
 
    ```bash
-   python -m twine upload --repository testpypi dist/*
+   uv run --with cibuildwheel python -m cibuildwheel --platform macos --output-dir dist
    ```
 
-9. Upload the final artifacts to PyPI:
+9. Build Windows wheels on the Windows host:
 
    ```bash
-   python -m twine upload dist/*
+   uv run --with cibuildwheel python -m cibuildwheel --platform windows --output-dir dist
+   ```
+
+10. Validate the gathered artifacts:
+
+   ```bash
+   uv run --with twine python -m twine check dist/*
+   ```
+
+11. Upload to TestPyPI for rehearsal when needed:
+
+   ```bash
+   uv run --with twine python -m twine upload --repository testpypi dist/*
+   ```
+
+12. Upload the final artifacts to PyPI:
+
+   ```bash
+   uv run --with twine python -m twine upload dist/*
    ```
 
 ## Release Requirements
@@ -74,14 +94,15 @@
 - `pytest` must pass.
 - `latest_audit.json` must report no failed parity workflows.
 - The explicit verification command must pass using the `run_root` recorded in `latest_audit.json` (documented in verification).
-- `python -m build` must emit exactly one wheel and one sdist.
-- `twine check` must pass on all files in `dist/`.
+- `python -m build --sdist` must emit the release sdist.
+- `cibuildwheel` must emit the expected platform wheels for Linux, macOS, and Windows.
+- `twine check` must pass on every file gathered in `dist/`.
 - Any interrupted audit, manual restart, or stale run-copy reuse leaves the release gate closed.
 
 ## Distribution Scope
 
-- The wheel contains the `pystamps` Python package and package metadata.
-- The sdist contains the tracked Python source tree and release docs needed to rebuild that wheel.
+- The wheel set contains the `pystamps` Python package, the compiled Rust stage-2 native extension, and package metadata.
+- The sdist contains the tracked Python source tree, Rust sources, and release docs needed to rebuild those wheels.
 - Release artifacts do not include `inputs_and_outputs/`, `tmp/`, or the vendored `StaMPS/` tree.
 - Generated directories such as `dist/` and `build/` are excluded from the source distribution so repeated build validation does not recurse on prior outputs.
 - External binaries such as `triangle` and `snaphu` remain user-managed prerequisites.

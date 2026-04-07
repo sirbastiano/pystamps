@@ -1,0 +1,20 @@
+[package]
+name = "pystamps_stage2_native"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "_stage2_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+num-complex = "0.4"
+numpy = "0.28"
+pyo3 = { version = "0.28", features = ["extension-module"] }
+rayon = "1.10"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = 3

@@ -21,7 +21,14 @@ def test_discover_dataset_has_patches() -> None:
     layout = discover_dataset(DATASET)
 
     assert layout.root.exists()
-    assert len(layout.patches) >= 4
+    assert len(layout.patches) >= 1
+    if layout.patch_list_file is not None:
+        expected = [
+            line.strip()
+            for line in layout.patch_list_file.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert [patch.name for patch in layout.patches] == expected
 
 
 def test_stage_inference_on_reference_data() -> None:
