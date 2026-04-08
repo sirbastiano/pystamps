@@ -484,6 +484,22 @@ def test_stage2_native_dispatch_uses_native_module(monkeypatch: pytest.MonkeyPat
                 np.full((n_row, n_col), 4 + 0j, dtype=np.complex64),
             )
 
+        def ps_topofit_batch_generic_f32(
+            self,
+            cpxphase: np.ndarray,
+            bperp: np.ndarray,
+            n_trial_wraps: float,
+            threads: int,
+        ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+            calls.append(f"topofit32:{threads}")
+            n_row, n_col = cpxphase.shape
+            return (
+                np.full(n_row, 1.5, dtype=np.float64),
+                np.full(n_row, 2.5, dtype=np.float64),
+                np.full(n_row, 3.5, dtype=np.float64),
+                np.full((n_row, n_col), 4.5 + 0j, dtype=np.complex64),
+            )
+
         def ps_topofit_batch_row_invariant(
             self,
             cpxphase: np.ndarray,
@@ -535,6 +551,13 @@ def test_stage2_native_dispatch_uses_native_module(monkeypatch: pytest.MonkeyPat
         backend="native",
         threads=4,
     )
+    topofit_single = run_stage2_topofit_kernel(
+        np.ones((2, 3), dtype=np.complex64),
+        np.asarray([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], dtype=np.float32),
+        1.0,
+        backend="native",
+        threads=5,
+    )
     topofit_row = run_stage2_topofit_row_invariant_kernel(
         np.ones((2, 3), dtype=np.complex128),
         np.asarray([1.0, 2.0, 3.0], dtype=np.float64),
@@ -574,6 +597,7 @@ def test_stage2_native_dispatch_uses_native_module(monkeypatch: pytest.MonkeyPat
     assert calls == ["grid:3", "hist"]
     np.testing.assert_allclose(grid, np.full((2, 1, 3), 7 + 0j, dtype=np.complex64))
     np.testing.assert_allclose(topofit[0], expected_topofit[0], atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(topofit_single[0], expected_topofit[0], atol=0.0, rtol=0.0)
     np.testing.assert_allclose(topofit_row[0], expected_row[0], atol=0.0, rtol=0.0)
     np.testing.assert_allclose(coh_row, expected_coh, atol=0.0, rtol=0.0)
     np.testing.assert_allclose(hist, np.asarray([2.0, 1.0, 0.0], dtype=np.float64))

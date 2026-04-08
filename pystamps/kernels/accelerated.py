@@ -336,12 +336,7 @@ def _stage2_topofit_native(
         if np.array_equal(bperp_arr, np.broadcast_to(row0, bperp_arr.shape)):
             return _stage2_topofit_row_invariant_native(cpxphase, row0, n_trial_wraps, threads)
     cpx_arr = np.asarray(cpxphase)
-    use_single = cpx_arr.dtype == np.complex64 or bperp_arr.dtype == np.float32
-    if use_single and hasattr(native_mod, "ps_topofit_batch_generic_f32"):
-        cpx_native = np.ascontiguousarray(cpx_arr, dtype=np.complex64)
-        bperp_native = np.ascontiguousarray(bperp_arr, dtype=np.float32)
-        return native_mod.ps_topofit_batch_generic_f32(cpx_native, bperp_native, float(n_trial_wraps), int(threads))
-    # Keep the double-precision generic path exact until the compiled solver reaches Python parity.
+    # Keep the generic path exact until the compiled solver reaches Python parity.
     return _stage2_topofit_python(cpx_arr, bperp_arr, n_trial_wraps, threads)
 
 
