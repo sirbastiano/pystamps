@@ -543,3 +543,38 @@ PY` -> PASS
   - Useful context
     - This iteration does not justify a stage-7/8 source fix because there is no contained-run mismatch left to improve; the remaining full-loop failures are owned by upstream stories and keep the global audit/verify gates red.
 ---
+## [2026-04-21 23:53:10 UTC] - US-004: Restore exact stage-2 parity for the first audited workflow
+Thread: 
+Run: 20260421-123533-4172008 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bb76173 fix(stage2): restore near-max topofit semantics
+- Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after this commit (for example `.ralph/activity.log`, `MANIFEST.in`, `README.md`, `pyproject.toml`, `pystamps/kernels/accelerated.py`, `pystamps/pipeline/stages.py`, `tests/test_acceleration.py`, and multiple untracked build artifacts under `dist/`, `target/`, and `.build-*`)
+- Verification:
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage5_ported.py tests/test_validate_audit.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage6_ported.py tests/test_stage7_ported.py tests/test_stage8_ported.py tests/test_acceleration.py tests/test_validate_audit.py tests/test_cli.py -q` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/latest_parity_loop.json` -> FAIL (interrupted after the spawned audit remained compute-bound for >20 minutes)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL (not run after stage-2 exactness remained unresolved and the preceding parity gate did not complete)
+- Files changed:
+  - pystamps/pipeline/ported.py
+  - tests/test_stage2_ported.py
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Restored MATLAB near-max local-peak refinement in `_ps_topofit_single` instead of forcing an argmax-only candidate path.
+  - Made the row-invariant stage-2 coherence helper fall back to `_ps_topofit_single` for ambiguous saved rows while keeping the fast vectorized path for single-candidate rows.
+  - Switched the row-invariant stage-2 `bperp` selector to prefer the invariant `bp1.bperp_mat` row when present and added audited PATCH_1 saved-row regressions around the affected paths.
+  - Confirmed the remaining audited `pm1.mat` drift is now isolated to the CLAP-filtered `ph_patch`/`ph_res` path at roughly `6.4e-05` max abs, so US-004 is not complete in this iteration.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - The high-signal stage-2 helper mismatches were the near-max topofit selector and the row-invariant `bp1` phase-ramp source, not the saved `ph_weight` or `ph_grid` path.
+  - Gotchas encountered
+    - The audited `ph_patch` gap persists even when replayed directly from saved `ph_weight` and when CLAP is replayed one interferogram at a time, so a wrapper-unbacked precision toggle is not an acceptable fix.
+  - Useful context
+    - Historical experimental runs such as `20260414_stage2_clap128_safe` reduce but do not eliminate the same `ph_patch`/`ph_res` residual, which points to a deeper CLAP numeric seam rather than another topofit regression.
+---

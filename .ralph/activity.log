@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-04-21 16:10:58 | run=20260421-123533-4172008 | iter=3 | mode=build | story=US-003 | duration=2459s | status=success
 - 2026-04-21 15:29:54 | run=20260421-123533-4172008 | iter=2 | mode=build | story=US-002 | duration=4386s | status=success
 - 2026-04-21 14:16:41 | run=20260421-123533-4172008 | iter=1 | mode=build | story=US-001 | duration=6068s | status=success
 - 2026-03-14 14:28:09 | run=20260314-105700-3558543 | iter=6 | mode=build | story=US-006 | duration=8838s | status=success
@@ -122,3 +123,17 @@
 [2026-04-21 16:01:37] US-003 major change: added tracked first-drift evidence bundle and reproducibility commands under inputs_and_outputs/validation_runs/us003_current_first_drift
 [2026-04-21 16:06:33] US-003 verification: pytest gates, build, and twine passed; parity_bug_loop and validate_audit were run and interrupted after fresh run roots remained pre-stage2, with snapshots saved in the us003 evidence bundle
 [2026-04-21 16:09:31] US-003 progress update recorded with stage-2 first-boundary evidence, command outcomes, and tracked evidence bundle paths
+[2026-04-21 16:10:56] ITERATION 3 end (duration=2459s)
+[2026-04-21 16:11:02] ITERATION 4 start (mode=build story=US-004)
+[2026-04-21 16:14:02] US-004 iteration 4: located stage-2 row-invariant bperp path and started focused pm1 oracle drift inspection
+[2026-04-21 16:29:39] US-004 iteration 4: started focused stage2 PATCH_1 regeneration for InSAR_dataset_test_stage8diag
+[2026-04-21 16:32:43] US-004 iteration 4: verifying suspected stage2 preserve_precision regression against existing stage2 tests
+[2026-04-21 17:13:27] US-004 iteration 4: patched live stage2 tail to use replay-matched preserve_precision flow for grid accumulation, CLAP filtering, and ph_patch normalization
+[2026-04-21 19:28:14] US-004 iteration 4: patched stage2 grid accumulation to use MATLAB single-workspace cast-back with complex128 phase contributions and updated focused tests
+[2026-04-21 19:52:49] US-004 iteration 4: reverted cast-back probe expectations and restored focused stage2 baseline tests after killing the long-running experimental PATCH_1 probe
+[2026-04-21 20:25:14] US-004 iteration 4: restored near-max refined trial selection in Python stage2 topofit and added oracle-row regressions for PATCH_1 rows 40316 and 44969
+[2026-04-21 21:34:24] US-004 iteration 4: reverted the experimental near-max selector probe and confirmed focused stage2 topofit tests are back to baseline
+[2026-04-21 21:58:58] US-004 iteration 4: identified audited single-master helper mismatches in row-invariant near-max topofit and random-hist coherence selection; applying focused stage2 helper patch
+[2026-04-21 22:09:51] US-004 iteration 4: focused stage2 topofit regressions passed; running fresh audited PATCH_1 stage2 probe against the single-master oracle pair
+[2026-04-21 23:10:17] US-004 iteration 4: patched near-max topofit selection and row-invariant bp1 phase-ramp selection; full stage2, trial-wrap, and accelerated kernel suites now pass
+[2026-04-21 23:53:57] US-004 iteration 4: progress recorded after committing near-max topofit and row-invariant bp1 fixes; audited pm1 parity still blocked by residual ph_patch/ph_res CLAP drift
