@@ -1,0 +1,372 @@
+{
+  "generated_at_utc": "2026-04-21T16:00:12Z",
+  "contract": {
+    "contract_version": 1,
+    "inputs_root": "inputs_and_outputs",
+    "oracle_contract_manifest_path": "pystamps/data/oracle_contract.json",
+    "audited_workflow_manifest_path": "pystamps/data/audited_workflow_manifest.json",
+    "oracle_contract": {
+      "manifest_version": 1,
+      "purpose": "Freeze the oracle sources used for pySTAMPS parity decisions.",
+      "matlab_source": {
+        "vendor_path": "StaMPS",
+        "upstream_repository_url": "https://github.com/dbekaert/StaMPS",
+        "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed",
+        "pinned_source_paths": [
+          "StaMPS/matlab",
+          "StaMPS/bin",
+          "StaMPS/src"
+        ]
+      },
+      "manual_references": [
+        {
+          "kind": "repo_readme",
+          "path": "StaMPS/README.md",
+          "notes": "Workflow overview and supported processing modes."
+        },
+        {
+          "kind": "manual_pdf",
+          "path": "StaMPS/Manual/StaMPS_Manual.pdf",
+          "notes": "Pinned user/manual reference for the vendored StaMPS checkout."
+        },
+        {
+          "kind": "manual_source",
+          "path": "StaMPS/Manual/StaMPS_Manual.tex",
+          "notes": "Tracked manual source used to audit wording and section references."
+        }
+      ],
+      "cpp_wrapper": {
+        "repository_url": "https://github.com/dbekaert/StaMPS",
+        "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed",
+        "pinned_source_paths": [
+          "StaMPS/src"
+        ],
+        "notes": "StaMPS ships the C/C++ helper programs in the same upstream repository as the MATLAB sources; the pinned repository URL and revision above are the wrapper oracle reference for this repo."
+      },
+      "precedence_rule": {
+        "ordered_sources": [
+          "cpp_wrapper",
+          "matlab_source",
+          "manual_references"
+        ],
+        "rule": "When the pinned StaMPS C/C++ helper behavior intentionally differs from the pinned MATLAB scripts, treat the pinned C/C++ helper path as the practical parity oracle and record that choice in the parity evidence."
+      },
+      "negative_completion_rule": "If cpp_wrapper.repository_url or cpp_wrapper.pinned_revision is empty, this manifest is invalid and downstream stories must not claim oracle-backed completion."
+    },
+    "audited_workflow_manifest": {
+      "manifest_version": 1,
+      "purpose": "Freeze the repo-tracked workflow coverage required before parity can be called done.",
+      "supported_audit": {
+        "entrypoint": "scripts/validate_audit.py",
+        "output_artifact": "inputs_and_outputs/validation_runs/latest_audit.json",
+        "required_workflow_names": [
+          "full_validation"
+        ],
+        "required_dataset_paths": [
+          "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+          "inputs_and_outputs/InSAR_dataset_test"
+        ]
+      },
+      "done_gate_rule": "Full oracle-backed parity requires every required_for_done workflow target below to be present and passing. Missing small-baseline coverage keeps the overall parity gate open even if the current single-master audit pair passes.",
+      "workflow_targets": [
+        {
+          "id": "single_master_diagnostic",
+          "kind": "single_master",
+          "required_for_done": true,
+          "status": "present",
+          "local_dataset_path": "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+          "golden_dataset_path": "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+          "run_seed_path": "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+          "comparison_mode": "fresh_run_copy_vs_golden_dataset",
+          "workflow_profile": "default",
+          "supports_validate_audit": true,
+          "notes": "Repo-tracked compact single-master audit dataset."
+        },
+        {
+          "id": "single_master_full",
+          "kind": "single_master",
+          "required_for_done": true,
+          "status": "present",
+          "local_dataset_path": "inputs_and_outputs/InSAR_dataset_test",
+          "golden_dataset_path": "inputs_and_outputs/InSAR_dataset_test",
+          "run_seed_path": "inputs_and_outputs/RUN_FULL_GATE_1e10",
+          "comparison_mode": "fresh_run_copy_vs_golden_dataset",
+          "workflow_profile": "legacy_post",
+          "supports_validate_audit": true,
+          "notes": "Explicitly audited against the maintained run seed inputs_and_outputs/RUN_FULL_GATE_1e10 before comparison back to inputs_and_outputs/InSAR_dataset_test."
+        },
+        {
+          "id": "small_baseline_diagnostic",
+          "kind": "small_baseline",
+          "required_for_done": true,
+          "status": "missing_repo_dataset",
+          "local_dataset_path": null,
+          "golden_dataset_path": null,
+          "run_seed_path": null,
+          "comparison_mode": "missing_dataset_blocker",
+          "workflow_profile": "small_baseline",
+          "supports_validate_audit": false,
+          "notes": "No repo-tracked small-baseline diagnostic audit dataset was found under inputs_and_outputs/ when this manifest was frozen."
+        },
+        {
+          "id": "small_baseline_full",
+          "kind": "small_baseline",
+          "required_for_done": true,
+          "status": "missing_repo_dataset",
+          "local_dataset_path": null,
+          "golden_dataset_path": null,
+          "run_seed_path": null,
+          "comparison_mode": "missing_dataset_blocker",
+          "workflow_profile": "small_baseline",
+          "supports_validate_audit": false,
+          "notes": "No repo-tracked full-loop small-baseline audit dataset was found under inputs_and_outputs/ when this manifest was frozen."
+        }
+      ],
+      "supporting_repo_datasets": [
+        {
+          "local_dataset_path": "inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+          "status": "present_not_done_gate",
+          "notes": "Notebook/reference dataset only; not part of the done gate."
+        }
+      ]
+    },
+    "dataset_discovery_rule": "Immediate child directories of inputs_root with patch.list or at least one PATCH_* directory.",
+    "supported_audit": {
+      "entrypoint": "scripts/validate_audit.py",
+      "output_artifact": "inputs_and_outputs/validation_runs/latest_audit.json",
+      "required_result_fields": [
+        "generated_at_utc",
+        "contract",
+        "missing_datasets",
+        "audits",
+        "failed_workflows",
+        "completed",
+        "interrupted",
+        "ok"
+      ]
+    },
+    "required_dataset_names": [
+      "InSAR_dataset_test_stage8diag",
+      "InSAR_dataset_test"
+    ],
+    "required_dataset_paths": [
+      "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+      "inputs_and_outputs/InSAR_dataset_test"
+    ],
+    "required_workflow_names": [
+      "full_validation"
+    ],
+    "artifacts": {
+      "stage2_weighting_snapshot": {
+        "kind": "stage2_debug_snapshot",
+        "path": "inputs_and_outputs/validation_runs/stage2_weighting_snapshot.json",
+        "source_patch": "PATCH_1",
+        "required_fields": [
+          "Nr",
+          "Na",
+          "low_coh_thresh",
+          "Nr_max_nz_ix",
+          "coh_ps",
+          "prand",
+          "prand_hi",
+          "prand_ps",
+          "weighting"
+        ]
+      },
+      "stage2_weighting_oracle": {
+        "kind": "stage2_weighting_oracle",
+        "path": "inputs_and_outputs/validation_runs/stage2_weighting_oracle.json",
+        "source_artifact": "stage2_weighting_snapshot",
+        "required_outputs": [
+          "prand",
+          "prand_hi",
+          "prand_ps",
+          "weighting"
+        ]
+      },
+      "stage2_weighting_compare": {
+        "kind": "stage2_weighting_compare",
+        "path": "inputs_and_outputs/validation_runs/stage2_weighting_compare.json",
+        "driver": "scripts/stage2_weighting_harness.py",
+        "snapshot_artifact": "stage2_weighting_snapshot",
+        "oracle_artifact": "stage2_weighting_oracle",
+        "expected_max_abs": 0.0
+      }
+    },
+    "datasets": [
+      {
+        "name": "InSAR_dataset_test",
+        "path": "inputs_and_outputs/InSAR_dataset_test",
+        "required": true,
+        "patch_count": 1,
+        "patches": [
+          "PATCH_1"
+        ],
+        "has_patch_list": true,
+        "discovery_signals": [
+          "patch.list",
+          "PATCH_*"
+        ]
+      },
+      {
+        "name": "InSAR_dataset_test_stage8diag",
+        "path": "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+        "required": true,
+        "patch_count": 1,
+        "patches": [
+          "PATCH_1"
+        ],
+        "has_patch_list": true,
+        "discovery_signals": [
+          "patch.list",
+          "PATCH_*"
+        ]
+      },
+      {
+        "name": "InSAR_dataset_test_stage8diag_hl",
+        "path": "inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+        "required": false,
+        "patch_count": 1,
+        "patches": [
+          "PATCH_1"
+        ],
+        "has_patch_list": true,
+        "discovery_signals": [
+          "patch.list",
+          "PATCH_*"
+        ]
+      },
+      {
+        "name": "RUN_FULL_GATE_1e10",
+        "path": "inputs_and_outputs/RUN_FULL_GATE_1e10",
+        "required": false,
+        "patch_count": 1,
+        "patches": [
+          "PATCH_1"
+        ],
+        "has_patch_list": true,
+        "discovery_signals": [
+          "patch.list",
+          "PATCH_*"
+        ]
+      }
+    ],
+    "workflows": {
+      "stage2_only": {
+        "kind": "dataset_workflow",
+        "audit_name_suffix": "stage2_only",
+        "start_step": 2,
+        "end_step": 2,
+        "verify_patterns": [
+          "PATCH_*/pm1.mat"
+        ]
+      },
+      "stage3_only": {
+        "kind": "dataset_workflow",
+        "audit_name_suffix": "stage3_only",
+        "start_step": 3,
+        "end_step": 3,
+        "verify_patterns": [
+          "PATCH_*/select1.mat"
+        ]
+      },
+      "stage4_only": {
+        "kind": "dataset_workflow",
+        "audit_name_suffix": "stage4_only",
+        "start_step": 4,
+        "end_step": 4,
+        "verify_patterns": [
+          "PATCH_*/weed1.mat"
+        ]
+      },
+      "stage2_5": {
+        "kind": "dataset_workflow",
+        "audit_name_suffix": "stage2_5",
+        "start_step": 2,
+        "end_step": 5,
+        "verify_patterns": [
+          "PATCH_*/pm1.mat",
+          "PATCH_*/select1.mat",
+          "PATCH_*/weed1.mat",
+          "PATCH_*/ps2.mat",
+          "PATCH_*/ph2.mat",
+          "PATCH_*/pm2.mat",
+          "PATCH_*/bp2.mat",
+          "PATCH_*/hgt2.mat",
+          "PATCH_*/la2.mat",
+          "PATCH_*/rc2.mat",
+          "PATCH_*/psver.mat",
+          "ps2.mat",
+          "ph2.mat",
+          "pm2.mat",
+          "bp2.mat",
+          "hgt2.mat",
+          "la2.mat",
+          "rc2.mat",
+          "psver.mat"
+        ]
+      },
+      "stage6_8": {
+        "kind": "dataset_workflow",
+        "audit_name_suffix": "stage6_8",
+        "start_step": 6,
+        "end_step": 8,
+        "verify_patterns": [
+          "ifgstd2.mat",
+          "phuw2.mat",
+          "uw_phaseuw.mat",
+          "uw_grid.mat",
+          "uw_interp.mat",
+          "scla2.mat",
+          "scla_smooth2.mat",
+          "mean_v.mat",
+          "mv2.mat",
+          "uw_space_time.mat"
+        ]
+      },
+      "full_validation": {
+        "kind": "campaign",
+        "driver": "scripts/validate_audit.py",
+        "command": "uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json",
+        "output_artifact": "inputs_and_outputs/validation_runs/latest_audit.json",
+        "required_result_fields": [
+          "generated_at_utc",
+          "contract",
+          "missing_datasets",
+          "audits",
+          "failed_workflows",
+          "completed",
+          "interrupted",
+          "ok"
+        ],
+        "required_dataset_names": [
+          "InSAR_dataset_test_stage8diag",
+          "InSAR_dataset_test"
+        ],
+        "includes_dataset_workflow_suffixes": [
+          "stage2_only",
+          "stage3_only",
+          "stage4_only",
+          "stage2_5",
+          "stage6_8"
+        ]
+      },
+      "pytest_smoke": {
+        "kind": "repo_workflow",
+        "command": "uv run pytest -q"
+      }
+    }
+  },
+  "missing_datasets": [],
+  "audits": [],
+  "failed_workflows": [
+    "full_validation"
+  ],
+  "completed": false,
+  "interrupted": true,
+  "interruption": {
+    "kind": "keyboard_interrupt",
+    "message": "Audit interrupted before all dataset workflows completed."
+  },
+  "ok": false
+}

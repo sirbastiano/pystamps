@@ -1,0 +1,70 @@
+{
+  "generated_at_utc": "2026-04-21T15:59:56Z",
+  "dataset": "InSAR_dataset_test",
+  "workflow": "InSAR_dataset_test_audit",
+  "run_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/20260421_153559/InSAR_dataset_test_stage2_8",
+  "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test",
+  "stage_boundary": 2,
+  "patterns": [
+    "PATCH_*/pm1.mat"
+  ],
+  "ok": false,
+  "checked": 1,
+  "failed": 1,
+  "first_boundary_failure": {
+    "path": "PATCH_1/pm1.mat",
+    "message": "Missing run artifact",
+    "stage_scope": "stage2",
+    "failure_class": "stage2_patch_boundary",
+    "label": "Stage 2 patch boundary",
+    "failing_key": null,
+    "failure_kind": "missing_run_artifact",
+    "shape_run": null,
+    "shape_oracle": null,
+    "max_abs": null,
+    "guidance": "pm1.mat diverges before later patch stages; fix stage-2 parity before changing stage-3/4 or downstream code."
+  },
+  "trace": {
+    "artifact_path": "PATCH_1/pm1.mat",
+    "stage_boundary": 2,
+    "stage_scope": "stage2",
+    "failure_class": "stage2_patch_boundary",
+    "label": "Stage 2 patch boundary",
+    "guidance": "pm1.mat diverges before later patch stages; fix stage-2 parity before changing stage-3/4 or downstream code.",
+    "failure_kind": "missing_run_artifact",
+    "failing_key": null,
+    "shape_run": null,
+    "shape_oracle": null,
+    "max_abs": null,
+    "message": "Missing run artifact",
+    "oracle_source": {
+      "name": "cpp_wrapper",
+      "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test",
+      "repository_url": "https://github.com/dbekaert/StaMPS",
+      "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed"
+    },
+    "artifact_lineage": [
+      {
+        "stage": 1,
+        "artifact_path": "PATCH_1/ps1.mat",
+        "role": "upstream_input"
+      },
+      {
+        "stage": 1,
+        "artifact_path": "PATCH_1/ph1.mat",
+        "role": "upstream_input"
+      },
+      {
+        "stage": 1,
+        "artifact_path": "PATCH_1/bp1.mat",
+        "role": "upstream_input"
+      },
+      {
+        "stage": 2,
+        "artifact_path": "PATCH_1/pm1.mat",
+        "role": "failing_artifact"
+      }
+    ],
+    "probe_output_path": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/us003_current_first_drift/InSAR_dataset_test_stage2_boundary_probe.json"
+  }
+}

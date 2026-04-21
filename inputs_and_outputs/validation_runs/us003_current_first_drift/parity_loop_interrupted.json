@@ -1,0 +1,13 @@
+{
+  "generated_at_utc": "2026-04-21T15:59:56Z",
+  "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/us003_current_first_drift/parity_loop.json --audit-output inputs_and_outputs/validation_runs/us003_current_first_drift/parity_audit.json",
+  "status": "interrupted",
+  "exit_code": 130,
+  "run_root": "inputs_and_outputs/validation_runs/20260421_153559/InSAR_dataset_test_stage2_8",
+  "first_observed_missing_artifacts": [
+    "PATCH_1/pm1.mat",
+    "PATCH_1/select1.mat",
+    "PATCH_1/weed1.mat"
+  ],
+  "notes": "Interrupted after the fresh run root remained pre-stage2 for more than twenty minutes. Use the saved stage-boundary probe JSON files in this directory as the canonical evidence snapshot."
+}

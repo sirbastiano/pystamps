@@ -1,0 +1,123 @@
+# Activity Log
+
+## Run Summary
+- 2026-04-21 15:29:54 | run=20260421-123533-4172008 | iter=2 | mode=build | story=US-002 | duration=4386s | status=success
+- 2026-04-21 14:16:41 | run=20260421-123533-4172008 | iter=1 | mode=build | story=US-001 | duration=6068s | status=success
+- 2026-03-14 14:28:09 | run=20260314-105700-3558543 | iter=6 | mode=build | story=US-006 | duration=8838s | status=success
+- 2026-03-14 12:00:48 | run=20260314-105700-3558543 | iter=5 | mode=build | story=US-005 | duration=458s | status=success
+- 2026-03-14 11:53:06 | run=20260314-105700-3558543 | iter=4 | mode=build | story=US-004 | duration=908s | status=success
+- 2026-03-14 11:37:53 | run=20260314-105700-3558543 | iter=3 | mode=build | story=US-003 | duration=776s | status=success
+- 2026-03-14 11:24:54 | run=20260314-105700-3558543 | iter=2 | mode=build | story=US-002 | duration=843s | status=success
+- 2026-03-14 11:10:49 | run=20260314-105700-3558543 | iter=1 | mode=build | story=US-001 | duration=829s | status=success
+- 2026-03-14 09:51:44 | run=20260314-091325-3523629 | iter=2 | mode=build | story=US-005 | duration=466s | status=success
+- 2026-03-14 09:43:55 | run=20260314-091325-3523629 | iter=1 | mode=build | story=US-001 | duration=1830s | status=success
+- 2026-03-14 07:39:09 | run=20260314-052029-3444733 | iter=4 | mode=build | story=US-004 | duration=921s | status=success
+- 2026-03-14 07:23:44 | run=20260314-052029-3444733 | iter=3 | mode=build | story=US-003 | duration=1310s | status=success
+- 2026-03-14 07:01:51 | run=20260314-052029-3444733 | iter=2 | mode=build | story=US-002 | duration=478s | status=success
+- 2026-03-14 06:53:51 | run=20260314-052029-3444733 | iter=1 | mode=build | story=US-001 | duration=5602s | status=success
+
+## Events
+
+[2026-03-14 05:20:29] ITERATION 1 start (mode=build story=US-001)
+[2026-03-14 05:20:34] Start US-001: Align stage-3 stack filter core with MATLAB filter2 behavior
+[2026-03-14 05:20:59] Updated _clap_filt_patch_stack in pystamps/pipeline/ported.py to per-interferogram 2-D convolve with 2-D kernel (fixing singleton-kernel indexing)
+[2026-03-14 05:36:30] Re-ran stage-3/4 (recomputed select1.mat/weed1.mat) and executed mandated narrow_compare + verify; both still fail on C_ps2/ps_max and downstream keys.
+[2026-03-14 05:36:40] Appended progress entry for US-001 with verification outcomes (run stage3/4 rerun, narrow compare, verify) and remaining failure status.
+[2026-03-14 05:37:21] US-001: after patch-stack function refinement for per-interferogram filter semantics
+[2026-03-14 05:54:42] US-001: switched _clap_filt_patch_stack to explicit per-interferogram _clap_filt_patch delegation
+[2026-03-14 06:53:33] US-001: narrow_compare and full verify still failing after per-interferogram patch-stack delegate refactor; blockers remain in C_ps2/ps_max
+[2026-03-14 06:53:37] US-001: progress entry appended with verification failures and pending status
+[2026-03-14 06:53:51] ITERATION 1 end (duration=5602s)
+[2026-03-14 06:53:54] ITERATION 2 start (mode=build story=US-002)
+[2026-03-14 06:54:27] US-002 command discovery complete; reading verify and parity reporting code paths.
+[2026-03-14 06:57:00] US-002 implementation added: verification failure classification helpers, script, tests, and ExecPlan.
+[2026-03-14 06:59:22] US-002 verification complete: narrow compare and full verify rerun, grouped failure report generated.
+[2026-03-14 07:01:17] US-002 progress entry and run summary recorded with grouped residual failure classes.
+[2026-03-14 07:01:51] ITERATION 2 end (duration=478s)
+[2026-03-14 07:01:54] ITERATION 3 start (mode=build story=US-003)
+[2026-03-14 07:04:03] US-003: command surface loaded; comparing current unwrap-stage artifacts against golden and tracing MATLAB parity gaps
+[2026-03-14 07:11:16] US-003: updated stage6 unwrap input construction and MSD computation; preparing targeted stage6-8 regeneration
+[2026-03-14 07:22:17] US-003: verification complete; stage6 MSD improved but verify still fails on pm2, uw_grid, uw_space_time, and downstream stage7 artifacts
+[2026-03-14 07:23:18] US-003: progress entry recorded with failed-gate evidence and remaining parity blockers
+[2026-03-14 07:23:44] ITERATION 3 end (duration=1310s)
+[2026-03-14 07:23:47] ITERATION 4 start (mode=build story=US-004)
+[2026-03-14 07:24:22] US-004 context loaded; inspecting command surface, current worktree, and scla2/mean_v implementation paths
+[2026-03-14 07:30:26] US-004 code changes applied: stage7 now uses StaMPS-style reference centering, deramp, weighted regression, and corrected mean_v coefficients; added targeted stage7 helper tests
+[2026-03-14 07:38:46] US-004 verification complete: targeted pytest passed, stage7 rerun succeeded, full parity remains blocked by stage7 exact mismatch and existing upstream/downstream verify failures; no commit created
+[2026-03-14 07:39:01] US-004 progress log updated with incomplete outcome: no commit, targeted tests pass, stage7 parity still blocked by exact unwrapped-phase drift
+[2026-03-14 07:39:08] ITERATION 4 end (duration=921s)
+[2026-03-14 09:13:25] ITERATION 1 start (mode=build story=US-001)
+[2026-03-14 09:13:58] US-001 audit: located _clap_filt_patch_stack and verifying repository state before edits
+[2026-03-14 09:15:09] US-001 validation: rerunning stages 3-4 and parity checks from current tree
+[2026-03-14 09:15:45] US-001 validation: removing cached select1/weed1 artifacts to force stage 3-4 regeneration
+[2026-03-14 09:16:00] US-001 validation: unlinked cached select1/weed1 artifacts via uv run python after shell rm was blocked
+[2026-03-14 09:41:54] US-001 validation: stage 3-4 rerun completed; running narrow compare on regenerated select1/weed1 artifacts
+[2026-03-14 09:42:12] US-001 validation: running remaining global quality gates after regenerated narrow compare still failed
+[2026-03-14 09:43:42] US-001 progress recorded: clean rerun confirms stage-3/4 parity still blocked on C_ps2 and ps_max residuals
+[2026-03-14 09:43:55] ITERATION 1 end (duration=1830s)
+[2026-03-14 09:43:58] ITERATION 2 start (mode=build story=US-005)
+[2026-03-14 09:44:37] US-005 context loaded; tracing Stage-7 implementation, tests, and vendored StaMPS references before verification.
+[2026-03-14 09:48:00] US-005 verification complete: stage7 helper tests pass, direct stage7_calc_scla rerun succeeds, full verify still fails on scla2/mean_v plus unrelated residual artifacts.
+[2026-03-14 09:48:34] US-005 audit summary recorded with Stage-7 evidence, concrete mismatch candidates, and scoped follow-up validation plan.
+[2026-03-14 09:50:34] US-005 progress log appended with commit hash, verification outcomes, and scoped Stage-7 audit findings.
+[2026-03-14 09:51:43] ITERATION 2 end (duration=466s)
+[2026-03-14 10:57:00] ITERATION 1 start (mode=build story=US-001)
+[2026-03-14 10:57:30] US-001 discovery: reading validate_audit, parity contract, CLI, and verification code to confirm the single supported audit path and current contract gaps.
+[2026-03-14 11:00:36] US-001 code changes applied: audit driver now defaults to contract datasets, fails fast on missing datasets, and emits explicit completion/interruption metadata with focused tests added.
+[2026-03-14 11:01:07] US-001 targeted tests passed; starting required repo-wide validation and locating a concrete run copy for the verify gate.
+[2026-03-14 11:06:16] US-001 review fix applied: full_validation is now the required workflow reported by the audit contract, with unsupported dataset selection covered by tests. Re-running required gates.
+[2026-03-14 11:10:21] US-001 progress entry appended with commit and validation details after the final gate rerun.
+[2026-03-14 11:10:49] ITERATION 1 end (duration=829s)
+[2026-03-14 11:10:52] ITERATION 2 start (mode=build story=US-002)
+[2026-03-14 11:11:22] US-002 audit: inspecting README, packaging metadata, manifests, and validation tests.
+[2026-03-14 11:12:28] US-002 pre-change check: building current sdist/wheel to inspect packaging surface.
+[2026-03-14 11:14:50] US-002 verification: running targeted dataset/doc/packaging contract tests.
+[2026-03-14 11:15:14] US-002 verification: running build gate and locating a concrete verify run copy.
+[2026-03-14 11:16:06] US-002 verification: corrected release-scope wording after sdist inspection and rerunning contract test.
+[2026-03-14 11:21:58] US-002 verification: full pytest/build/twine/audit complete; canonical verify passed using InSAR_dataset_test as run and golden. RUN_FULL_GATE_1e10 remains a separate parity failure.
+[2026-03-14 11:23:55] US-002 progress update: appending run summary with commit and gate results.
+[2026-03-14 11:24:18] US-002 progress update complete: recorded commit f86d124 and final validation matrix in .ralph/progress.md.
+[2026-03-14 11:24:54] ITERATION 2 end (duration=843s)
+[2026-03-14 11:24:58] ITERATION 3 start (mode=build story=US-003)
+[2026-03-14 11:29:26] US-003 implementation: updating audit driver to compare concrete full-loop run roots against golden datasets and record run_root in audit output.
+[2026-03-14 11:35:44] US-003 verification complete: targeted pytest and repo gates passed; audit and verify now record truthful parity failures with current concrete run roots.
+[2026-03-14 11:37:21] US-003 progress updated: recorded audit/verify outcomes, stage-cluster classification, and implementation commit a1ca13d in .ralph/progress.md.
+[2026-03-14 11:37:53] ITERATION 3 end (duration=776s)
+[2026-03-14 11:37:56] ITERATION 4 start (mode=build story=US-004)
+[2026-03-14 11:45:25] US-004 analysis: stage8diag stage5-6 artifacts are downstream of upstream patch-level drift. Reproduced that PATCH_1 select1.keep_ix/weed1.ix_weed counts differ from golden before stage5 writes ps2/pm2, so no speculative stage5/6 code change was applied.
+[2026-03-14 11:50:28] US-004 verification complete: pytest/build/twine passed; refreshed audit plus concrete stage8diag and RUN_FULL_GATE verifies confirm stage5-6 mismatches are downstream of upstream select1/weed1 count drift.
+[2026-03-14 11:50:31] US-004 progress update recorded: documented upstream blocker evidence, no speculative stage5-6 code changes, and pending docs-only commit for this blocked iteration.
+[2026-03-14 11:53:04] ITERATION 4 end (duration=908s)
+[2026-03-14 11:53:10] ITERATION 5 start (mode=build story=US-005)
+[2026-03-14 11:57:09] US-005 iteration 5: confirmed on RUN_FULL_GATE_1e10 that scla2.mat, mean_v.mat, and uw_space_time.mat match golden; full verify fails only on PATCH_3/weed1.mat upstream residual.
+[2026-03-14 12:00:22] US-005 verification complete: pytest/build/twine passed, direct RUN_FULL_GATE_1e10 stage7-8 comparisons match golden, and the required audit/verify remain blocked only by upstream residuals.
+[2026-03-14 12:00:22] US-005 progress updated: recorded no-code stage7-8 outcome, gate results, and upstream blocker context in .ralph/progress.md.
+[2026-03-14 12:00:47] ITERATION 5 end (duration=458s)
+[2026-03-14 12:00:50] ITERATION 6 start (mode=build story=US-006)
+[2026-03-14 12:01:19] US-006 context loaded; auditing parity scripts, docs, and prior run artifacts.
+[2026-03-14 12:08:26] US-006 major change: validate_audit now regenerates fresh run copies before verification; running targeted tests.
+[2026-03-14 12:09:52] US-006 verification: running fresh unattended audit after adding run-copy regeneration.
+[2026-03-14 13:25:46] US-006 audit runtime issue: refining run-copy regeneration to seed InSAR_dataset_test from RUN_FULL_GATE_1e10 at stage 4-8 to avoid impractical full stage2 rebuilds.
+[2026-03-14 13:36:54] US-006 verification: rerunning audit with stage8diag stage2-8 refresh and RUN_FULL_GATE_1e10 stage4-8 seed refresh.
+[2026-03-14 14:26:22] US-006 verification: full pytest passes; audit and verify still fail on regenerated parity artifacts.
+[2026-03-14 14:28:08] ITERATION 6 end (duration=8838s)
+[2026-04-21 12:35:34] ITERATION 1 start (mode=build story=US-001)
+[2026-04-21 12:42:29] US-001 discovery: confirmed existing parity contract, current audited dataset roots, and active repo dirt before implementing oracle/workflow manifests
+[2026-04-21 12:59:17] US-001 implementation: added pinned oracle/workflow manifests, parity contract loader updates, and contract/package regression tests
+[2026-04-21 13:02:17] US-001 verification: targeted contract tests and all three global pytest groups passed; starting build and long parity gates
+[2026-04-21 13:10:47] US-001 verification: temp build passed and packaged the oracle/workflow manifests; starting twine and parity loop
+[2026-04-21 14:14:53] US-001 verification status: contract tests, global pytest groups, build, and twine passed; long parity loop still running past one hour so story remains unverified and uncommitted in this run
+[2026-04-21 14:16:01] US-001 progress update complete: manifest changes recorded in .ralph/progress.md; long parity loop cancelled after exceeding one hour without completing the required artifact refresh
+[2026-04-21 14:16:41] ITERATION 1 end (duration=6068s)
+[2026-04-21 14:16:44] ITERATION 2 start (mode=build story=US-002)
+[2026-04-21 14:17:45] Start US-002 work: reviewing guardrails, errors, PRD, and parity tooling.
+[2026-04-21 14:37:01] US-002 major code changes: added structured parity failure metadata, saved stage-boundary probe traces, and parity loop first-boundary targeting.
+[2026-04-21 15:26:56] US-002 verification update: focused regression tests and all required pytest gates passed; parity loop dataset gate remained compute-bound for >40 minutes and was stopped before completion.
+[2026-04-21 15:29:02] US-002 progress log updated with passing pytest gates and incomplete long-running dataset validation gates.
+[2026-04-21 15:29:51] ITERATION 2 end (duration=4386s)
+[2026-04-21 15:29:58] ITERATION 3 start (mode=build story=US-003)
+[2026-04-21 15:34:23] US-003 analysis: confirmed logger entrypoint and inspecting fresh run-copy generation for reproducible evidence capture
+[2026-04-21 15:34:49] US-003 execution: starting fresh parity baseline run for current repo state and archiving under a stable us003 evidence path
+[2026-04-21 16:00:14] US-003 evidence captured: stable stage-boundary probes written under inputs_and_outputs/validation_runs/us003_current_first_drift; first boundary is PATCH_1/pm1.mat missing after interrupted fresh baseline run
+[2026-04-21 16:01:37] US-003 major change: added tracked first-drift evidence bundle and reproducibility commands under inputs_and_outputs/validation_runs/us003_current_first_drift
+[2026-04-21 16:06:33] US-003 verification: pytest gates, build, and twine passed; parity_bug_loop and validate_audit were run and interrupted after fresh run roots remained pre-stage2, with snapshots saved in the us003 evidence bundle
