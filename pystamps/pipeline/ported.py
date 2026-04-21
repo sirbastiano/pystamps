@@ -739,15 +739,11 @@ def _stage2_bperp_rows_are_invariant(bperp_mat: np.ndarray | None) -> bool:
 
 
 def _stage2_row_invariant_bperp_vector(bperp_nm: np.ndarray, bperp_mat: np.ndarray | None) -> np.ndarray:
-    bperp_vec = np.asarray(bperp_nm).reshape(-1)
-    if bperp_mat is None:
-        return bperp_vec
-    bp = np.asarray(bperp_mat)
-    if bp.ndim != 2 or bp.shape[1] != bperp_vec.size:
-        return bperp_vec
-    if _stage2_bperp_rows_are_invariant(bp):
-        return np.asarray(bp[0], dtype=bperp_vec.dtype).reshape(-1)
-    return bperp_vec
+    if bperp_mat is not None:
+        bp = np.asarray(bperp_mat)
+        if bp.ndim == 2 and bp.shape[0] > 0:
+            return np.asarray(bp[0], dtype=np.float64).reshape(-1)
+    return np.asarray(bperp_nm).reshape(-1)
 
 
 def _stage2_random_hist_cache_path(
@@ -1841,8 +1837,6 @@ def _ps_topofit_single(cpxphase: np.ndarray, bperp: np.ndarray, n_trial_wraps: f
     if use_single:
         candidate_ix = np.asarray([int(np.argmax(np.asarray(coh_trial, dtype=np.float64)))], dtype=np.int64)
     else:
-        candidate_ix = _ps_topofit_near_max_trial_indices(np.asarray(coh_trial, dtype=np.float64))
-
     bp_work = bp.astype(real_dtype, copy=False)
     weighting = np.abs(cpx).astype(real_dtype)
     wb = weighting * bp_work
@@ -1850,6 +1844,7 @@ def _ps_topofit_single(cpxphase: np.ndarray, bperp: np.ndarray, n_trial_wraps: f
     if den_lin == 0.0:
         den_lin = 1.0
 
+    candidate_ix = _ps_topofit_near_max_trial_indices(coh_trial)
     if candidate_ix.size == 1:
         coarse_k0 = (np.pi / 4.0) / float(bperp_range) * float(trial_mult[int(candidate_ix[0])])
         K0, C0, coh0, valid_phase_residual = _ps_topofit_refine_candidate(
@@ -2019,37 +2014,60 @@ def _ps_topofit_batch_row_invariant_coh(
     if bperp_range == 0.0:
         bperp_range = 1.0
 
+    cpx_arr = np.asarray(cpxphase, dtype=np.complex128)
     trial_phase = bperp_vec / bperp_range * (np.pi / 4.0)
     phaser_basis = np.exp(-1j * (trial_phase[:, None] * trial_mult[None, :])).astype(np.complex128)
-    denom = np.sum(np.abs(cpxphase), axis=1, dtype=np.float64)
+    denom = np.sum(np.abs(cpx_arr), axis=1, dtype=np.float64)
     denom[denom == 0] = 1.0
-    coh_high_max_ix = np.zeros(cpxphase.shape[0], dtype=np.int64)
+    coh0 = np.zeros(cpx_arr.shape[0], dtype=np.float64)
     chunk_rows = max(1024, min(cpxphase.shape[0], 8192))
+    tol = _STAGE2_TOPOFIT_NEAR_MAX_COH_TOL
     for start in range(0, cpxphase.shape[0], chunk_rows):
         stop = min(cpxphase.shape[0], start + chunk_rows)
-        phaser_sum = cpxphase[start:stop, :] @ phaser_basis
+        cpx_chunk = cpx_arr[start:stop, :]
+        phaser_sum = cpx_chunk @ phaser_basis
         coh_trial = np.abs(phaser_sum).astype(np.float64)
         coh_trial = coh_trial / denom[start:stop, None]
-        coh_high_max_ix[start:stop] = np.argmax(coh_trial, axis=1)
+        local_max = np.zeros_like(coh_trial, dtype=bool)
+        if coh_trial.shape[1] == 1:
+            local_max[:, 0] = True
+        else:
+            local_max[:, 0] = coh_trial[:, 0] >= coh_trial[:, 1]
+            local_max[:, -1] = coh_trial[:, -1] >= coh_trial[:, -2]
+        if coh_trial.shape[1] > 2:
+            local_max[:, 1:-1] = (coh_trial[:, 1:-1] >= coh_trial[:, :-2]) & (coh_trial[:, 1:-1] >= coh_trial[:, 2:])
+        max_coh = np.max(coh_trial, axis=1, keepdims=True)
+        near_max_mask = local_max & (coh_trial >= (max_coh - tol))
+        near_max_count = np.count_nonzero(near_max_mask, axis=1)
 
-    K0 = (np.pi / 4.0) / bperp_range * trial_mult[coh_high_max_ix].astype(np.float64)
-    bp64 = bperp.astype(np.float64, copy=False)
-    resphase = cpxphase * np.exp(-1j * (K0[:, None] * bp64))
-    offset_phase = np.sum(resphase, axis=1)
-    resphase_angle = np.angle(resphase * np.conj(offset_phase[:, None]))
-    weighting = np.abs(cpxphase).astype(np.float64)
-    wb = weighting * bp64
-    den_lin = np.sum(wb * wb, axis=1)
-    den_lin[den_lin == 0] = 1.0
-    mopt = np.sum(wb * (weighting * resphase_angle), axis=1) / den_lin
-    K0 = K0 + mopt
+        single_mask = near_max_count == 1
+        if np.any(single_mask):
+            single_rows = cpx_chunk[single_mask, :]
+            coh_high_max_ix = np.argmax(near_max_mask[single_mask, :], axis=1)
+            K0 = (np.pi / 4.0) / bperp_range * trial_mult[coh_high_max_ix].astype(np.float64)
+            bp64 = np.broadcast_to(bperp_vec, single_rows.shape)
+            resphase = single_rows * np.exp(-1j * (K0[:, None] * bp64))
+            offset_phase = np.sum(resphase, axis=1)
+            resphase_angle = np.angle(resphase * np.conj(offset_phase[:, None]))
+            weighting = np.abs(single_rows).astype(np.float64)
+            wb = weighting * bp64
+            den_lin = np.sum(wb * wb, axis=1)
+            den_lin[den_lin == 0] = 1.0
+            mopt = np.sum(wb * (weighting * resphase_angle), axis=1) / den_lin
+            K0 = K0 + mopt
 
-    phase_residual = cpxphase * np.exp(-1j * (K0[:, None] * bp64))
-    mean_phase_residual = np.sum(phase_residual, axis=1)
-    coh0 = np.abs(mean_phase_residual).astype(np.float64)
-    denom2 = np.sum(np.abs(phase_residual), axis=1)
-    denom2[denom2 == 0] = 1.0
-    coh0 = coh0 / denom2
+            phase_residual = single_rows * np.exp(-1j * (K0[:, None] * bp64))
+            mean_phase_residual = np.sum(phase_residual, axis=1)
+            chunk_coh = np.abs(mean_phase_residual).astype(np.float64)
+            denom2 = np.sum(np.abs(phase_residual), axis=1)
+            denom2[denom2 == 0] = 1.0
+            coh_chunk = coh0[start:stop]
+            coh_chunk[single_mask] = chunk_coh / denom2
+
+        if np.any(~single_mask):
+            for local_row in np.flatnonzero(~single_mask):
+                _, _, row_coh, _ = _ps_topofit_single(cpx_chunk[local_row, :], bperp_vec, n_trial_wraps)
+                coh0[start + int(local_row)] = row_coh
     return coh0
 
 

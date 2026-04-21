@@ -431,7 +431,7 @@ def test_ps_topofit_single_routes_through_near_max_selector(monkeypatch) -> None
     )
 
 
-def test_ps_topofit_single_refines_argmax_coarse_candidate() -> None:
+def test_ps_topofit_single_matches_source_near_max_refinement_path() -> None:
     cpxphase = np.asarray(
         [
             (0.9982544183731079 - 0.05906030535697937j),
@@ -624,51 +624,31 @@ def test_ps_topofit_single_refines_argmax_coarse_candidate() -> None:
         np.asarray([result[2] for result in refined], dtype=np.float64),
         trial_mult.size,
     )
-    expected_local_ix = int(np.flatnonzero(candidate_ix == selected_trial_ix)[0])
-    expected_K0, expected_C0, expected_coh0, _ = refined[expected_local_ix]
-
-    assert candidate_ix.size > 1
+    selected_local_ix = int(np.flatnonzero(candidate_ix == selected_trial_ix)[0])
+    expected_K0, expected_C0, expected_coh0, _ = refined[selected_local_ix]
     np.testing.assert_allclose(K0, expected_K0, rtol=0.0, atol=1e-12)
     np.testing.assert_allclose(C0, expected_C0, rtol=0.0, atol=1e-12)
     np.testing.assert_allclose(coh0, expected_coh0, rtol=0.0, atol=1e-12)
 
 
-def test_ps_topofit_single_uses_selected_near_max_candidate(monkeypatch) -> None:
-    cpxphase = np.asarray([1.0 + 0.0j, 0.5 + 0.5j, 0.25 - 0.75j], dtype=np.complex128)
-    bperp = np.asarray([0.0, 1.0, 2.0], dtype=np.float64)
-
-    monkeypatch.setattr(ported, "_ps_topofit_near_max_trial_indices", lambda coh_trial: np.asarray([0, 2], dtype=np.int64))
-
-    refine_calls: list[float] = []
-
-    def fake_refine(
-        cpx: np.ndarray,
-        bp64: np.ndarray,
-        weighting: np.ndarray,
-        wb: np.ndarray,
-        den_lin: float,
-        coarse_k0: float,
-    ) -> tuple[float, float, float, np.ndarray]:
-        refine_calls.append(float(coarse_k0))
-        if len(refine_calls) == 1:
-            return (-1.5, 0.1, 0.49, np.full(cpx.shape, 2 + 0j, dtype=np.complex128))
-        return (2.5, -0.2, 0.61, np.full(cpx.shape, 3 + 0j, dtype=np.complex128))
-
-    monkeypatch.setattr(ported, "_ps_topofit_refine_candidate", fake_refine)
-    monkeypatch.setattr(ported, "_ps_topofit_select_candidate", lambda *_args: 2)
-
-    K0, C0, coh0, phase_residual = ported._ps_topofit_single(cpxphase, bperp, n_trial_wraps=0.2)
-
-    assert len(refine_calls) == 2
-    np.testing.assert_allclose(K0, 2.5, rtol=0.0, atol=1e-12)
-    np.testing.assert_allclose(C0, -0.2, rtol=0.0, atol=1e-12)
-    np.testing.assert_allclose(coh0, 0.61, rtol=0.0, atol=1e-12)
-    np.testing.assert_allclose(phase_residual, np.full(cpxphase.shape, 3 + 0j, dtype=np.complex64), rtol=0.0, atol=0.0)
-
-
-def test_ps_topofit_single_refines_argmax_candidate_only(monkeypatch: pytest.MonkeyPatch) -> None:
-    cpxphase = np.asarray([1.0 + 0.0j, 0.5 + 0.5j, 0.25 - 0.75j], dtype=np.complex128)
-    bperp = np.asarray([0.0, 1.0, 2.0], dtype=np.float64)
+@pytest.mark.parametrize(
+    ("cpxphase", "bperp"),
+    [
+        (
+            np.asarray([1.0 + 0.0j, 0.5 + 0.5j, 0.25 - 0.75j], dtype=np.complex64),
+            np.asarray([0.0, 1.0, 2.0], dtype=np.float32),
+        ),
+        (
+            np.asarray([1.0 + 0.0j, 0.5 + 0.5j, 0.25 - 0.75j], dtype=np.complex128),
+            np.asarray([0.0, 1.0, 2.0], dtype=np.float64),
+        ),
+    ],
+)
+def test_ps_topofit_single_refines_single_near_max_peak(
+    cpxphase: np.ndarray,
+    bperp: np.ndarray,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
 
     refine_calls: list[float] = []
 
@@ -681,28 +661,101 @@ def test_ps_topofit_single_refines_argmax_candidate_only(monkeypatch: pytest.Mon
         coarse_k0: float,
     ) -> tuple[float, float, float, np.ndarray]:
         refine_calls.append(float(coarse_k0))
-        return (2.5, -0.2, 0.61, np.full(cpx.shape, 3 + 0j, dtype=np.complex128))
+        return (1.25, -0.5, 0.75, np.full(cpx.shape, 4 + 0j, dtype=np.complex64))
 
     monkeypatch.setattr(ported, "_ps_topofit_refine_candidate", fake_refine)
 
     K0, C0, coh0, phase_residual = ported._ps_topofit_single(cpxphase, bperp, n_trial_wraps=0.2)
-
-    trial_mult = ported._stage2_trial_values(0.2)
-    bperp_range = float(np.max(bperp) - np.min(bperp))
-    trial_phase = bperp / bperp_range * (np.pi / 4.0)
-    trial_phase_mat = np.exp(-1j * (trial_phase[:, None] * trial_mult[None, :])).astype(np.complex128)
-    phaser_sum = np.sum(trial_phase_mat * cpxphase[:, None], axis=0, dtype=np.complex128)
-    coh_trial = np.abs(phaser_sum).astype(np.float64)
-    coh_trial /= float(np.sum(np.abs(cpxphase), dtype=np.float64))
-    coarse_ix = int(np.argmax(coh_trial))
-    expected_coarse_k0 = (np.pi / 4.0) / bperp_range * float(trial_mult[coarse_ix])
 
     assert len(refine_calls) == 1
-    np.testing.assert_allclose(refine_calls[0], expected_coarse_k0, rtol=0.0, atol=1e-12)
-    np.testing.assert_allclose(K0, 2.5, rtol=0.0, atol=1e-12)
-    np.testing.assert_allclose(C0, -0.2, rtol=0.0, atol=1e-12)
-    np.testing.assert_allclose(coh0, 0.61, rtol=0.0, atol=1e-12)
-    np.testing.assert_allclose(phase_residual, np.full(cpxphase.shape, 3 + 0j, dtype=np.complex64), rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(K0, 1.25, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(C0, -0.5, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(coh0, 0.75, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(phase_residual, np.full(cpxphase.shape, 4 + 0j, dtype=np.complex64), rtol=0.0, atol=0.0)
+
+
+@pytest.mark.parametrize("row", [30271, 36824, 40316, 44969])
+def test_ps_topofit_single_matches_patch1_golden_saved_row(row: int) -> None:
+    patch_dir = Path("inputs_and_outputs/RUN_FULL_GATE_1e10/PATCH_1")
+    if not patch_dir.exists():
+        pytest.skip("golden PATCH_1 inputs are not available")
+
+    ps = read_mat(patch_dir / "ps1.mat")
+    ph = np.asarray(read_mat(patch_dir / "ph1.mat")["ph"])
+    pm = read_mat(patch_dir / "pm1.mat")
+    bp1 = read_mat(patch_dir / "bp1.mat")
+
+    master_ix = int(np.asarray(ps["master_ix"], dtype=np.float64).reshape(-1)[0])
+    bperp = np.asarray(ps["bperp"], dtype=np.float64).reshape(-1)
+    no_master = np.arange(bperp.size) != (master_ix - 1)
+    ph_nm = ph[:, no_master]
+    amp = np.abs(ph_nm).astype(np.float32)
+    amp[amp == 0] = 1.0
+    ph_nm = (ph_nm / amp).astype(np.complex128)
+    ph_patch = np.asarray(pm["ph_patch"])
+    bperp_mat = np.asarray(bp1["bperp_mat"], dtype=np.float64)
+    if bperp_mat.shape[1] == bperp.size:
+        bperp_mat = bperp_mat[:, no_master]
+    cpxphase = (np.conjugate(ph_patch[row, :]).astype(np.complex128) * ph_nm[row, :]).astype(np.complex128)
+    K0, C0, coh0, _ = ported._ps_topofit_single(
+        cpxphase,
+        bperp_mat[row, :],
+        float(np.asarray(pm["n_trial_wraps"], dtype=np.float64).reshape(-1)[0]),
+    )
+
+    np.testing.assert_allclose(K0, np.asarray(pm["K_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=1e-10)
+    np.testing.assert_allclose(C0, np.asarray(pm["C_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=5e-8)
+    np.testing.assert_allclose(coh0, np.asarray(pm["coh_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=5e-9)
+
+
+def test_ps_topofit_batch_row_invariant_coh_uses_single_solver_for_ambiguous_saved_row(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    patch_dir = Path("inputs_and_outputs/RUN_FULL_GATE_1e10/PATCH_1")
+    if not patch_dir.exists():
+        pytest.skip("golden PATCH_1 inputs are not available")
+
+    ps = read_mat(patch_dir / "ps1.mat")
+    ph = np.asarray(read_mat(patch_dir / "ph1.mat")["ph"])
+    pm = read_mat(patch_dir / "pm1.mat")
+    master_ix = int(np.asarray(ps["master_ix"], dtype=np.float64).reshape(-1)[0])
+    bperp = np.asarray(ps["bperp"], dtype=np.float64).reshape(-1)
+    no_master = np.arange(bperp.size) != (master_ix - 1)
+    ph_nm = ph[:, no_master]
+    amp = np.abs(ph_nm).astype(np.float32)
+    amp[amp == 0] = 1.0
+    ph_nm = (ph_nm / amp).astype(np.complex128)
+
+    rows = np.asarray([40316, 30271], dtype=np.int64)
+    ph_patch = np.asarray(pm["ph_patch"], dtype=np.complex64)
+    cpxphase = (np.conjugate(ph_patch[rows, :]).astype(np.complex128) * ph_nm[rows, :]).astype(np.complex128)
+    bperp_nm = np.ascontiguousarray(bperp[no_master], dtype=np.float64)
+    n_trial_wraps = float(np.asarray(pm["n_trial_wraps"], dtype=np.float64).reshape(-1)[0])
+    bperp_mat = np.broadcast_to(bperp_nm, cpxphase.shape)
+
+    expected_ambiguous = ported._ps_topofit_single(cpxphase[0, :], bperp_nm, n_trial_wraps)[2]
+    single_calls: list[np.ndarray] = []
+    original = ported._ps_topofit_single
+
+    def fake_single(
+        cpx_row: np.ndarray,
+        bperp_row: np.ndarray,
+        wraps: float,
+    ) -> tuple[float, float, float, np.ndarray]:
+        single_calls.append(np.asarray(cpx_row, dtype=np.complex128).copy())
+        return original(cpx_row, bperp_row, wraps)
+
+    monkeypatch.setattr(ported, "_ps_topofit_single", fake_single)
+
+    observed = ported._ps_topofit_batch_row_invariant_coh(
+        cpxphase,
+        bperp_mat,
+        n_trial_wraps,
+    )
+
+    assert len(single_calls) == 1
+    np.testing.assert_allclose(single_calls[0], cpxphase[0, :], rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(observed[0], expected_ambiguous, rtol=0.0, atol=5e-9)
 
 
 def test_stage2_trial_values_match_stamps_topofit_trial_semantics() -> None:
@@ -2118,6 +2171,15 @@ def test_stage2_uses_bp1_matrix_for_non_small_baseline(monkeypatch, tmp_path: Pa
     assert seen_random_bperp
     np.testing.assert_allclose(seen_bperp[0], bp_payload["bperp_mat"])
     np.testing.assert_allclose(seen_random_bperp[0], np.asarray([15.0, 30.0], dtype=np.float64))
+
+
+def test_stage2_row_invariant_bperp_vector_prefers_invariant_bp1_rows() -> None:
+    bperp_nm = np.asarray([15.0, 30.0, 45.0], dtype=np.float64)
+    bperp_mat = np.tile(np.asarray([14.0, 29.0, 44.0], dtype=np.float64), (2, 1))
+
+    observed = ported._stage2_row_invariant_bperp_vector(bperp_nm, bperp_mat)
+
+    np.testing.assert_allclose(observed, bperp_mat[0])
 
 
 def test_stage2_reprocesses_partial_zero_rows_for_generic_topofit(monkeypatch, tmp_path: Path) -> None:
