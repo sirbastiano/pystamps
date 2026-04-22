@@ -12,7 +12,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-12.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: ec98da9 docs(parity): finalize oracle contract docs (progress/activity commit pending)
+- Commit: ec98da9 docs(parity): finalize oracle contract docs; 29eb725 docs(progress): record us-012 outcome
 - Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after the story commit (for example `MANIFEST.in`, `docs/api/pipeline_ported.html`, `docs/function_reference.md`, `pyproject.toml`, `pystamps/pipeline/ported.py`, `tests/test_stage6_ported.py`, `dist/`, and `target/`)
 - Verification:
   - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_standalone_validation_contract.py tests/test_parity_contract.py -q` -> PASS
