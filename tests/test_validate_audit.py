@@ -542,6 +542,61 @@ def test_build_run_copy_prefers_stage5_when_run_full_gate_seed_has_stage1_artifa
     assert not (run_root / "pm2.mat").exists()
 
 
+def test_build_run_copy_uses_manifest_stage7_small_baseline_profile(monkeypatch, tmp_path: Path) -> None:
+    module = _load_validate_audit_module()
+    inputs_root = tmp_path / "inputs_and_outputs"
+    dataset = inputs_root / "InSAR_dataset_small_baseline_stage7diag"
+    dataset.mkdir(parents=True)
+    (dataset / "patch.list").write_text("", encoding="utf-8")
+    for filename in ("ps2.mat", "phuw2.mat", "ifgstd2.mat", "parms.mat", "scla2.mat", "scla_smooth2.mat"):
+        (dataset / filename).write_text("stub", encoding="utf-8")
+
+    contract = {
+        "audited_workflow_manifest": {
+            "workflow_targets": [
+                {
+                    "id": "small_baseline_diagnostic",
+                    "local_dataset_path": "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag",
+                    "run_seed_path": "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag",
+                    "workflow_profile": "small_baseline",
+                    "audit_start_step": 7,
+                    "audit_end_step": 7,
+                }
+            ]
+        }
+    }
+
+    monkeypatch.setattr(module, "_resolve_contract", lambda: contract)
+    monkeypatch.setattr(module, "_inputs_root", lambda: inputs_root)
+    monkeypatch.setattr(module, "_copy_dataset", lambda src, dst: shutil.copytree(src, dst))
+    captured: dict[str, object] = {}
+
+    def fake_run_pipeline(context):
+        captured["dataset_root"] = context.dataset_root
+        captured["start_step"] = context.start_step
+        captured["end_step"] = context.end_step
+        captured["workflow_profile"] = context.workflow_profile
+        return SimpleNamespace(failures=[])
+
+    monkeypatch.setattr(module, "run_pipeline", fake_run_pipeline)
+
+    run_root, generation = module._build_run_copy(dataset, "20260422_150000")
+
+    assert run_root.name == "InSAR_dataset_small_baseline_stage7diag_stage7_7"
+    assert generation["start_step"] == 7
+    assert generation["end_step"] == 7
+    assert generation["workflow_profile"] == "small_baseline"
+    assert generation["seed_name"] == "InSAR_dataset_small_baseline_stage7diag"
+    assert generation["clean_patterns"] == ["scla2.mat", "scla_smooth2.mat"]
+    assert captured["dataset_root"] == run_root
+    assert captured["start_step"] == 7
+    assert captured["end_step"] == 7
+    assert captured["workflow_profile"] == "small_baseline"
+    assert (run_root / "phuw2.mat").exists()
+    assert not (run_root / "scla2.mat").exists()
+    assert not (run_root / "scla_smooth2.mat").exists()
+
+
 def test_align_run_copy_replaces_hardlinked_patch_list(monkeypatch, tmp_path: Path) -> None:
     module = _load_validate_audit_module()
     dataset = tmp_path / "dataset"

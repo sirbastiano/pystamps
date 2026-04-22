@@ -84,8 +84,11 @@ STAGE68_VERIFY_PATTERNS: tuple[str, ...] = STAGE6_VERIFY_PATTERNS + (
     "scla2.mat",
     "scla_smooth2.mat",
     "mean_v.mat",
-    "mv2.mat",
     "uw_space_time.mat",
+)
+STAGE7_VERIFY_PATTERNS: tuple[str, ...] = (
+    "scla2.mat",
+    "scla_smooth2.mat",
 )
 
 STAGE25_CLEAN_PATTERNS = STAGE25_VERIFY_PATTERNS
@@ -103,9 +106,9 @@ STAGE78_VERIFY_PATTERNS: tuple[str, ...] = (
     "scla2.mat",
     "scla_smooth2.mat",
     "mean_v.mat",
-    "mv2.mat",
     "uw_space_time.mat",
 )
+STAGE7_CLEAN_PATTERNS = STAGE7_VERIFY_PATTERNS
 STAGE78_CLEAN_PATTERNS = STAGE78_VERIFY_PATTERNS
 FULL_VERIFY_PATTERNS = STAGE1_VERIFY_PATTERNS + STAGE25_VERIFY_PATTERNS + STAGE68_VERIFY_PATTERNS
 
@@ -145,6 +148,13 @@ REQUIRED_WORKFLOWS: dict[str, dict[str, Any]] = {
         "end_step": 8,
         "verify_patterns": list(STAGE68_VERIFY_PATTERNS),
     },
+    "stage7_only": {
+        "kind": "dataset_workflow",
+        "audit_name_suffix": "stage7_only",
+        "start_step": 7,
+        "end_step": 7,
+        "verify_patterns": list(STAGE7_VERIFY_PATTERNS),
+    },
     "full_validation": {
         "kind": "campaign",
         "driver": SUPPORTED_AUDIT_ENTRYPOINT,
@@ -164,6 +174,7 @@ REQUIRED_WORKFLOWS: dict[str, dict[str, Any]] = {
             "stage4_only",
             "stage2_5",
             "stage6_8",
+            "stage7_only",
         ],
     },
     "pytest_smoke": {

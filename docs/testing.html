@@ -43,7 +43,7 @@ uv run --with twine python -m twine check dist/*</code></pre>
       <h2>Coverage</h2>
       <p>Validation starts with <span class="code-inline">uv run pytest -q</span>, <span class="code-inline">uv run --with build python -m build --sdist --wheel</span>, and <span class="code-inline">uv run --with twine python -m twine check dist/*</span>, then moves to parity-audit validation in <a href="verification.html">Verification</a>.</p>
       <p>For PyPI wheel releases, use <span class="code-inline">uv run --with cibuildwheel python -m cibuildwheel --platform ... --output-dir dist</span> on the Linux, macOS, and Windows release hosts.</p>
-      <p>For parity workflows, do not guess a Makefile, CI wrapper, or reduced audit dataset list. Use the documented dataset pair, the generated <span class="code-inline">latest_audit.json</span>, and the explicit verify command shape.</p>
+      <p>For parity workflows, do not guess a Makefile, CI wrapper, or reduced audit dataset list. Use the documented audited dataset set, the generated <span class="code-inline">latest_audit.json</span>, and the explicit verify command shape.</p>
       <div class="callout info">In-code assertions and explicit exceptions define many behavior guarantees where test coverage is expected to assert failure conditions.</div>
     </section>
 

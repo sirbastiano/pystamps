@@ -12,13 +12,17 @@ from typing import Any
 from pystamps.config import RunConfig, load_config
 from pystamps.parity_contract import (
     STAGE1_VERIFY_PATTERNS,
+    STAGE2_CLEAN_PATTERNS,
     STAGE2_VERIFY_PATTERNS,
+    STAGE3_CLEAN_PATTERNS,
     STAGE3_VERIFY_PATTERNS,
     STAGE4_CLEAN_PATTERNS,
     STAGE4_VERIFY_PATTERNS,
     STAGE25_CLEAN_PATTERNS,
     STAGE68_CLEAN_PATTERNS,
     STAGE28_CLEAN_PATTERNS,
+    STAGE7_CLEAN_PATTERNS,
+    STAGE78_CLEAN_PATTERNS,
     FULL_CLEAN_PATTERNS,
     build_parity_contract,
 )
@@ -71,6 +75,64 @@ def _now_utc() -> str:
 
 def _resolve_contract() -> dict[str, Any]:
     return build_parity_contract(_inputs_root())
+
+
+def _workflow_targets(contract: dict[str, Any]) -> list[dict[str, Any]]:
+    manifest = contract.get("audited_workflow_manifest", {})
+    return list(manifest.get("workflow_targets", []))
+
+
+def _workflow_target_for_dataset(dataset_root: Path, contract: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    active_contract = contract or _resolve_contract()
+    repo_root = _repo_root()
+    dataset_path = dataset_root.expanduser().resolve()
+    try:
+        relative = str(dataset_path.relative_to(repo_root)).replace("\\", "/")
+    except ValueError:
+        relative = None
+
+    for target in _workflow_targets(active_contract):
+        local_dataset_path = target.get("local_dataset_path")
+        if not local_dataset_path:
+            continue
+        candidate = str(local_dataset_path)
+        if relative is not None and candidate == relative:
+            return target
+        if Path(candidate).name == dataset_path.name:
+            return target
+    return None
+
+
+def _target_seed_root(target: dict[str, Any] | None) -> Path | None:
+    if not target:
+        return None
+    run_seed_path = target.get("run_seed_path")
+    if not run_seed_path:
+        return None
+    seed_path = Path(str(run_seed_path)).expanduser()
+    if not seed_path.is_absolute():
+        seed_path = _repo_root() / seed_path
+    return seed_path.resolve() if seed_path.exists() else None
+
+
+def _clean_patterns_for_stage_range(start_step: int, end_step: int) -> tuple[str, ...]:
+    mapping: dict[tuple[int, int], tuple[str, ...]] = {
+        (1, 8): FULL_CLEAN_PATTERNS,
+        (2, 2): STAGE2_CLEAN_PATTERNS,
+        (3, 3): STAGE3_CLEAN_PATTERNS,
+        (4, 4): STAGE4_CLEAN_PATTERNS,
+        (2, 5): STAGE25_CLEAN_PATTERNS,
+        (2, 8): STAGE28_CLEAN_PATTERNS,
+        (4, 8): _stage48_clean_patterns(),
+        (5, 8): _stage58_clean_patterns(),
+        (6, 8): STAGE68_CLEAN_PATTERNS,
+        (7, 7): STAGE7_CLEAN_PATTERNS,
+        (7, 8): STAGE78_CLEAN_PATTERNS,
+    }
+    try:
+        return mapping[(int(start_step), int(end_step))]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported audit stage window {start_step}->{end_step}") from exc
 
 
 def _resolve_datasets(args: argparse.Namespace, contract: dict[str, Any]) -> tuple[list[Path], list[str], list[str]]:
@@ -187,6 +249,10 @@ def _stage58_clean_patterns() -> tuple[str, ...]:
 
 
 def _seed_root_for_dataset(dataset_root: Path) -> Path:
+    target = _workflow_target_for_dataset(dataset_root)
+    target_seed = _target_seed_root(target)
+    if target_seed is not None:
+        return target_seed
     if dataset_root.name == "InSAR_dataset_test":
         explicit = _repo_root() / "inputs_and_outputs" / "RUN_FULL_GATE_1e10"
         if explicit.exists():
@@ -194,15 +260,26 @@ def _seed_root_for_dataset(dataset_root: Path) -> Path:
     return dataset_root.resolve()
 
 
-def _run_profile(dataset_root: Path) -> tuple[Path, int, int, tuple[str, ...], str]:
+def _run_profile(dataset_root: Path) -> tuple[Path, int, int, tuple[str, ...], str, str]:
+    target = _workflow_target_for_dataset(dataset_root)
+    if target is not None and target.get("audit_start_step") is not None and target.get("audit_end_step") is not None:
+        seed_root = _seed_root_for_dataset(dataset_root)
+        start_step = int(target["audit_start_step"])
+        end_step = int(target["audit_end_step"])
+        clean_patterns = _clean_patterns_for_stage_range(start_step, end_step)
+        workflow_profile = str(target.get("workflow_profile") or "default")
+        return seed_root, start_step, end_step, clean_patterns, seed_root.name, workflow_profile
+
     seed_root = _seed_root_for_dataset(dataset_root)
     if seed_root.name == "RUN_FULL_GATE_1e10":
         if _has_stage1_artifacts(seed_root):
-            return seed_root, 5, 8, _stage58_clean_patterns(), "RUN_FULL_GATE_1e10"
-        return seed_root, 4, 8, _stage48_clean_patterns(), "RUN_FULL_GATE_1e10"
+            return seed_root, 5, 8, _stage58_clean_patterns(), "RUN_FULL_GATE_1e10", "legacy_post"
+        return seed_root, 4, 8, _stage48_clean_patterns(), "RUN_FULL_GATE_1e10", "legacy_post"
     if _has_stage1_artifacts(dataset_root):
-        return seed_root, 2, 8, STAGE28_CLEAN_PATTERNS, dataset_root.name
-    return seed_root, 1, 8, FULL_CLEAN_PATTERNS, dataset_root.name
+        workflow_profile = str(target.get("workflow_profile") or "default") if target is not None else "default"
+        return seed_root, 2, 8, STAGE28_CLEAN_PATTERNS, dataset_root.name, workflow_profile
+    workflow_profile = str(target.get("workflow_profile") or "default") if target is not None else "default"
+    return seed_root, 1, 8, FULL_CLEAN_PATTERNS, dataset_root.name, workflow_profile
 
 
 def _build_run_copy(
@@ -210,11 +287,10 @@ def _build_run_copy(
     audit_stamp: str,
     run_config: RunConfig | None = None,
 ) -> tuple[Path, dict[str, Any]]:
-    seed_root, start_step, end_step, clean_patterns, seed_name = _run_profile(dataset_root)
-    workflow_profile = "legacy_post" if seed_name == "RUN_FULL_GATE_1e10" else "default"
+    seed_root, start_step, end_step, clean_patterns, seed_name, workflow_profile = _run_profile(dataset_root)
     validation_dir = _validation_runs_root() / audit_stamp
     validation_dir.mkdir(parents=True, exist_ok=True)
-    run_root = validation_dir / f"{dataset_root.name}_stage{start_step}_8"
+    run_root = validation_dir / f"{dataset_root.name}_stage{start_step}_{end_step}"
     _copy_dataset(seed_root, run_root)
     _align_run_copy_with_dataset(run_root, dataset_root, workflow_profile)
     _clean_outputs(run_root, clean_patterns)
@@ -274,6 +350,14 @@ def _latest_workflow_run(dataset_name: str, suffixes: tuple[str, ...]) -> Path |
 def _resolve_required_run_root(dataset_root: Path) -> Path | None:
     dataset_name = dataset_root.name
     repo_root = _repo_root()
+
+    target = _workflow_target_for_dataset(dataset_root)
+    target_seed = _target_seed_root(target)
+    if target_seed is not None and (
+        target.get("audit_start_step") is not None
+        or str(target.get("run_seed_path")) != str(target.get("local_dataset_path"))
+    ):
+        return target_seed
 
     explicit_run_roots = {
         "InSAR_dataset_test": repo_root / "inputs_and_outputs" / "RUN_FULL_GATE_1e10",

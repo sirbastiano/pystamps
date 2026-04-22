@@ -52,9 +52,10 @@ uv run --with build python -m build --sdist --wheel
 uv run --with twine python -m twine check dist/*
 ```
 
-The local parity datasets under `inputs_and_outputs/InSAR_dataset_test_stage8diag` and
-`inputs_and_outputs/InSAR_dataset_test` are optional repo assets. Keep the fresh-clone
-validation surface separate from parity workflows that need those optional repo assets.
+The local parity datasets under `inputs_and_outputs/InSAR_dataset_test_stage8diag`,
+`inputs_and_outputs/InSAR_dataset_test`, `inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag`,
+and `inputs_and_outputs/InSAR_dataset_small_baseline_stage7` are optional repo assets.
+Keep the fresh-clone validation surface separate from parity workflows that need those optional repo assets.
 
 ## Repo entrypoints
 
@@ -76,6 +77,10 @@ make benchmark
 - Dry-run and execute targeted stage ranges (`run`)
 - Validate outputs with explicit comparison flows (`verify`)
 - Track compatibility/replay mode for controlled reproducibility
+
+For merged post-processing, pySTAMPS now keeps the StaMPS stage boundary aligned with the legacy single-master flow: stage 7 writes both the raw `scla2.mat` result and the smoothed `scla_smooth2.mat` envelope, while stage 8 only performs the final space-time filtering and writes `uw_space_time.mat`.
+
+The internal parity-audit regeneration path for `RUN_FULL_GATE_1e10` also mirrors the legacy merged-post refinement loop `6 -> 7 -> 6 -> 7 -> 8`. This is used for audit reproducibility; the normal CLI stage range model stays unchanged.
 
 ## Read the full docs
 

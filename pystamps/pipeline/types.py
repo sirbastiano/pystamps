@@ -8,6 +8,7 @@ from pystamps.config import RunConfig
 
 
 StageScope = Literal["patch", "merged"]
+WorkflowProfile = Literal["default", "legacy_post", "small_baseline"]
 
 
 @dataclass(slots=True)
@@ -17,6 +18,7 @@ class PipelineContext:
     start_step: int
     end_step: int
     dry_run: bool = False
+    workflow_profile: WorkflowProfile = "default"
 
 
 @dataclass(slots=True)

@@ -1,6 +1,8 @@
 # Activity Log
 
 ## Run Summary
+- 2026-04-22 14:11:22 | run=20260421-123533-4172008 | iter=9 | mode=build | story=US-009 | duration=13099s | status=success
+- 2026-04-22 10:32:59 | run=20260421-123533-4172008 | iter=8 | mode=build | story=US-008 | duration=12415s | status=success
 - 2026-04-22 07:05:59 | run=20260421-123533-4172008 | iter=7 | mode=build | story=US-007 | duration=10875s | status=success
 - 2026-04-22 04:04:37 | run=20260421-123533-4172008 | iter=6 | mode=build | story=US-006 | duration=4412s | status=success
 - 2026-04-22 02:50:59 | run=20260421-123533-4172008 | iter=5 | mode=build | story=US-005 | duration=10473s | status=success
@@ -184,3 +186,16 @@
 [2026-04-22 09:53:22] US-008 verification: running single-dataset validate_audit replay to confirm fresh stage5_8 parity before full gates
 [2026-04-22 10:14:58] US-008 verification: rerunning parity bug loop after stage6 sequencing and interpolation fixes
 [2026-04-22 10:31:50] US-008 progress updated: recorded stage6 fix, fresh stage5_8 evidence, pytest passes, and the stalled parity wrapper
+[2026-04-22 10:32:58] ITERATION 8 end (duration=12415s)
+[2026-04-22 10:33:02] ITERATION 9 start (mode=build story=US-009)
+[2026-04-22 10:36:32] US-009: reviewed guardrails/errors/PRD and started stage7/8 code audit
+[2026-04-22 10:51:30] US-009: validated MATLAB stage ownership and audited current legacy-post refinement loop evidence
+[2026-04-22 11:40:30] US-009: updated stage7/stage8 ownership code paths, contracts, tests, and docs to match wrapper-backed sequencing
+[2026-04-22 13:25:53] US-009: added stage6 guard to ignore incompatible carried-over scla_smooth2 seed payloads before rerunning stage7/8 parity gates
+[2026-04-22 14:10:52] US-009: code and pytest gates passed, but validate_audit/parity_bug_loop did not finish in-session after stage6 incompatible-scla guard fix; stopping validators without commit
+[2026-04-22 14:11:20] ITERATION 9 end (duration=13099s)
+[2026-04-22 14:11:25] ITERATION 10 start (mode=build story=US-010)
+[2026-04-22 14:50:37] US-010: implementing manifest-driven small-baseline stage7 audit support after confirming no committed audited small-baseline datasets exist
+[2026-04-22 14:56:20] US-010: manifest, audit tooling, and compact small-baseline stage7 datasets updated; starting verification
+[2026-04-22 15:22:38] US-010: small-baseline stage7 audit and parity loop passed; starting global quality gates
+[2026-04-22 16:29:01] US-010: verification completed for small-baseline audit surfaces; recording guardrails and preparing progress + commit

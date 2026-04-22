@@ -1,0 +1,93 @@
+{
+  "manifest_version": 1,
+  "purpose": "Freeze the repo-tracked workflow coverage required before parity can be called done.",
+  "supported_audit": {
+    "entrypoint": "scripts/validate_audit.py",
+    "output_artifact": "inputs_and_outputs/validation_runs/latest_audit.json",
+    "required_workflow_names": [
+      "full_validation"
+    ],
+    "required_dataset_paths": [
+      "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+      "inputs_and_outputs/InSAR_dataset_test",
+      "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag",
+      "inputs_and_outputs/InSAR_dataset_small_baseline_stage7"
+    ]
+  },
+  "done_gate_rule": "Full oracle-backed parity requires every required_for_done workflow target below to be present and passing. Missing small-baseline coverage keeps the overall parity gate open even if the current single-master audit pair passes.",
+  "workflow_targets": [
+    {
+      "id": "single_master_diagnostic",
+      "kind": "single_master",
+      "required_for_done": true,
+      "status": "present",
+      "local_dataset_path": "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+      "golden_dataset_path": "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+      "run_seed_path": "inputs_and_outputs/InSAR_dataset_test_stage8diag",
+      "comparison_mode": "fresh_run_copy_vs_golden_dataset",
+      "workflow_profile": "default",
+      "supports_validate_audit": true,
+      "notes": "Repo-tracked compact single-master audit dataset."
+    },
+    {
+      "id": "single_master_full",
+      "kind": "single_master",
+      "required_for_done": true,
+      "status": "present",
+      "local_dataset_path": "inputs_and_outputs/InSAR_dataset_test",
+      "golden_dataset_path": "inputs_and_outputs/InSAR_dataset_test",
+      "run_seed_path": "inputs_and_outputs/RUN_FULL_GATE_1e10",
+      "comparison_mode": "fresh_run_copy_vs_golden_dataset",
+      "workflow_profile": "legacy_post",
+      "supports_validate_audit": true,
+      "notes": "Explicitly audited against the maintained run seed inputs_and_outputs/RUN_FULL_GATE_1e10 before comparison back to inputs_and_outputs/InSAR_dataset_test."
+    },
+    {
+      "id": "small_baseline_diagnostic",
+      "kind": "small_baseline",
+      "required_for_done": true,
+      "status": "present",
+      "local_dataset_path": "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag",
+      "golden_dataset_path": "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag",
+      "run_seed_path": "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag",
+      "comparison_mode": "fresh_run_copy_vs_golden_dataset",
+      "workflow_profile": "small_baseline",
+      "supports_validate_audit": true,
+      "audit_start_step": 7,
+      "audit_end_step": 7,
+      "oracle_reference_paths": [
+        "StaMPS/matlab/ps_calc_scla.m",
+        "StaMPS/matlab/ps_smooth_scla.m",
+        "StaMPS/Manual/StaMPS_Manual.tex"
+      ],
+      "notes": "Repo-tracked compact small-baseline stage-7 audit dataset with explicit bp2.mat input, pinned to the StaMPS stage-7 MATLAB/manual sources recorded in the oracle contract."
+    },
+    {
+      "id": "small_baseline_full",
+      "kind": "small_baseline",
+      "required_for_done": true,
+      "status": "present",
+      "local_dataset_path": "inputs_and_outputs/InSAR_dataset_small_baseline_stage7",
+      "golden_dataset_path": "inputs_and_outputs/InSAR_dataset_small_baseline_stage7",
+      "run_seed_path": "inputs_and_outputs/InSAR_dataset_small_baseline_stage7",
+      "comparison_mode": "fresh_run_copy_vs_golden_dataset",
+      "workflow_profile": "small_baseline",
+      "supports_validate_audit": true,
+      "audit_start_step": 7,
+      "audit_end_step": 7,
+      "oracle_reference_paths": [
+        "StaMPS/matlab/ps_calc_scla.m",
+        "StaMPS/matlab/ps_smooth_scla.m",
+        "StaMPS/Manual/StaMPS_Manual.tex"
+      ],
+      "notes": "Repo-tracked small-baseline stage-7 audit dataset that rebuilds bp2.mat from ps2.bperp before matching the pinned StaMPS stage-7 MATLAB/manual sources recorded in the oracle contract."
+    }
+  ],
+  "supporting_repo_datasets": [
+    {
+      "local_dataset_path": "inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+      "status": "present_not_done_gate",
+      "notes": "Notebook/reference dataset only; not part of the done gate."
+    }
+  ]
+}

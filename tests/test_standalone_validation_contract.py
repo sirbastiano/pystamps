@@ -21,6 +21,8 @@ def test_readme_documents_fresh_clone_validation_separately() -> None:
     assert "platform wheels for the Rust extension" in README
     assert "uv run python scripts/validate_audit.py \\\n  --datasets inputs_and_outputs/InSAR_dataset_test" not in README
     assert "inputs_and_outputs/InSAR_dataset_test_stage8diag" in README
+    assert "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag" in README
+    assert "inputs_and_outputs/InSAR_dataset_small_baseline_stage7" in README
     assert "optional repo assets" in README
 
 
@@ -35,7 +37,12 @@ def test_readme_and_makefile_expose_the_same_local_entrypoints() -> None:
 
     assert ".PHONY: setup test test-impl build twine-check audit verify benchmark" in MAKEFILE
     assert "PARITY_ENV = OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=." in MAKEFILE
-    assert "AUDIT_DATASETS = inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test" in MAKEFILE
+    assert (
+        "AUDIT_DATASETS = inputs_and_outputs/InSAR_dataset_test_stage8diag "
+        "inputs_and_outputs/InSAR_dataset_test "
+        "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag "
+        "inputs_and_outputs/InSAR_dataset_small_baseline_stage7"
+    ) in MAKEFILE
     assert "AUDIT_OUTPUT = inputs_and_outputs/validation_runs/latest_audit.json" in MAKEFILE
     assert "VERIFY_RUN = inputs_and_outputs/RUN_FULL_GATE_1e10" in MAKEFILE
     assert "VERIFY_GOLDEN = inputs_and_outputs/InSAR_dataset_test" in MAKEFILE
@@ -56,6 +63,8 @@ def test_release_docs_reference_the_supported_parity_gate() -> None:
     assert "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=." in RELEASE_DOC
     assert "inputs_and_outputs/InSAR_dataset_test_stage8diag" in RELEASE_DOC
     assert "inputs_and_outputs/InSAR_dataset_test" in RELEASE_DOC
+    assert "inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag" in RELEASE_DOC
+    assert "inputs_and_outputs/InSAR_dataset_small_baseline_stage7" in RELEASE_DOC
     assert "--output inputs_and_outputs/validation_runs/latest_audit.json" in RELEASE_DOC
     assert "run_root" in RELEASE_DOC
     assert "manual restart" in RELEASE_DOC
@@ -67,6 +76,7 @@ def test_release_docs_reference_the_supported_parity_gate() -> None:
 def test_testing_docs_call_out_optional_dataset_workflows() -> None:
     assert "skip cleanly when the local validation datasets are absent" in TESTING_DOC
     assert "do not guess a Makefile, CI wrapper, or reduced audit dataset list" in TESTING_DOC
+    assert "documented audited dataset set" in TESTING_DOC
     assert "uv run --with build python -m build --sdist --wheel" in TESTING_DOC
     assert "uv run --with twine python -m twine check dist/*" in TESTING_DOC
     assert "uv run --with cibuildwheel python -m cibuildwheel --platform" in TESTING_DOC
@@ -85,6 +95,8 @@ def test_manifest_excludes_generated_release_artifacts() -> None:
 def test_packaging_contract_prefers_rust_sources_and_excludes_cython_package_data() -> None:
     assert "include Cargo.toml" in MANIFEST
     assert "recursive-include src *.rs" in MANIFEST
+    assert "recursive-include pystamps/data *.json" in MANIFEST
     assert "recursive-include pystamps *.pyx" not in MANIFEST
     assert "include-package-data = false" in PYPROJECT
+    assert '[tool.setuptools.package-data]\npystamps = ["data/*.json"]' in PYPROJECT
     assert "setuptools-rust>=1.10" in PYPROJECT

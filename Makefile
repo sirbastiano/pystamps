@@ -1,11 +1,11 @@
 PARITY_ENV = OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=.
-AUDIT_DATASETS = inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test
+AUDIT_DATASETS = inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag inputs_and_outputs/InSAR_dataset_small_baseline_stage7
 AUDIT_OUTPUT = inputs_and_outputs/validation_runs/latest_audit.json
 VERIFY_RUN = inputs_and_outputs/RUN_FULL_GATE_1e10
 VERIFY_GOLDEN = inputs_and_outputs/InSAR_dataset_test
 BENCHMARK_DATASET = inputs_and_outputs/InSAR_dataset_test_stage8diag
 
-.PHONY: setup test test-impl build twine-check audit verify benchmark
+.PHONY: setup test test-impl build twine-check audit verify benchmark parity-loop
 
 setup:
 	uv sync
@@ -35,3 +35,9 @@ benchmark:
 		--dataset $(BENCHMARK_DATASET) \
 		--start-step 1 --end-step 8 \
 		--repeat 3 --warmup 1
+
+parity-loop:
+	$(PARITY_ENV) uv run python scripts/parity_bug_loop.py \
+		--datasets inputs_and_outputs/InSAR_dataset_test \
+		--allow-subset \
+		--output inputs_and_outputs/validation_runs/latest_parity_loop.json

@@ -36,6 +36,8 @@
        --datasets \
          inputs_and_outputs/InSAR_dataset_test_stage8diag \
          inputs_and_outputs/InSAR_dataset_test \
+         inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag \
+         inputs_and_outputs/InSAR_dataset_small_baseline_stage7 \
        --output inputs_and_outputs/validation_runs/latest_audit.json
    ```
 

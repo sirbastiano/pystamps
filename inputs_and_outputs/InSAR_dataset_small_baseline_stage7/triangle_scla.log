@@ -1,0 +1,19 @@
+Opening scla.1.node.
+Constructing Delaunay triangulation by divide-and-conquer method.
+Delaunay milliseconds:  0
+
+Writing scla.2.node.
+Writing scla.2.ele.
+Writing scla.2.edge.
+
+Output milliseconds:  23
+Total running milliseconds:  26
+
+Statistics:
+
+  Input vertices: 4
+
+  Mesh vertices: 4
+  Mesh triangles: 2
+  Mesh edges: 5
+  Mesh exterior boundary edges: 4
