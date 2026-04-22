@@ -1797,6 +1797,54 @@ def _load_triangle_edges(edge_path: Path, n_nodes: int) -> np.ndarray:
     return edges.astype(np.int64)
 
 
+def _resolve_stage4_edges(
+    patch_dir: Path,
+    xy_weed: np.ndarray,
+    *,
+    strict_reference: bool,
+) -> tuple[np.ndarray, str]:
+    coords = np.asarray(xy_weed, dtype=np.float64)
+    n_ps = int(coords.shape[0])
+    if n_ps < 2:
+        return np.empty((0, 2), dtype=np.int64), "none"
+
+    pts = coords[:, 1:3]
+    triangle_exe = _maybe_resolve_external_tool("triangle")
+    if triangle_exe is not None:
+        node_path = patch_dir / "psweed.1.node"
+        with node_path.open("w", encoding="utf-8") as fid:
+            fid.write(f"{n_ps} 2 0 0\n")
+            for idx, (x_val, y_val) in enumerate(pts, start=1):
+                fid.write(f"{idx} {x_val:.12g} {y_val:.12g}\n")
+
+        try:
+            _run_external_command(
+                [triangle_exe, "-e", node_path.name],
+                cwd=patch_dir,
+                log_path=patch_dir / "triangle_weed.log",
+            )
+        except PortedStageError:
+            if strict_reference:
+                raise
+        else:
+            raw_edges = _load_triangle_edges(patch_dir / "psweed.2.edge", n_ps)
+            if raw_edges.size > 0:
+                return raw_edges, "triangle_regenerated"
+            if strict_reference:
+                raise PortedStageError(
+                    "Strict reference parity requires valid psweed.2.edge regenerated from current stage-4 nodes"
+                )
+
+        return _delaunay_edges(pts), "delaunay_fallback"
+
+    raw_edges = _load_triangle_edges(patch_dir / "psweed.2.edge", n_ps)
+    if raw_edges.size > 0:
+        return raw_edges, "triangle_file"
+    if strict_reference:
+        raise PortedStageError("Strict reference parity requires triangle or a valid psweed.2.edge file")
+    return _delaunay_edges(pts), "delaunay_fallback"
+
+
 def _resolve_scla_smooth_edges(
     dataset_root: Path,
     ps: dict[str, Any],
@@ -4711,36 +4759,33 @@ def stage4_weed_ps(
         ifg_count_used = int(ifg_index_ix.size)
 
         xy_weed = xy2[ix_weed, :]
-        edge_file = patch_dir / "psweed.2.edge"
         edge_t0 = time.perf_counter()
-        edges = _load_triangle_edges(edge_file, n_pre_noise)
-        if edges.size > 0:
-            edge_source = "triangle_file"
-        if edges.size == 0:
-            if strict_reference:
-                if debug_payload is not None:
-                    debug_payload["count_before_noise_filter"] = int(n_pre_noise)
-                    debug_payload["edge_source"] = "missing_or_invalid_triangle_file"
-                    debug_payload["edge_count"] = 0
-                    debug_payload["ifg_count_used"] = int(ifg_count_used)
-                    _stage4_checkpoint(
-                        patch_dir,
-                        debug_payload,
-                        status="failed",
-                        phase="edge_build_failed",
-                        timings={
-                            "adjacency": adjacency_dt,
-                            "zero_elevation": zero_elev_dt,
-                            "duplicate_removal": duplicate_dt,
-                            "edge_build": time.perf_counter() - edge_t0,
-                            "total": time.perf_counter() - stage4_t0,
-                        },
-                    )
-                raise PortedStageError(
-                    "Strict reference parity requires valid psweed.2.edge; Delaunay fallback is disabled"
+        try:
+            edges, edge_source = _resolve_stage4_edges(
+                patch_dir,
+                xy_weed,
+                strict_reference=strict_reference,
+            )
+        except PortedStageError:
+            if debug_payload is not None:
+                debug_payload["count_before_noise_filter"] = int(n_pre_noise)
+                debug_payload["edge_source"] = "missing_or_invalid_triangle_file"
+                debug_payload["edge_count"] = 0
+                debug_payload["ifg_count_used"] = int(ifg_count_used)
+                _stage4_checkpoint(
+                    patch_dir,
+                    debug_payload,
+                    status="failed",
+                    phase="edge_build_failed",
+                    timings={
+                        "adjacency": adjacency_dt,
+                        "zero_elevation": zero_elev_dt,
+                        "duplicate_removal": duplicate_dt,
+                        "edge_build": time.perf_counter() - edge_t0,
+                        "total": time.perf_counter() - stage4_t0,
+                    },
                 )
-            edges = _delaunay_edges(xy_weed[:, 1:3].astype(np.float64))
-            edge_source = "delaunay_fallback"
+            raise
         edge_build_dt = time.perf_counter() - edge_t0
         n_edge = edges.shape[0]
         edge_count = int(n_edge)
