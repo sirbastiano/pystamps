@@ -5,6 +5,47 @@ Started: Sat Mar 14 05:18:43 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-04-22 10:30:46 UTC] - US-008: Restore exact stage-6 unwrap and interpolation outputs
+Thread: 019db403-9251-7d70-a02e-861390dd7b00
+Run: 20260421-123533-4172008 (iteration 8)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-8.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-8.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 45274cc fix(stage6): restore unwrap replay inputs (progress/activity commit pending)
+- Post-commit status: remaining pre-existing unrelated modifications and build artifacts remain in the worktree (for example `.ralph/activity.log`, `MANIFEST.in`, `README.md`, `pyproject.toml`, `pystamps/kernels/accelerated.py`, `tests/test_stage7_ported.py`, `.build-deps/`, `dist/`, and `target/`)
+- Verification:
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage5_ported.py tests/test_validate_audit.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage6_ported.py tests/test_stage7_ported.py tests/test_stage8_ported.py tests/test_acceleration.py tests/test_validate_audit.py tests/test_cli.py -q` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. .venv/bin/python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/20260422_085150/InSAR_dataset_test_stage5_8 --golden inputs_and_outputs/InSAR_dataset_test --patterns ps2.mat ph2.mat pm2.mat --atol 1e-10 --rtol 1e-10` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. .venv/bin/python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/20260422_085150/InSAR_dataset_test_stage5_8 --golden inputs_and_outputs/InSAR_dataset_test --patterns uw_grid.mat uw_interp.mat --atol 1e-10 --rtol 1e-10` -> FAIL (`uw_grid.ph` and `uw_interp.Z` were the first fresh stage-6 mismatches before the fix)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/us008_stage6_single_audit.json` -> FAIL (bounded replay proved fresh `ifgstd2.mat` exactness and preserved `scla_smooth2.mat`, but the long stage-6 replay did not finish within the turn)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/latest_parity_loop.json` -> FAIL (wrapper stalled without writing a fresh final JSON; stale `latest_parity_loop.json` remained on disk)
+- Files changed:
+  - pystamps/parity_contract.py
+  - pystamps/pipeline/ported.py
+  - tests/test_stage5_ported.py
+  - tests/test_stage6_ported.py
+  - tests/test_validate_audit.py
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Preserved `scla_smooth2.mat` in stage-5/6 and stage-6/8 audit replays so stage 6 reuses the same smoothed SCLA corrections that vendored `ps_unwrap.m` consumes when present.
+  - Fixed the non-small-baseline `rc2` unwrap-input path to mirror MATLAB: add back `K_ps .* bperp_mat` and stop subtracting patch phase a second time when `rc2.mat` already exists.
+  - Fixed `_build_uw_interp_payload` tie handling to choose the lower-index nearest node, matching the fresh oracle tie at `Z[81, 4118]`.
+  - Updated regressions for the stage-5/6 clean-pattern contract, the rc2 unwrap-input construction, and the uw_interp equal-distance tie rule.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - Fresh merged stage-5 outputs (`ps2`, `ph2`, `pm2`, `ifgstd2`) were already exact; the live stage-6 seam started at `uw_grid.ph` / `uw_interp.Z`.
+    - The only `uw_interp.Z` drift on the fresh run was a single two-way nearest-node tie where the oracle chose the lower node index.
+    - Fresh `uw_grid.ph_in` matched the current Python formula exactly, which exposed the real mismatch as stage-6 sequencing/input construction rather than a later filter-only artifact.
+  - Gotchas encountered
+    - `validate_audit.py` creates hard-linked run copies, so stale sidecar files like `snaphu.log` and `triangle.log` can survive cleanup and should not be treated as proof that fresh `.mat` outputs were regenerated.
+    - The parity-bug-loop wrapper can stall after spawning the audit; check the live `validation_runs/<stamp>/..._stage5_8` root directly instead of trusting a stale `latest_parity_loop.json`.
+  - Useful context
+    - Vendored `StaMPS/matlab/ps_unwrap.m` was the decisive oracle for the rc2 path: it re-applies `K_ps .* bperp_mat` on the rc path, normalizes, then subtracts `scla_smooth2` terms when that file exists.
+---
 ## [2026-04-22 07:02 UTC] - US-007: Restore exact merged stage-5 outputs after upstream patch corrections
 Thread: 019db35d-4380-7222-b554-902b503e14fc
 Run: 20260421-123533-4172008 (iteration 7)
