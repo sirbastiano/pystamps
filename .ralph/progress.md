@@ -5,6 +5,46 @@ Started: Sat Mar 14 05:18:43 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-04-22 20:18 UTC] - US-012: Remove speculative parity changes and document the final oracle-backed contract
+Thread:
+Run: 20260421-123533-4172008 (iteration 12)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-12.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-12.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: ec98da9 docs(parity): finalize oracle contract docs (progress/activity commit pending)
+- Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after the story commit (for example `MANIFEST.in`, `docs/api/pipeline_ported.html`, `docs/function_reference.md`, `pyproject.toml`, `pystamps/pipeline/ported.py`, `tests/test_stage6_ported.py`, `dist/`, and `target/`)
+- Verification:
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_standalone_validation_contract.py tests/test_parity_contract.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py -q` -> PASS
+  - Command: `TMPDIR=$PWD/.tmp_test_us012 PYTHONPATH=. .venv/bin/pytest tests/test_stage5_ported.py tests/test_validate_audit.py -q` -> PASS
+  - Command: `TMPDIR=$PWD/.tmp_test_us012 PYTHONPATH=. .venv/bin/pytest tests/test_stage6_ported.py tests/test_stage7_ported.py tests/test_stage8_ported.py tests/test_acceleration.py tests/test_validate_audit.py tests/test_cli.py -q` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL (the prompt’s older two-dataset command is stale after US-010; `latest_audit.json` was rewritten immediately with `missing_datasets` for the two small-baseline done-gate targets and `failed_workflows=['full_validation']`)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/latest_parity_loop.json` -> FAIL (stopped after about 20 minutes; the fresh run root `inputs_and_outputs/validation_runs/20260422_194459/InSAR_dataset_test_stage5_8` only reached merged stage-5 files like `ph2.mat`/`pm2.mat`, never wrote a stamped parity-loop audit JSON, and left the tracked `latest_parity_loop.json` stale)
+  - Command: `TMPDIR=$PWD/.tmp_test_us012 make audit` -> FAIL (stopped after about 11 minutes; the fresh run root `inputs_and_outputs/validation_runs/20260422_200529/InSAR_dataset_test_stage8diag_stage2_8` never wrote `pm1.mat`/`select1.mat`/`weed1.mat`, and `inputs_and_outputs/validation_runs/latest_audit.json` remained at the earlier stale-command timestamp)
+- Files changed:
+  - README.md
+  - docs/verification.html
+  - parity.md
+  - tests/test_standalone_validation_contract.py
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Replaced the stale blocked-status note in `parity.md` with the final oracle-backed contract, including workflow ownership, authoritative audit commands, explicit verify flow, and the `cpp_wrapper -> matlab_source -> manual_references` precedence rule.
+  - Updated `docs/verification.html` and `README.md` so the user-facing docs now point to `make audit` / `scripts/validate_audit.py` as the supported audit surface, explain that the required dataset set comes from `pystamps/data/audited_workflow_manifest.json`, and describe the parity-loop/oracle-precedence contract without stale two-dataset examples.
+  - Added regression coverage in `tests/test_standalone_validation_contract.py` so the final docs contract is enforced and the old blocked-status/two-dataset wording does not silently return.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - `parity.md` is the cleanest place to keep the final oracle-backed ownership contract, while `docs/verification.html` should stay focused on the executable audit and verify flow.
+    - The doc contract is now testable with simple repository text assertions, which is enough to prevent stale command drift without touching runtime code.
+  - Gotchas encountered
+    - The prompt’s explicit two-dataset `validate_audit.py` command is now intentionally invalid because the done gate requires the two small-baseline datasets added in US-010.
+    - The single-master long validators remain the dominant blocker: the bounded parity-loop and full-audit runs both stalled in fresh validation roots before writing their expected JSON outputs.
+  - Useful context
+    - The bounded parity-loop root from this run is `inputs_and_outputs/validation_runs/20260422_194459/InSAR_dataset_test_stage5_8`.
+    - The bounded full-audit root from this run is `inputs_and_outputs/validation_runs/20260422_200529/InSAR_dataset_test_stage8diag_stage2_8`.
+    - The story commit for the docs/test cleanup is `ec98da9 docs(parity): finalize oracle contract docs`.
+---
 ## [2026-04-22 10:30:46 UTC] - US-008: Restore exact stage-6 unwrap and interpolation outputs
 Thread: 019db403-9251-7d70-a02e-861390dd7b00
 Run: 20260421-123533-4172008 (iteration 8)
