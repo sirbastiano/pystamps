@@ -258,6 +258,50 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
     - Carrying structured failure metadata in `FileComparison` avoids brittle message scraping and keeps the saved trace payload stable across audit and loop tooling.
   - Gotchas encountered
     - The required dataset parity-loop gate can stay compute-bound in stage-2 regeneration for well over 40 minutes on `inputs_and_outputs/InSAR_dataset_test`; it is not a quick smoke check.
+---
+## [2026-04-22 19:05:45 UTC] - US-011: Make the full audit and parity loop pass for all audited workflows
+Thread:
+Run: 20260421-123533-4172008 (iteration 11)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-11.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-11.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 8820d2e feat(validation): reuse matching audit in parity loop (progress/activity commit pending)
+- Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after the implementation commit (for example `MANIFEST.in`, `docs/api/pipeline_ported.html`, `pyproject.toml`, `pystamps/pipeline/ported.py`, `tests/test_stage6_ported.py`, `dist/`, and `target/`)
+- Verification:
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py -q` -> PASS
+  - Command: `TMPDIR=$PWD/.tmp_test PYTHONPATH=. .venv/bin/pytest tests/test_stage5_ported.py tests/test_validate_audit.py -q` -> PASS
+  - Command: `TMPDIR=$PWD/.tmp_test PYTHONPATH=. .venv/bin/pytest tests/test_stage6_ported.py tests/test_stage7_ported.py tests/test_stage8_ported.py tests/test_acceleration.py tests/test_validate_audit.py tests/test_cli.py -q` -> PASS
+  - Command: `TMPDIR=$PWD/.tmp_test make audit` -> FAIL (stopped after about 57 minutes; the fresh run root `inputs_and_outputs/validation_runs/20260422_180816/InSAR_dataset_test_stage8diag_stage2_8` never completed and `inputs_and_outputs/validation_runs/latest_audit.json` remained stale)
+  - Command: `TMPDIR=$PWD/.tmp_test make parity-loop` -> FAIL (not attempted because the required fresh full-audit artifact never completed; parity-loop now reuses a matching `latest_audit.json` instead of rerunning the audit)
+- Files changed:
+  - Makefile
+  - README.md
+  - pystamps/parity_contract.py
+  - scripts/parity_bug_loop.py
+  - scripts/validate_audit.py
+  - tests/test_parity_bug_loop.py
+  - tests/test_parity_contract.py
+  - tests/test_standalone_validation_contract.py
+  - tests/test_validate_audit.py
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - Added `code_state` metadata to `validate_audit.py` outputs so audit artifacts record the git commit/branch/dirty state that produced them.
+  - Added a tracked `scripts/parity_bug_loop.py` plus tests, switched the loop surface to the full audited dataset set, and made it reuse a matching `latest_audit.json` instead of forcing a second full audit.
+  - Updated the Makefile/README/testing contract so `parity-loop` now targets the manifest-driven audited dataset set and consumes the canonical audit artifact.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - Reusing a matching `latest_audit.json` removes the redundant second full-audit replay from `make parity-loop`, so future runs only need the standalone `make audit` long pole once.
+    - Generated `inputs_and_outputs/validation_runs/*` artifacts should not count as code-state drift when deciding whether an audit artifact is still reusable.
+  - Gotchas encountered
+    - Even with the parity-loop reuse fix, the standalone full `make audit` command stayed compute-bound inside the first `InSAR_dataset_test_stage8diag_stage2_8` replay for about 57 minutes and never rewrote `latest_audit.json`.
+    - The repo still contains broad unrelated tracked and untracked dirt, so implementation commits must stay scoped to this story’s files rather than using a blanket `git add -A`.
+  - Useful context
+    - The blocked fresh audit root is `inputs_and_outputs/validation_runs/20260422_180816/InSAR_dataset_test_stage8diag_stage2_8`.
+    - The implementation commit for this iteration is `8820d2e feat(validation): reuse matching audit in parity loop`.
     - The repo worktree was already broadly dirty before this run, including generated artifacts and unrelated tracked changes, so a safe story-only commit was not possible without violating the no-revert guardrail.
   - Useful context
     - The saved trace/unit-test path is validated end-to-end by the focused tests, but the two script-level global quality gates still need a full dataset run to complete before this story can be called fully verified.

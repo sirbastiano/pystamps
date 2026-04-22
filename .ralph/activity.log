@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-04-22 16:36:50 | run=20260421-123533-4172008 | iter=10 | mode=build | story=US-010 | duration=8722s | status=success
 - 2026-04-22 14:11:22 | run=20260421-123533-4172008 | iter=9 | mode=build | story=US-009 | duration=13099s | status=success
 - 2026-04-22 10:32:59 | run=20260421-123533-4172008 | iter=8 | mode=build | story=US-008 | duration=12415s | status=success
 - 2026-04-22 07:05:59 | run=20260421-123533-4172008 | iter=7 | mode=build | story=US-007 | duration=10875s | status=success
@@ -200,3 +201,9 @@
 [2026-04-22 15:22:38] US-010: small-baseline stage7 audit and parity loop passed; starting global quality gates
 [2026-04-22 16:29:01] US-010: verification completed for small-baseline audit surfaces; recording guardrails and preparing progress + commit
 [2026-04-22 16:33:50] US-010: progress log updated after commit ae70a09; finalizing run record
+[2026-04-22 16:36:08] US-010: final commits a715c19 and ae70a09 created; remaining dirty worktree is pre-existing unrelated state
+[2026-04-22 16:36:47] ITERATION 10 end (duration=8722s)
+[2026-04-22 16:36:54] ITERATION 11 start (mode=build story=US-011)
+[2026-04-22 17:19:00] US-011 implementation: added audit code-state metadata, made parity-loop default to the audited dataset manifest, and taught parity-loop to reuse a matching latest_audit.json instead of rerunning the full audit.
+[2026-04-22 17:33:41] US-011 verification: repo-wide pytest gates passed and the final-tree standalone make audit started on the full four-dataset set.
+[2026-04-22 19:05:45] US-011 verification: stopped make audit after about 57 minutes when the fresh 20260422_180816/InSAR_dataset_test_stage8diag_stage2_8 replay still had not completed and latest_audit.json remained stale.
