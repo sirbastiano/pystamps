@@ -35,6 +35,12 @@ class FileComparison:
     relative_path: str
     ok: bool
     message: str
+    failure_kind: str | None = None
+    failing_key: str | None = None
+    shape_run: tuple[int, ...] | None = None
+    shape_oracle: tuple[int, ...] | None = None
+    max_abs: float | None = None
+    matched_keys: int | None = None
 
 
 @dataclass(slots=True)
@@ -67,15 +73,33 @@ class ClassifiedFailure:
     label: str
     guidance: str
     failing_key: str | None
+    failure_kind: str | None
+    shape_run: tuple[int, ...] | None
+    shape_oracle: tuple[int, ...] | None
+    max_abs: float | None
 
 
 _KEY_PATTERN = re.compile(r"key '([^']+)'")
 
-_PATCH_STAGE34_CLASSIFICATION = FailureClassification(
-    stage_scope="stage3_4",
-    failure_class="upstream_patch_residual",
-    label="Upstream patch residual",
-    guidance="Stage-3/4 artifact still diverges; downstream stories should not modify stage-3/4 code without new trace evidence.",
+_PATCH_STAGE2_CLASSIFICATION = FailureClassification(
+    stage_scope="stage2",
+    failure_class="stage2_patch_boundary",
+    label="Stage 2 patch boundary",
+    guidance="pm1.mat diverges before later patch stages; fix stage-2 parity before changing stage-3/4 or downstream code.",
+)
+
+_PATCH_STAGE3_CLASSIFICATION = FailureClassification(
+    stage_scope="stage3",
+    failure_class="stage3_patch_boundary",
+    label="Stage 3 patch boundary",
+    guidance="select1.mat diverges before later stages; fix stage-3 parity before changing stage-4 or downstream code.",
+)
+
+_PATCH_STAGE4_CLASSIFICATION = FailureClassification(
+    stage_scope="stage4",
+    failure_class="stage4_patch_boundary",
+    label="Stage 4 patch boundary",
+    guidance="weed1.mat diverges before merged stages; fix stage-4 parity before changing stage-5/6 or stage-7/8 code.",
 )
 
 _UNWRAP_SMOOTHING_CLASSIFICATION = FailureClassification(
@@ -165,7 +189,7 @@ def _collect_numeric(payload: Any, prefix: str = "") -> dict[str, np.ndarray]:
     return out
 
 
-def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple[bool, str]:
+def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple[bool, str, dict[str, Any]]:
     run_payload = read_mat(run_mat)
     golden_payload = read_mat(golden_mat)
     rtol = float(tol.rtol)
@@ -179,14 +203,23 @@ def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple
 
     missing = sorted(golden_keys - run_keys)
     if missing:
-        return False, f"Missing numeric keys in run: {', '.join(missing[:8])}"
+        return False, f"Missing numeric keys in run: {', '.join(missing[:8])}", {"failure_kind": "missing_numeric_keys"}
 
     for key in sorted(golden_keys):
         lhs = run_numeric[key]
         rhs = golden_numeric[key]
 
         if lhs.shape != rhs.shape:
-            return False, f"Shape mismatch for key '{key}': {lhs.shape} != {rhs.shape}"
+            return (
+                False,
+                f"Shape mismatch for key '{key}': {lhs.shape} != {rhs.shape}",
+                {
+                    "failure_kind": "shape_mismatch",
+                    "failing_key": key,
+                    "shape_run": tuple(int(v) for v in lhs.shape),
+                    "shape_oracle": tuple(int(v) for v in rhs.shape),
+                },
+            )
 
         wrap_key = False
         if tol.wrap_equivalence:
@@ -209,7 +242,17 @@ def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple
             ok_wrap = np.all(close | both_nan)
             if not ok_wrap:
                 max_abs = float(np.nanmax(np.abs(np.asarray(diff, dtype=np.float64)[~both_nan])))
-                return False, f"Wrap mismatch for key '{key}', wrapped_max_abs={max_abs:.6g}"
+                return (
+                    False,
+                    f"Wrap mismatch for key '{key}', wrapped_max_abs={max_abs:.6g}",
+                    {
+                        "failure_kind": "wrap_mismatch",
+                        "failing_key": key,
+                        "shape_run": tuple(int(v) for v in lhs.shape),
+                        "shape_oracle": tuple(int(v) for v in rhs.shape),
+                        "max_abs": max_abs,
+                    },
+                )
             continue
 
         try:
@@ -220,9 +263,19 @@ def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple
             lhs_f = np.asarray(lhs, dtype=np.float64)
             rhs_f = np.asarray(rhs, dtype=np.float64)
             max_abs = float(np.nanmax(np.abs(lhs_f - rhs_f)))
-            return False, f"Value mismatch for key '{key}', max_abs={max_abs:.6g}"
+            return (
+                False,
+                f"Value mismatch for key '{key}', max_abs={max_abs:.6g}",
+                {
+                    "failure_kind": "value_mismatch",
+                    "failing_key": key,
+                    "shape_run": tuple(int(v) for v in lhs.shape),
+                    "shape_oracle": tuple(int(v) for v in rhs.shape),
+                    "max_abs": max_abs,
+                },
+            )
 
-    return True, f"Matched {len(golden_keys)} numeric keys"
+    return True, f"Matched {len(golden_keys)} numeric keys", {"matched_keys": len(golden_keys)}
 
 
 def _iter_pattern_files(root: Path, pattern: str) -> list[Path]:
@@ -247,8 +300,13 @@ def _extract_failure_key(message: str) -> str | None:
 def classify_failure(relative_path: str) -> FailureClassification:
     path = Path(relative_path)
     basename = path.name
-    if path.parts[:1] and path.parts[0].startswith("PATCH_") and basename in {"select1.mat", "weed1.mat"}:
-        return _PATCH_STAGE34_CLASSIFICATION
+    if path.parts[:1] and path.parts[0].startswith("PATCH_"):
+        if basename == "pm1.mat":
+            return _PATCH_STAGE2_CLASSIFICATION
+        if basename == "select1.mat":
+            return _PATCH_STAGE3_CLASSIFICATION
+        if basename == "weed1.mat":
+            return _PATCH_STAGE4_CLASSIFICATION
     if basename in _UNWRAP_SMOOTHING_ARTIFACTS:
         return _UNWRAP_SMOOTHING_CLASSIFICATION
     if basename in _UNWRAPPED_NOISE_STATS_ARTIFACTS:
@@ -260,6 +318,7 @@ def classify_failures(report: VerificationReport) -> list[ClassifiedFailure]:
     classified: list[ClassifiedFailure] = []
     for failure in report.failures:
         classification = classify_failure(failure.relative_path)
+        failing_key = getattr(failure, "failing_key", None) or _extract_failure_key(failure.message)
         classified.append(
             ClassifiedFailure(
                 relative_path=failure.relative_path,
@@ -268,10 +327,52 @@ def classify_failures(report: VerificationReport) -> list[ClassifiedFailure]:
                 failure_class=classification.failure_class,
                 label=classification.label,
                 guidance=classification.guidance,
-                failing_key=_extract_failure_key(failure.message),
+                failing_key=failing_key,
+                failure_kind=getattr(failure, "failure_kind", None),
+                shape_run=getattr(failure, "shape_run", None),
+                shape_oracle=getattr(failure, "shape_oracle", None),
+                max_abs=getattr(failure, "max_abs", None),
             )
         )
     return classified
+
+
+def _stage_scope_priority(stage_scope: str) -> int:
+    return {
+        "stage2": 0,
+        "stage3": 1,
+        "stage4": 2,
+        "stage3_4": 2,
+        "stage5_6": 3,
+        "stage7_8": 4,
+        "unknown": 5,
+    }.get(stage_scope, 6)
+
+
+def _failure_priority(failure: ClassifiedFailure) -> tuple[int, str, str]:
+    return (_stage_scope_priority(failure.stage_scope), failure.relative_path, failure.message)
+
+
+def _shape_json(shape: tuple[int, ...] | None) -> list[int] | None:
+    if shape is None:
+        return None
+    return [int(v) for v in shape]
+
+
+def _failure_dict(failure: ClassifiedFailure) -> dict[str, Any]:
+    return {
+        "path": failure.relative_path,
+        "message": failure.message,
+        "stage_scope": failure.stage_scope,
+        "failure_class": failure.failure_class,
+        "label": failure.label,
+        "failing_key": failure.failing_key,
+        "failure_kind": failure.failure_kind,
+        "shape_run": _shape_json(failure.shape_run),
+        "shape_oracle": _shape_json(failure.shape_oracle),
+        "max_abs": failure.max_abs,
+        "guidance": failure.guidance,
+    }
 
 
 def summarize_failures(report: VerificationReport) -> dict[str, Any]:
@@ -295,31 +396,30 @@ def summarize_failures(report: VerificationReport) -> dict[str, Any]:
         if failure.failing_key is not None and failure.failing_key not in group["failing_keys"]:
             group["failing_keys"].append(failure.failing_key)
 
+    first_boundary_failure = min(classified, key=_failure_priority) if classified else None
+
     return {
         "ok": report.ok,
         "checked": len(report.comparisons),
         "failed": len(report.failures),
-        "failures": [
-            {
-                "path": failure.relative_path,
-                "message": failure.message,
-                "stage_scope": failure.stage_scope,
-                "failure_class": failure.failure_class,
-                "label": failure.label,
-                "failing_key": failure.failing_key,
-                "guidance": failure.guidance,
-            }
-            for failure in classified
-        ],
-        "groups": sorted(groups.values(), key=lambda group: (group["stage_scope"], group["failure_class"])),
+        "failures": [_failure_dict(failure) for failure in classified],
+        "groups": sorted(groups.values(), key=lambda group: (_stage_scope_priority(group["stage_scope"]), group["failure_class"])),
+        "first_boundary_failure": _failure_dict(first_boundary_failure) if first_boundary_failure is not None else None,
         "trace": {
+            "stage2_residual_present": any(
+                failure.failure_class == _PATCH_STAGE2_CLASSIFICATION.failure_class for failure in classified
+            ),
             "stage3_4_residual_present": any(
-                failure.failure_class == _PATCH_STAGE34_CLASSIFICATION.failure_class for failure in classified
+                failure.failure_class in {
+                    _PATCH_STAGE3_CLASSIFICATION.failure_class,
+                    _PATCH_STAGE4_CLASSIFICATION.failure_class,
+                }
+                for failure in classified
             ),
             "stage3_4_coupling_evidence_present": False,
             "guidance": (
-                "Do not modify stage-3/4 code in downstream stories unless new trace evidence shows that an "
-                "upstream residual is causing the downstream artifact mismatch."
+                "Do not modify downstream stages until the first stage-boundary trace is identified and its "
+                "upstream artifact lineage is understood."
             ),
         },
     }
@@ -342,7 +442,12 @@ def verify_run_against_golden(
 
     if not golden_files:
         report.comparisons.append(
-            FileComparison(relative_path="<dataset>", ok=False, message="No golden files found for selected patterns")
+            FileComparison(
+                relative_path="<dataset>",
+                ok=False,
+                message="No golden files found for selected patterns",
+                failure_kind="missing_oracle_artifacts",
+            )
         )
         return report
 
@@ -350,16 +455,16 @@ def verify_run_against_golden(
         rel = golden_file.relative_to(golden_path)
         run_file = run_path / rel
         if not run_file.exists():
-            report.comparisons.append(FileComparison(str(rel), False, "Missing run artifact"))
+            report.comparisons.append(FileComparison(str(rel), False, "Missing run artifact", failure_kind="missing_run_artifact"))
             continue
 
         if golden_file.suffix.lower() == ".mat":
-            ok, message = _compare_mat(run_file, golden_file, tolerance)
-            report.comparisons.append(FileComparison(str(rel), ok, message))
+            ok, message, details = _compare_mat(run_file, golden_file, tolerance)
+            report.comparisons.append(FileComparison(str(rel), ok, message, **details))
         else:
             if run_file.stat().st_size == golden_file.stat().st_size:
                 report.comparisons.append(FileComparison(str(rel), True, "File size matches"))
             else:
-                report.comparisons.append(FileComparison(str(rel), False, "File size differs"))
+                report.comparisons.append(FileComparison(str(rel), False, "File size differs", failure_kind="size_mismatch"))
 
     return report

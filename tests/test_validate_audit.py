@@ -410,6 +410,7 @@ def test_build_run_copy_uses_stage2_when_stage1_artifacts_exist(monkeypatch, tmp
         captured["dataset_root"] = context.dataset_root
         captured["start_step"] = context.start_step
         captured["end_step"] = context.end_step
+        captured["workflow_profile"] = context.workflow_profile
         return SimpleNamespace(failures=[])
 
     monkeypatch.setattr(module, "run_pipeline", fake_run_pipeline)
@@ -419,10 +420,12 @@ def test_build_run_copy_uses_stage2_when_stage1_artifacts_exist(monkeypatch, tmp
     assert run_root.name == "InSAR_dataset_test_stage8diag_stage2_8"
     assert generation["start_step"] == 2
     assert generation["end_step"] == 8
+    assert generation["workflow_profile"] == "default"
     assert "PATCH_*/pm1.mat" in generation["clean_patterns"]
     assert captured["dataset_root"] == run_root
     assert captured["start_step"] == 2
     assert captured["end_step"] == 8
+    assert captured["workflow_profile"] == "default"
     assert not (run_root / "PATCH_1" / "pm1.mat").exists()
     assert not (run_root / "PATCH_1" / "select1.mat").exists()
     assert not (run_root / "PATCH_1" / "weed1.mat").exists()
@@ -436,6 +439,10 @@ def test_build_run_copy_uses_run_full_gate_seed_for_dataset_test(monkeypatch, tm
     seed = inputs_root / "RUN_FULL_GATE_1e10"
     patch = seed / "PATCH_1"
     patch.mkdir(parents=True)
+    for name in ("PATCH_2", "PATCH_3", "PATCH_4"):
+        (seed / name).mkdir(parents=True)
+    (seed / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    (seed / "patch.list_old").write_text("PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n", encoding="utf-8")
     for filename in ("select1.mat", "weed1.mat", "pm2.mat", "ps2.mat", "phuw2.mat", "scla2.mat", "mean_v.mat"):
         (patch / filename).write_text("stub", encoding="utf-8")
     (seed / "pm2.mat").write_text("stub", encoding="utf-8")
@@ -446,7 +453,13 @@ def test_build_run_copy_uses_run_full_gate_seed_for_dataset_test(monkeypatch, tm
     monkeypatch.setattr(module, "_inputs_root", lambda: inputs_root)
     monkeypatch.setattr(module, "_seed_root_for_dataset", lambda dataset_root: seed.resolve())
     monkeypatch.setattr(module, "_copy_dataset", lambda src, dst: shutil.copytree(src, dst))
-    monkeypatch.setattr(module, "run_pipeline", lambda context: SimpleNamespace(failures=[]))
+    captured: dict[str, object] = {}
+
+    def fake_run_pipeline(context):
+        captured["workflow_profile"] = context.workflow_profile
+        return SimpleNamespace(failures=[])
+
+    monkeypatch.setattr(module, "run_pipeline", fake_run_pipeline)
 
     run_root, generation = module._build_run_copy(dataset, "20260314_120000")
 
@@ -454,14 +467,18 @@ def test_build_run_copy_uses_run_full_gate_seed_for_dataset_test(monkeypatch, tm
     assert generation["start_step"] == 4
     assert generation["end_step"] == 8
     assert generation["seed_name"] == "RUN_FULL_GATE_1e10"
+    assert generation["workflow_profile"] == "legacy_post"
+    assert captured["workflow_profile"] == "legacy_post"
     assert Path(generation["seed_root"]) == seed.resolve()
+    assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n"
+    assert (run_root / "PATCH_2").exists()
     assert not (run_root / "PATCH_1" / "weed1.mat").exists()
     assert not (run_root / "PATCH_1" / "pm2.mat").exists()
     assert not (run_root / "pm2.mat").exists()
     assert not (run_root / "phuw2.mat").exists()
 
 
-def test_build_run_copy_prefers_stage2_when_run_full_gate_seed_has_stage1_artifacts(
+def test_build_run_copy_prefers_stage5_when_run_full_gate_seed_has_stage1_artifacts(
     monkeypatch, tmp_path: Path
 ) -> None:
     module = _load_validate_audit_module()
@@ -472,8 +489,10 @@ def test_build_run_copy_prefers_stage2_when_run_full_gate_seed_has_stage1_artifa
     seed = inputs_root / "RUN_FULL_GATE_1e10"
     patch = seed / "PATCH_1"
     patch.mkdir(parents=True)
-    (seed / "patch.list").write_text("PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n", encoding="utf-8")
-    (seed / "PATCH_2").mkdir(parents=True)
+    (seed / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    (seed / "patch.list_old").write_text("PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n", encoding="utf-8")
+    for name in ("PATCH_2", "PATCH_3", "PATCH_4"):
+        (seed / name).mkdir(parents=True)
     for filename in (
         "ps1.mat",
         "ph1.mat",
@@ -483,26 +502,43 @@ def test_build_run_copy_prefers_stage2_when_run_full_gate_seed_has_stage1_artifa
         "pm1.mat",
         "select1.mat",
         "weed1.mat",
+        "ps2.mat",
+        "ph2.mat",
+        "pm2.mat",
     ):
         (patch / filename).write_text("stub", encoding="utf-8")
 
     monkeypatch.setattr(module, "_inputs_root", lambda: inputs_root)
     monkeypatch.setattr(module, "_seed_root_for_dataset", lambda dataset_root: seed.resolve())
     monkeypatch.setattr(module, "_copy_dataset", lambda src, dst: shutil.copytree(src, dst))
-    monkeypatch.setattr(module, "run_pipeline", lambda context: SimpleNamespace(failures=[]))
+    captured: dict[str, object] = {}
+
+    def fake_run_pipeline(context):
+        captured["workflow_profile"] = context.workflow_profile
+        return SimpleNamespace(failures=[])
+
+    monkeypatch.setattr(module, "run_pipeline", fake_run_pipeline)
 
     run_root, generation = module._build_run_copy(dataset, "20260314_120000")
 
-    assert run_root.name == "InSAR_dataset_test_stage2_8"
-    assert generation["start_step"] == 2
+    assert run_root.name == "InSAR_dataset_test_stage5_8"
+    assert generation["start_step"] == 5
     assert generation["end_step"] == 8
     assert generation["seed_name"] == "RUN_FULL_GATE_1e10"
+    assert generation["workflow_profile"] == "legacy_post"
+    assert captured["workflow_profile"] == "legacy_post"
     assert Path(generation["seed_root"]) == seed.resolve()
-    assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\n"
-    assert not (run_root / "PATCH_2").exists()
-    assert not (run_root / "PATCH_1" / "pm1.mat").exists()
-    assert not (run_root / "PATCH_1" / "select1.mat").exists()
-    assert not (run_root / "PATCH_1" / "weed1.mat").exists()
+    assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n"
+    assert (run_root / "PATCH_2").exists()
+    assert (run_root / "PATCH_1" / "pm1.mat").exists()
+    assert (run_root / "PATCH_1" / "select1.mat").exists()
+    assert (run_root / "PATCH_1" / "weed1.mat").exists()
+    assert (run_root / "PATCH_1" / "ps2.mat").exists()
+    assert (run_root / "PATCH_1" / "ph2.mat").exists()
+    assert (run_root / "PATCH_1" / "pm2.mat").exists()
+    assert not (run_root / "ps2.mat").exists()
+    assert not (run_root / "ph2.mat").exists()
+    assert not (run_root / "pm2.mat").exists()
 
 
 def test_align_run_copy_replaces_hardlinked_patch_list(monkeypatch, tmp_path: Path) -> None:
@@ -521,3 +557,161 @@ def test_align_run_copy_replaces_hardlinked_patch_list(monkeypatch, tmp_path: Pa
     assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\n"
     assert not os.path.samefile(dataset / "patch.list", run_root / "patch.list")
     assert not (run_root / "PATCH_2").exists()
+
+
+def test_align_run_copy_removes_dataset_patch_dirs_missing_from_patch_list(monkeypatch, tmp_path: Path) -> None:
+    module = _load_validate_audit_module()
+    dataset = tmp_path / "dataset"
+    run_root = tmp_path / "run"
+    for name in ("PATCH_1", "PATCH_2", "PATCH_3", "PATCH_4"):
+        (dataset / name).mkdir(parents=True, exist_ok=True)
+    (dataset / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    shutil.copytree(dataset, run_root)
+
+    module._align_run_copy_with_dataset(run_root, dataset)
+
+    assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\n"
+    assert not (run_root / "PATCH_2").exists()
+    assert not (run_root / "PATCH_3").exists()
+    assert not (run_root / "PATCH_4").exists()
+
+
+def test_align_run_copy_legacy_post_restores_patch_list_old(monkeypatch, tmp_path: Path) -> None:
+    module = _load_validate_audit_module()
+    dataset = tmp_path / "dataset"
+    run_root = tmp_path / "run"
+    for name in ("PATCH_1", "PATCH_2", "PATCH_3", "PATCH_4"):
+        (dataset / name).mkdir(parents=True, exist_ok=True)
+    (dataset / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    shutil.copytree(dataset, run_root)
+    (run_root / "patch.list_old").write_text("PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n", encoding="utf-8")
+
+    module._align_run_copy_with_dataset(run_root, dataset, "legacy_post")
+
+    assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n"
+    assert (run_root / "PATCH_2").exists()
+    assert (run_root / "PATCH_3").exists()
+    assert (run_root / "PATCH_4").exists()
+
+
+def test_dataset_audit_emits_saved_stage_boundary_trace(monkeypatch, tmp_path: Path) -> None:
+    module = _load_validate_audit_module()
+    run_root = tmp_path / "run"
+    golden_root = tmp_path / "golden"
+    run_root.mkdir()
+    golden_root.mkdir()
+    generation = {"validation_run_dir": str(tmp_path / "validation_runs"), "start_step": 2}
+    contract = {
+        "oracle_contract": {
+            "cpp_wrapper": {
+                "repository_url": "https://example.invalid/stamps",
+                "pinned_revision": "abc123",
+            },
+            "precedence_rule": {"ordered_sources": ["cpp_wrapper"]},
+        }
+    }
+
+    def fake_verify(run_root_arg, golden_root_arg, tolerance, patterns=None):
+        pattern_tuple = tuple(patterns) if patterns is not None else None
+        if pattern_tuple == module.STAGE2_VERIFY_PATTERNS:
+            comparisons = []
+        elif pattern_tuple == module.STAGE3_VERIFY_PATTERNS:
+            comparisons = [
+                SimpleNamespace(
+                    ok=False,
+                    relative_path="PATCH_1/select1.mat",
+                    message="Value mismatch for key 'C_ps2', max_abs=2.5",
+                )
+            ]
+        elif pattern_tuple == module.STAGE4_VERIFY_PATTERNS:
+            comparisons = []
+        else:
+            comparisons = [
+                SimpleNamespace(
+                    ok=False,
+                    relative_path="PATCH_1/select1.mat",
+                    message="Value mismatch for key 'C_ps2', max_abs=2.5",
+                ),
+                SimpleNamespace(
+                    ok=False,
+                    relative_path="uw_space_time.mat",
+                    message="Shape mismatch for key 'dph_noise': (3, 4) != (5, 4)",
+                ),
+            ]
+        return SimpleNamespace(ok=not comparisons, comparisons=comparisons)
+
+    def fake_summarize(report):
+        failures = []
+        for comparison in report.comparisons:
+            if comparison.relative_path == "PATCH_1/select1.mat":
+                failures.append(
+                    {
+                        "path": "PATCH_1/select1.mat",
+                        "message": comparison.message,
+                        "stage_scope": "stage3",
+                        "failure_class": "stage3_patch_boundary",
+                        "label": "Stage 3 patch boundary",
+                        "failing_key": "C_ps2",
+                        "failure_kind": "value_mismatch",
+                        "shape_run": [10],
+                        "shape_oracle": [10],
+                        "max_abs": 2.5,
+                        "guidance": "fix stage 3",
+                    }
+                )
+            elif comparison.relative_path == "uw_space_time.mat":
+                failures.append(
+                    {
+                        "path": "uw_space_time.mat",
+                        "message": comparison.message,
+                        "stage_scope": "stage7_8",
+                        "failure_class": "unwrapped_noise_statistics",
+                        "label": "Unwrapped-noise / statistics",
+                        "failing_key": "dph_noise",
+                        "failure_kind": "shape_mismatch",
+                        "shape_run": [3, 4],
+                        "shape_oracle": [5, 4],
+                        "max_abs": None,
+                        "guidance": "fix stage 7/8",
+                    }
+                )
+        return {
+            "ok": report.ok,
+            "checked": len(report.comparisons),
+            "failed": len(failures),
+            "failures": failures,
+            "groups": [],
+            "first_boundary_failure": failures[0] if failures else None,
+            "trace": {},
+        }
+
+    monkeypatch.setattr(module, "verify_run_against_golden", fake_verify)
+    monkeypatch.setattr(module, "summarize_failures", fake_summarize)
+
+    payload = module._dataset_audit(
+        run_root,
+        golden_root,
+        "generated_full_loop_run_copy",
+        contract,
+        "20260421_120000",
+        module.RunConfig(),
+        generation,
+    )
+
+    trace = payload["trace"]["first_divergent_boundary"]
+    assert trace["artifact_path"] == "PATCH_1/select1.mat"
+    assert trace["failing_key"] == "C_ps2"
+    assert trace["oracle_source"]["name"] == "cpp_wrapper"
+    assert [item["artifact_path"] for item in trace["artifact_lineage"]] == [
+        "PATCH_1/ps1.mat",
+        "PATCH_1/ph1.mat",
+        "PATCH_1/bp1.mat",
+        "PATCH_1/da1.mat",
+        "PATCH_1/pm1.mat",
+        "PATCH_1/select1.mat",
+    ]
+    assert Path(payload["trace"]["first_divergent_boundary_output_path"]).exists()
+    assert len(payload["trace"]["stage_boundary_probes"]) == 3
+    stage3_probe = payload["trace"]["stage_boundary_probes"][1]
+    assert stage3_probe["stage_boundary"] == 3
+    assert Path(stage3_probe["output_path"]).exists()

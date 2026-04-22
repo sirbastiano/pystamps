@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-04-22 04:04:37 | run=20260421-123533-4172008 | iter=6 | mode=build | story=US-006 | duration=4412s | status=success
 - 2026-04-22 02:50:59 | run=20260421-123533-4172008 | iter=5 | mode=build | story=US-005 | duration=10473s | status=success
 - 2026-04-21 23:56:21 | run=20260421-123533-4172008 | iter=4 | mode=build | story=US-004 | duration=27918s | status=success
 - 2026-04-21 16:10:58 | run=20260421-123533-4172008 | iter=3 | mode=build | story=US-003 | duration=2459s | status=success
@@ -167,3 +168,8 @@
 [2026-04-22 03:55:38] US-006 verification: stopped parity_bug_loop after a bounded run because the fresh audit root still had not emitted PATCH_1 pm1/select1/weed1 evidence.
 [2026-04-22 04:01:36] US-006 verification: stopped validate_audit after a bounded run because both fresh stage2_8 roots still lacked PATCH_1 pm1/select1/weed1 outputs.
 [2026-04-22 04:03:10] US-006 progress updated: recorded the stage4 triangle-regeneration fix, passing pytest gates, and the remaining one-row weed shape blocker.
+[2026-04-22 04:04:35] ITERATION 6 end (duration=4412s)
+[2026-04-22 04:04:41] ITERATION 7 start (mode=build story=US-007)
+[2026-04-22 04:08:04] US-007 audit: inspecting stage-5 merge outputs, patch.list alignment, and current audited drift
+[2026-04-22 04:33:54] US-007 code change: legacy_post run copies restore full patch manifest before merged stage5; added regression coverage
+[2026-04-22 07:01:46] US-007 verification: pytest gates passed; fresh legacy stage5_8 run root regenerated exact ps2/ph2/pm2 with full authoritative patch.list; long parity/audit scripts remained compute-bound in later stages

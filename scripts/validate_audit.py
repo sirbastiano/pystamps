@@ -12,7 +12,10 @@ from typing import Any
 from pystamps.config import RunConfig, load_config
 from pystamps.parity_contract import (
     STAGE1_VERIFY_PATTERNS,
+    STAGE2_VERIFY_PATTERNS,
+    STAGE3_VERIFY_PATTERNS,
     STAGE4_CLEAN_PATTERNS,
+    STAGE4_VERIFY_PATTERNS,
     STAGE25_CLEAN_PATTERNS,
     STAGE68_CLEAN_PATTERNS,
     STAGE28_CLEAN_PATTERNS,
@@ -24,6 +27,11 @@ from pystamps.pipeline.types import PipelineContext
 from pystamps.verify import summarize_failures, verify_run_against_golden
 
 _RUN_CONFIG_OVERRIDE: RunConfig | None = None
+_STAGE_BOUNDARY_PATTERNS: dict[int, tuple[str, ...]] = {
+    2: STAGE2_VERIFY_PATTERNS,
+    3: STAGE3_VERIFY_PATTERNS,
+    4: STAGE4_VERIFY_PATTERNS,
+}
 
 
 def _parse_args() -> argparse.Namespace:
@@ -118,16 +126,47 @@ def _listed_patches(dataset_root: Path) -> list[str]:
     ]
 
 
-def _align_run_copy_with_dataset(run_root: Path, dataset_root: Path) -> None:
-    listed_patches = _listed_patches(dataset_root)
-    if not listed_patches:
+def _read_patch_manifest(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _authoritative_patch_names(run_root: Path, dataset_root: Path, workflow_profile: str) -> list[str]:
+    candidates: list[Path]
+    if workflow_profile == "legacy_post":
+        candidates = [
+            run_root / "patch.list_old",
+            dataset_root / "patch.list_old",
+            dataset_root / "patch.list",
+            run_root / "patch.list",
+        ]
+    else:
+        candidates = [dataset_root / "patch.list", run_root / "patch.list"]
+
+    for candidate in candidates:
+        names = _read_patch_manifest(candidate)
+        if names:
+            return names
+
+    source_root = run_root if workflow_profile == "legacy_post" else dataset_root
+    return [patch_dir.name for patch_dir in source_root.glob("PATCH_*") if patch_dir.is_dir()]
+
+
+def _align_run_copy_with_dataset(run_root: Path, dataset_root: Path, workflow_profile: str = "default") -> None:
+    listed_patches = _authoritative_patch_names(run_root, dataset_root, workflow_profile)
+    allowed = set(listed_patches)
+    if not allowed:
         return
 
     target_patch_list = run_root / "patch.list"
     if target_patch_list.exists():
         target_patch_list.unlink()
-    shutil.copy2(dataset_root / "patch.list", target_patch_list)
-    allowed = set(listed_patches)
+    target_patch_list.write_text("".join(f"{patch_name}\n" for patch_name in listed_patches), encoding="utf-8")
     for patch_dir in run_root.glob("PATCH_*"):
         if patch_dir.is_dir() and patch_dir.name not in allowed:
             shutil.rmtree(patch_dir)
@@ -142,6 +181,11 @@ def _stage48_clean_patterns() -> tuple[str, ...]:
     return STAGE4_CLEAN_PATTERNS + stage5_onward + STAGE68_CLEAN_PATTERNS
 
 
+def _stage58_clean_patterns() -> tuple[str, ...]:
+    stage5_onward = tuple(pattern for pattern in STAGE25_CLEAN_PATTERNS if not pattern.startswith("PATCH_*/"))
+    return stage5_onward + STAGE68_CLEAN_PATTERNS
+
+
 def _seed_root_for_dataset(dataset_root: Path) -> Path:
     if dataset_root.name == "InSAR_dataset_test":
         explicit = _repo_root() / "inputs_and_outputs" / "RUN_FULL_GATE_1e10"
@@ -154,7 +198,7 @@ def _run_profile(dataset_root: Path) -> tuple[Path, int, int, tuple[str, ...], s
     seed_root = _seed_root_for_dataset(dataset_root)
     if seed_root.name == "RUN_FULL_GATE_1e10":
         if _has_stage1_artifacts(seed_root):
-            return seed_root, 2, 8, STAGE28_CLEAN_PATTERNS, "RUN_FULL_GATE_1e10"
+            return seed_root, 5, 8, _stage58_clean_patterns(), "RUN_FULL_GATE_1e10"
         return seed_root, 4, 8, _stage48_clean_patterns(), "RUN_FULL_GATE_1e10"
     if _has_stage1_artifacts(dataset_root):
         return seed_root, 2, 8, STAGE28_CLEAN_PATTERNS, dataset_root.name
@@ -167,11 +211,12 @@ def _build_run_copy(
     run_config: RunConfig | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     seed_root, start_step, end_step, clean_patterns, seed_name = _run_profile(dataset_root)
+    workflow_profile = "legacy_post" if seed_name == "RUN_FULL_GATE_1e10" else "default"
     validation_dir = _validation_runs_root() / audit_stamp
     validation_dir.mkdir(parents=True, exist_ok=True)
     run_root = validation_dir / f"{dataset_root.name}_stage{start_step}_8"
     _copy_dataset(seed_root, run_root)
-    _align_run_copy_with_dataset(run_root, dataset_root)
+    _align_run_copy_with_dataset(run_root, dataset_root, workflow_profile)
     _clean_outputs(run_root, clean_patterns)
 
     context = PipelineContext(
@@ -180,6 +225,7 @@ def _build_run_copy(
         start_step=start_step,
         end_step=end_step,
         dry_run=False,
+        workflow_profile=workflow_profile,
     )
     report = run_pipeline(context)
     failures = [
@@ -202,6 +248,7 @@ def _build_run_copy(
         "seed_name": seed_name,
         "clean_patterns": list(clean_patterns),
         "validation_run_dir": str(validation_dir.resolve()),
+        "workflow_profile": workflow_profile,
     }
 
 
@@ -266,16 +313,227 @@ def _prepare_run_selection(
     return run_root, dataset_root.resolve(), "generated_full_loop_run_copy", generation
 
 
+def _verify_report(
+    run_root: Path,
+    golden_root: Path,
+    tolerance: Any,
+    *,
+    patterns: tuple[str, ...] | None = None,
+):
+    if patterns is None:
+        return verify_run_against_golden(run_root, golden_root, tolerance)
+    try:
+        return verify_run_against_golden(run_root, golden_root, tolerance, patterns=patterns)
+    except TypeError:
+        return verify_run_against_golden(run_root, golden_root, tolerance)
+
+
+def _trace_output_dir(audit_stamp: str, generation: dict[str, Any] | None) -> Path:
+    if generation is not None and generation.get("validation_run_dir"):
+        output_dir = Path(str(generation["validation_run_dir"])).expanduser().resolve()
+    else:
+        output_dir = (_validation_runs_root() / audit_stamp).resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def _oracle_source_payload(contract: dict[str, Any], golden_root: Path) -> dict[str, Any]:
+    oracle_contract = contract.get("oracle_contract", {})
+    precedence = oracle_contract.get("precedence_rule", {}).get("ordered_sources", [])
+    source_name = str(precedence[0]) if precedence else "golden_root"
+    source_payload = oracle_contract.get(source_name, {})
+    return {
+        "name": source_name,
+        "golden_root": str(golden_root),
+        "repository_url": source_payload.get("repository_url") or source_payload.get("upstream_repository_url"),
+        "pinned_revision": source_payload.get("pinned_revision"),
+    }
+
+
+def _artifact_lineage(relative_path: str) -> list[dict[str, Any]]:
+    path = Path(relative_path)
+    patch_name = path.parts[0] if path.parts and path.parts[0].startswith("PATCH_") else None
+    if patch_name is None:
+        return [{"stage": None, "artifact_path": relative_path, "role": "failing_artifact"}]
+
+    stage_inputs: dict[str, list[tuple[int, str]]] = {
+        "pm1.mat": [
+            (1, "ps1.mat"),
+            (1, "ph1.mat"),
+            (1, "bp1.mat"),
+            (2, "pm1.mat"),
+        ],
+        "select1.mat": [
+            (1, "ps1.mat"),
+            (1, "ph1.mat"),
+            (1, "bp1.mat"),
+            (1, "da1.mat"),
+            (2, "pm1.mat"),
+            (3, "select1.mat"),
+        ],
+        "weed1.mat": [
+            (1, "ps1.mat"),
+            (1, "da1.mat"),
+            (2, "pm1.mat"),
+            (3, "select1.mat"),
+            (4, "weed1.mat"),
+        ],
+    }
+    lineage = stage_inputs.get(path.name)
+    if lineage is None:
+        return [{"stage": None, "artifact_path": relative_path, "role": "failing_artifact"}]
+    return [
+        {
+            "stage": stage,
+            "artifact_path": f"{patch_name}/{artifact}",
+            "role": "failing_artifact" if artifact == path.name else "upstream_input",
+        }
+        for stage, artifact in lineage
+    ]
+
+
+def _stage_boundary_from_failure(failure: dict[str, Any] | None) -> int | None:
+    if failure is None:
+        return None
+    stage_scope = str(failure.get("stage_scope") or "")
+    if stage_scope == "stage2":
+        return 2
+    if stage_scope == "stage3":
+        return 3
+    if stage_scope in {"stage4", "stage3_4"}:
+        return 4
+    if stage_scope == "stage5_6":
+        return 5
+    if stage_scope == "stage7_8":
+        return 7
+    return None
+
+
+def _trace_failure_payload(
+    failure: dict[str, Any] | None,
+    *,
+    oracle_source: dict[str, Any],
+    stage_boundary: int | None = None,
+    probe_output_path: str | None = None,
+) -> dict[str, Any] | None:
+    if failure is None:
+        return None
+    return {
+        "artifact_path": failure.get("path"),
+        "stage_boundary": stage_boundary if stage_boundary is not None else _stage_boundary_from_failure(failure),
+        "stage_scope": failure.get("stage_scope"),
+        "failure_class": failure.get("failure_class"),
+        "label": failure.get("label"),
+        "guidance": failure.get("guidance"),
+        "failure_kind": failure.get("failure_kind"),
+        "failing_key": failure.get("failing_key"),
+        "shape_run": failure.get("shape_run"),
+        "shape_oracle": failure.get("shape_oracle"),
+        "max_abs": failure.get("max_abs"),
+        "message": failure.get("message"),
+        "oracle_source": oracle_source,
+        "artifact_lineage": _artifact_lineage(str(failure.get("path"))),
+        "probe_output_path": probe_output_path,
+    }
+
+
+def _write_json_artifact(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _emit_stage_boundary_traces(
+    run_root: Path,
+    golden_root: Path,
+    contract: dict[str, Any],
+    tolerance: Any,
+    *,
+    audit_stamp: str,
+    generation: dict[str, Any] | None,
+) -> tuple[list[dict[str, Any]], dict[str, Any] | None, str]:
+    output_dir = _trace_output_dir(audit_stamp, generation)
+    oracle_source = _oracle_source_payload(contract, golden_root)
+
+    probes: list[dict[str, Any]] = []
+    first_probe_trace: dict[str, Any] | None = None
+
+    for stage_boundary, patterns in _STAGE_BOUNDARY_PATTERNS.items():
+        report = _verify_report(run_root, golden_root, tolerance, patterns=patterns)
+        summary = summarize_failures(report)
+        output_path = output_dir / f"{golden_root.name}_stage{stage_boundary}_boundary_probe.json"
+        probe_trace = _trace_failure_payload(
+            summary.get("first_boundary_failure"),
+            oracle_source=oracle_source,
+            stage_boundary=stage_boundary,
+            probe_output_path=str(output_path),
+        )
+        probe_payload = {
+            "generated_at_utc": _now_utc(),
+            "dataset": golden_root.name,
+            "workflow": _workflow_name(golden_root),
+            "run_root": str(run_root),
+            "golden_root": str(golden_root),
+            "stage_boundary": stage_boundary,
+            "patterns": list(patterns),
+            "ok": summary.get("ok"),
+            "checked": summary.get("checked"),
+            "failed": summary.get("failed"),
+            "first_boundary_failure": summary.get("first_boundary_failure"),
+            "trace": probe_trace,
+        }
+        _write_json_artifact(output_path, probe_payload)
+        probes.append({**probe_payload, "output_path": str(output_path)})
+        if first_probe_trace is None and probe_trace is not None:
+            first_probe_trace = probe_trace
+
+    first_trace_path = output_dir / f"{golden_root.name}_first_boundary_trace.json"
+    _write_json_artifact(
+        first_trace_path,
+        {
+            "generated_at_utc": _now_utc(),
+            "dataset": golden_root.name,
+            "workflow": _workflow_name(golden_root),
+            "run_root": str(run_root),
+            "golden_root": str(golden_root),
+            "first_divergent_boundary": first_probe_trace,
+            "stage_boundary_probes": [probe["output_path"] for probe in probes],
+        },
+    )
+    return probes, first_probe_trace, str(first_trace_path)
+
+
 def _dataset_audit(
     run_root: Path,
     golden_root: Path,
     run_source: str,
+    contract: dict[str, Any],
+    audit_stamp: str,
     run_config: RunConfig | None = None,
     generation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     active_run_config = run_config or _RUN_CONFIG_OVERRIDE or RunConfig()
-    report = verify_run_against_golden(run_root, golden_root, active_run_config.tolerance)
+    report = _verify_report(run_root, golden_root, active_run_config.tolerance)
     summary = summarize_failures(report)
+    stage_boundary_probes: list[dict[str, Any]] = []
+    first_probe_trace: dict[str, Any] | None = None
+    first_trace_path: str | None = None
+    if not report.ok:
+        stage_boundary_probes, first_probe_trace, first_trace_path = _emit_stage_boundary_traces(
+            run_root,
+            golden_root,
+            contract,
+            active_run_config.tolerance,
+            audit_stamp=audit_stamp,
+            generation=generation,
+        )
+    first_divergent_boundary = first_probe_trace or _trace_failure_payload(
+        summary.get("first_boundary_failure"),
+        oracle_source=_oracle_source_payload(contract, golden_root),
+    )
+    trace_payload = dict(summary.get("trace", {}))
+    trace_payload["stage_boundary_probes"] = stage_boundary_probes
+    trace_payload["first_divergent_boundary"] = first_divergent_boundary
+    trace_payload["first_divergent_boundary_output_path"] = first_trace_path
     payload = {
         "workflow": _workflow_name(golden_root),
         "dataset": golden_root.name,
@@ -286,6 +544,7 @@ def _dataset_audit(
         "status": "passed" if report.ok else "failed",
         "checked": len(report.comparisons),
         **summary,
+        "trace": trace_payload,
     }
     if generation is not None:
         payload["run_generation"] = generation
@@ -367,7 +626,9 @@ def main() -> int:
         try:
             for dataset in datasets:
                 run_root, golden_root, run_source, generation = _prepare_run_selection(dataset, golden_base, audit_stamp)
-                payload["audits"].append(_dataset_audit(run_root, golden_root, run_source, run_config, generation))
+                payload["audits"].append(
+                    _dataset_audit(run_root, golden_root, run_source, contract, audit_stamp, run_config, generation)
+                )
             payload["completed"] = True
         except FileNotFoundError as exc:
             payload["interrupted"] = True
