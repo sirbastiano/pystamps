@@ -5,6 +5,44 @@ Started: Sat Mar 14 05:18:43 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-04-22 07:02 UTC] - US-007: Restore exact merged stage-5 outputs after upstream patch corrections
+Thread: 019db35d-4380-7222-b554-902b503e14fc
+Run: 20260421-123533-4172008 (iteration 7)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-7.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-7.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e2e978a fix(stage5): rerun legacy merge from patch outputs
+- Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after the implementation commit (for example `MANIFEST.in`, `README.md`, `pyproject.toml`, `pystamps/kernels/accelerated.py`, `tests/test_acceleration.py`, and generated artifacts under `dist/`, `target/`, and `.build-*`)
+- Verification:
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage5_ported.py tests/test_validate_audit.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage6_ported.py tests/test_stage7_ported.py tests/test_stage8_ported.py tests/test_acceleration.py tests/test_validate_audit.py tests/test_cli.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/python - <<'PY' ... _compare_mat(inputs_and_outputs/RUN_FULL_GATE_1e10/{ps2,ph2,pm2}.mat, inputs_and_outputs/InSAR_dataset_test/{ps2,ph2,pm2}.mat) ... PY` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/python - <<'PY' ... _compare_mat(inputs_and_outputs/validation_runs/20260422_065354/InSAR_dataset_test_stage5_8/{ps2,ph2,pm2}.mat, inputs_and_outputs/InSAR_dataset_test/{ps2,ph2,pm2}.mat) ... PY` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/latest_parity_loop.json` -> FAIL (bounded run was stopped after the fresh `20260422_065354/InSAR_dataset_test_stage5_8` root proved exact `ps2.mat`, `ph2.mat`, and `pm2.mat`; later stage-6+ regeneration remained compute-bound for this story turn)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL (bounded run was stopped while the compact `InSAR_dataset_test_stage8diag_stage2_8` replay was still in stage 2, before the full `InSAR_dataset_test` audit began)
+- Files changed:
+  - scripts/validate_audit.py
+  - tests/test_validate_audit.py
+  - pystamps/verify.py
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Made `legacy_post` run-copy preparation restore the full audited patch manifest from `patch.list_old`, rewrite `patch.list` in the run root, and prune the run root to only those intended audited patches.
+  - Changed the maintained `InSAR_dataset_test` audit profile to restart at stage 5 while preserving corrected per-patch stage-5 artifacts, so the fresh run reruns only the merged stage-5 root bundle before later merged stages continue.
+  - Added validate-audit regressions for the legacy patch-manifest restore path and the stage-5-scoped full-run copy, and kept `verify.py` compatible with the structured comparison metadata already returned by `_compare_mat`.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - For the full `legacy_post` audit, the authoritative patch manifest is the preserved four-patch `patch.list_old`, not the reduced one-line `patch.list` carried by the golden dataset root.
+    - Rebuilding only the merged root bundle from existing per-patch `ps2/ph2/pm2` is enough to restore exact stage-5 parity on the fresh `InSAR_dataset_test_stage5_8` run root.
+  - Gotchas encountered
+    - Cleaning patch-local `pm2/ph2/ps2` for the full legacy workflow reintroduces an unrelated patch-level `pm2.ph_patch` seam; US-007 needs the merged rerun to consume the already-corrected patch stage-5 inputs instead.
+    - The required script gates are still dominated by later merged-stage replay time; they can remain compute-bound well after the stage-5 acceptance artifacts are already exact.
+  - Useful context
+    - Fresh story proof root: `inputs_and_outputs/validation_runs/20260422_065354/InSAR_dataset_test_stage5_8`
+    - That run root carries `patch.list = PATCH_1..PATCH_4`, retains all four audited patches, and its regenerated root `ps2.mat`, `ph2.mat`, and `pm2.mat` each match `inputs_and_outputs/InSAR_dataset_test` exactly.
+---
 ## [2026-04-22 04:01 UTC] - US-006: Fix stage-4 weed selection parity once select1 is exact
 Thread:
 Run: 20260421-123533-4172008 (iteration 6)

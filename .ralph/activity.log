@@ -173,3 +173,4 @@
 [2026-04-22 04:08:04] US-007 audit: inspecting stage-5 merge outputs, patch.list alignment, and current audited drift
 [2026-04-22 04:33:54] US-007 code change: legacy_post run copies restore full patch manifest before merged stage5; added regression coverage
 [2026-04-22 07:01:46] US-007 verification: pytest gates passed; fresh legacy stage5_8 run root regenerated exact ps2/ph2/pm2 with full authoritative patch.list; long parity/audit scripts remained compute-bound in later stages
+[2026-04-22 07:04:32] US-007 progress updated: recorded legacy stage5_8 proof root, pytest gates, and bounded script outcomes
