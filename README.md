@@ -72,6 +72,12 @@ make verify
 make benchmark
 ```
 
+## Oracle-backed parity contract
+
+The supported audit driver is `scripts/validate_audit.py`, and `make audit` is the repo-local wrapper for that same command surface. The required audited dataset set is owned by `pystamps/data/audited_workflow_manifest.json`; do not replace it with a reduced hand-written dataset list.
+
+Oracle precedence is owned by `pystamps/data/oracle_contract.json`: `cpp_wrapper` first, then `matlab_source`, then `manual_references`. When the pinned StaMPS wrapper behavior intentionally differs from plain MATLAB, pySTAMPS treats the wrapper-backed path as the practical parity oracle and records that source in the audit evidence.
+
 ## What pySTAMPS does
 
 - Inspect dataset status and stage progress (`status`)
@@ -92,6 +98,7 @@ The internal parity-audit regeneration path for `RUN_FULL_GATE_1e10` also mirror
 - [Configuration](https://sirbastiano.github.io/pystamps/configuration.html)
 - [Architecture](https://sirbastiano.github.io/pystamps/architecture.html)
 - [Verification](https://sirbastiano.github.io/pystamps/verification.html)
+- [Parity contract](parity.md)
 - [API Reference](https://sirbastiano.github.io/pystamps/api/pystamps.html)
 - [Release workflow](https://sirbastiano.github.io/pystamps/release.md)
 

@@ -1,50 +1,87 @@
-# Full parity audit status
+# Oracle-backed parity contract
 
-Status: blocked by environment prerequisites.
+This document records the final repo-tracked contract for parity work. Future changes should start here instead of re-deriving command ownership or keeping story-specific debugging notes around.
 
-## Requested audit scope
-- Full parity audit across:
-  - `inputs_and_outputs/InSAR_dataset_test_stage8diag`
-  - `inputs_and_outputs/InSAR_dataset_test`
-- Expected generated evidence artifact:
-  - `inputs_and_outputs/validation_runs/latest_audit.json`
-- Expected follow-up verify step:
-  - `uv run pystamps verify --run <run_root_from_latest_audit> --golden ./inputs_and_outputs/InSAR_dataset_test`
+## Authoritative files
 
-## Prerequisite checks run
+- `pystamps/data/oracle_contract.json` owns the pinned oracle sources and precedence rule.
+- `pystamps/data/audited_workflow_manifest.json` owns the required done-gate datasets, run seeds, and workflow profiles.
+- `scripts/validate_audit.py` is the authoritative parity-audit driver and writes `inputs_and_outputs/validation_runs/latest_audit.json`.
+- `scripts/parity_bug_loop.py` is the follow-up triage surface that consumes audit output and selects the next first-boundary target.
+- `make audit` and `make parity-loop` are convenience wrappers around those script entrypoints, not separate contracts.
+
+## Workflow ownership
+
+- `inputs_and_outputs/InSAR_dataset_test_stage8diag`
+  - Purpose: compact single-master diagnostic audit target
+  - Workflow profile: `default`
+  - Run seed: dataset root itself
+- `inputs_and_outputs/InSAR_dataset_test`
+  - Purpose: full single-master done-gate comparison target
+  - Workflow profile: `legacy_post`
+  - Run seed: `inputs_and_outputs/RUN_FULL_GATE_1e10`
+- `inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag`
+  - Purpose: compact small-baseline stage-7 audit target
+  - Workflow profile: `small_baseline`
+  - Run seed: dataset root itself
+- `inputs_and_outputs/InSAR_dataset_small_baseline_stage7`
+  - Purpose: full small-baseline stage-7 done-gate target
+  - Workflow profile: `small_baseline`
+  - Run seed: dataset root itself
+
+The audited workflow manifest is the source of truth for these mappings. Do not replace it with a shorter ad hoc dataset list.
+
+## Audit process
+
+Run the local wrapper:
+
 ```bash
-test -d inputs_and_outputs/InSAR_dataset_test_stage8diag && test -d inputs_and_outputs/InSAR_dataset_test && printf 'datasets:ok\n' || printf 'datasets:missing\n'
-command -v triangle >/dev/null && printf 'triangle:ok\n' || printf 'triangle:missing\n'
-command -v snaphu >/dev/null && printf 'snaphu:ok\n' || printf 'snaphu:missing\n'
+make audit
 ```
 
-Observed outcomes:
-- `datasets:ok`
-- `triangle:missing`
-- `snaphu:missing`
-
-## Why the audit was not run
-The approved parity plan requires the documented local prerequisites to be present before starting the long-running audit flow. Both external tools required by the repo documentation, `triangle` and `snaphu`, are missing from `PATH`, so the parity workflow is blocked by environment setup.
-
-Because the prerequisite gate failed, the supported audit command was intentionally not started:
+Or run the authoritative driver directly:
 
 ```bash
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
   uv run python scripts/validate_audit.py \
-    --datasets \
-      inputs_and_outputs/InSAR_dataset_test_stage8diag \
-      inputs_and_outputs/InSAR_dataset_test \
     --output inputs_and_outputs/validation_runs/latest_audit.json
 ```
 
-The explicit verify step was also intentionally not run, because it depends on a fresh `latest_audit.json` and the recorded `run_root` for `InSAR_dataset_test`.
+Key rules:
 
-## Exact blocked status
-- Result: `blocked`
-- Classification: `environment/prerequisites`
-- Parity state: not executed
-- Audit artifact: not generated in this run
-- Verify state: not executed
+- Omitting `--datasets` makes `scripts/validate_audit.py` use the manifest-backed required dataset set.
+- `latest_audit.json` is the active audit artifact and records `run_root`, `workflow_profile`, `failed_workflows`, and first-boundary trace metadata.
+- Explicit verification must use the `run_root` recorded in that fresh audit artifact.
+- Interrupted audits, manual restart paths, or stale run-copy reuse are not valid evidence.
 
-## Unblock conditions
-Install or expose both `triangle` and `snaphu` on `PATH`, then rerun the documented audit flow to generate a fresh `latest_audit.json` and use its recorded `run_root` for the verify step.
+Example verify step:
+
+```bash
+RUN_COPY="$(python - <<'PY'
+import json
+from pathlib import Path
+
+payload = json.loads(Path('inputs_and_outputs/validation_runs/latest_audit.json').read_text(encoding='utf-8'))
+print(next(audit['run_root'] for audit in payload['audits'] if audit['dataset'] == 'InSAR_dataset_test'))
+PY
+)"
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
+  uv run pystamps verify --run "$RUN_COPY" --golden ./inputs_and_outputs/InSAR_dataset_test
+```
+
+## Oracle precedence
+
+`pystamps/data/oracle_contract.json` defines the precedence order:
+
+1. `cpp_wrapper`
+2. `matlab_source`
+3. `manual_references`
+
+When the pinned StaMPS C/C++ helper behavior intentionally differs from the pinned MATLAB scripts, the wrapper-backed path is the practical parity oracle. Audit traces should record that source instead of treating plain MATLAB as authoritative in those cases.
+
+## Rules for future parity changes
+
+- Keep only oracle-backed diffs that improve the first materially divergent boundary.
+- Do not keep speculative downstream fixes that merely move the failure to a later artifact.
+- Use the trace from `latest_audit.json` or `latest_parity_loop.json` to justify every parity edit.
+- Remove temporary story-specific debugging notes once the audited contract is understood and documented here.

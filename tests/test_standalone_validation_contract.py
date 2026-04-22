@@ -6,7 +6,9 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 README = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 TESTING_DOC = (REPO_ROOT / "docs" / "testing.html").read_text(encoding="utf-8")
+VERIFICATION_DOC = (REPO_ROOT / "docs" / "verification.html").read_text(encoding="utf-8")
 RELEASE_DOC = (REPO_ROOT / "docs" / "release.md").read_text(encoding="utf-8")
+PARITY_DOC = (REPO_ROOT / "parity.md").read_text(encoding="utf-8")
 MANIFEST = (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
 MAKEFILE = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
 PYPROJECT = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -88,6 +90,30 @@ def test_testing_docs_call_out_optional_dataset_workflows() -> None:
     assert "uv run pystamps verify --run RUN_COPY --golden ./inputs_and_outputs/InSAR_dataset_test" in TESTING_DOC
     assert "latest_audit.json" in TESTING_DOC
     assert "stale-output reuse keeps the validation gate red" in TESTING_DOC
+
+
+def test_verification_and_parity_docs_define_the_final_oracle_backed_contract() -> None:
+    assert "make audit" in VERIFICATION_DOC
+    assert "scripts/validate_audit.py" in VERIFICATION_DOC
+    assert "pystamps/data/audited_workflow_manifest.json" in VERIFICATION_DOC
+    assert "make parity-loop" in VERIFICATION_DOC
+    assert "scripts/parity_bug_loop.py" in VERIFICATION_DOC
+    assert "cpp_wrapper" in VERIFICATION_DOC
+    assert "matlab_source" in VERIFICATION_DOC
+    assert "manual_references" in VERIFICATION_DOC
+    assert "inputs_and_outputs/InSAR_dataset_test_stage8diag \\\n      inputs_and_outputs/InSAR_dataset_test" not in VERIFICATION_DOC
+
+    assert "# Oracle-backed parity contract" in PARITY_DOC
+    assert "pystamps/data/oracle_contract.json" in PARITY_DOC
+    assert "pystamps/data/audited_workflow_manifest.json" in PARITY_DOC
+    assert "RUN_FULL_GATE_1e10" in PARITY_DOC
+    assert "legacy_post" in PARITY_DOC
+    assert "small_baseline" in PARITY_DOC
+    assert "latest_audit.json" in PARITY_DOC
+    assert "latest_parity_loop.json" in PARITY_DOC
+    assert "Status: blocked by environment prerequisites." not in PARITY_DOC
+    assert "triangle:missing" not in PARITY_DOC
+    assert "snaphu:missing" not in PARITY_DOC
 
 
 def test_manifest_excludes_generated_release_artifacts() -> None:

@@ -45,11 +45,10 @@
     <section class="card">
       <h2>Parity audit workflow</h2>
       <p>Parity audits prepare and track fresh run copies, then report the copy path for explicit verification.</p>
+      <p><span class="code-inline">make audit</span> is the repo-local convenience wrapper. The authoritative driver is <span class="code-inline">scripts/validate_audit.py</span>, and omitting <span class="code-inline">--datasets</span> makes it use the manifest-backed required dataset set from <span class="code-inline">pystamps/data/audited_workflow_manifest.json</span>.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make audit</code></pre>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-  python scripts/validate_audit.py \
-    --datasets \
-      inputs_and_outputs/InSAR_dataset_test_stage8diag \
-      inputs_and_outputs/InSAR_dataset_test \
+  uv run python scripts/validate_audit.py \
     --output inputs_and_outputs/validation_runs/latest_audit.json</code></pre>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">RUN_COPY="$(python - <<'PY'
 import json
@@ -63,8 +62,15 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
   pystamps verify --run "$RUN_COPY" --golden ./inputs_and_outputs/InSAR_dataset_test</code></pre>
       <ul>
         <li>Fresh audit output should be treated as active input for subsequent checks.</li>
+        <li>The required done-gate datasets are owned by <span class="code-inline">pystamps/data/audited_workflow_manifest.json</span>, including the small-baseline stage-7 audit targets.</li>
         <li>Do not rerun against stale copies; interrupted audits or manual restart paths invalidate prior results.</li>
       </ul>
+    </section>
+
+    <section class="card">
+      <h2>Parity loop and oracle precedence</h2>
+      <p><span class="code-inline">make parity-loop</span> wraps <span class="code-inline">scripts/parity_bug_loop.py</span>. The loop consumes a matching <span class="code-inline">latest_audit.json</span> when one already exists, then ranks the next target from the saved first-divergent-boundary trace instead of guessing from downstream symptoms.</p>
+      <p>Oracle precedence comes from <span class="code-inline">pystamps/data/oracle_contract.json</span>: <span class="code-inline">cpp_wrapper</span>, then <span class="code-inline">matlab_source</span>, then <span class="code-inline">manual_references</span>. When the pinned StaMPS wrapper intentionally differs from the MATLAB scripts, the wrapper-backed path is the practical parity oracle and should be recorded in the emitted audit trace.</p>
     </section>
 
     <section class="card">
