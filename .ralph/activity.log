@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-04-21 23:56:21 | run=20260421-123533-4172008 | iter=4 | mode=build | story=US-004 | duration=27918s | status=success
 - 2026-04-21 16:10:58 | run=20260421-123533-4172008 | iter=3 | mode=build | story=US-003 | duration=2459s | status=success
 - 2026-04-21 15:29:54 | run=20260421-123533-4172008 | iter=2 | mode=build | story=US-002 | duration=4386s | status=success
 - 2026-04-21 14:16:41 | run=20260421-123533-4172008 | iter=1 | mode=build | story=US-001 | duration=6068s | status=success
@@ -137,3 +138,16 @@
 [2026-04-21 22:09:51] US-004 iteration 4: focused stage2 topofit regressions passed; running fresh audited PATCH_1 stage2 probe against the single-master oracle pair
 [2026-04-21 23:10:17] US-004 iteration 4: patched near-max topofit selection and row-invariant bp1 phase-ramp selection; full stage2, trial-wrap, and accelerated kernel suites now pass
 [2026-04-21 23:53:57] US-004 iteration 4: progress recorded after committing near-max topofit and row-invariant bp1 fixes; audited pm1 parity still blocked by residual ph_patch/ph_res CLAP drift
+[2026-04-21 23:56:19] ITERATION 4 end (duration=27918s)
+[2026-04-21 23:56:25] ITERATION 5 start (mode=build story=US-005)
+[2026-04-21 23:58:21] US-005 iteration 5 start: reviewing stage-3 select1.mat generation path, prior parity evidence, and canonical validation commands before code changes.
+[2026-04-22 00:47:54] US-005 iteration 5: regenerating PATCH_1 stage-3 output on a temporary copy to inspect fresh keep_ix and threshold drift against the oracle.
+[2026-04-22 00:54:29] US-005 iteration 5: validated the current uncommitted stage-3 rewrite with the focused stage3 pytest suite before deciding whether another code change is still needed.
+[2026-04-22 00:58:15] US-005 iteration 5: killed the stalled isolated PATCH_1 stage-3 replay after 10+ minutes and switched back to the mandated parity-loop/audit verification path.
+[2026-04-22 01:27:35] US-005 iteration 5: stopped the full parity loop after ~30 minutes because the seeded full-run audit had not yet regenerated pm1/select1 for PATCH_1; switching to a story-scoped PATCH_1 oracle replay instead.
+[2026-04-22 01:42:08] US-005 iteration 5: patched _ps_topofit_single to preserve double-precision phase_residual for stage-3 re-estimation and added a saved PATCH_1 oracle-row regression for ph_res2.
+[2026-04-22 02:14:02] US-005 iteration 5: stopped the second PATCH_1 replay after 25 minutes without artifact write; keeping the stage-3 complex64 topofit fix and oracle-row regression, but story-level file verification remains compute-bound.
+[2026-04-22 02:17:01] US-005 iteration 5: creating the focused stage-3 implementation commit for the topofit precision fix and oracle-row regression.
+[2026-04-22 02:20:08] US-005 iteration 5: stopped the exact two-dataset validate_audit gate after it remained in upstream stage-2 regeneration with no PATCH_1 pm1/select1 outputs in either run root.
+[2026-04-22 02:21:08] US-005 iteration 5: appended the progress entry with the implementation commit, passing pytest gates, and the compute-bound parity/audit verification limits.
+[2026-04-22 02:21:18] US-005 iteration 5: creating the required progress/log commit with the run outcome and verification evidence.

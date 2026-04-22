@@ -5,6 +5,42 @@ Started: Sat Mar 14 05:18:43 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-04-22 02:20 UTC] - US-005: Fix stage-3 select artifact generation against the wrapper and MATLAB traces
+Thread: 
+Run: 20260421-123533-4172008 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 0ac6985 fix(stage3): match reestimate topofit precision
+- Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after the implementation commit, and the progress/log update for this iteration is not committed yet
+- Verification:
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage5_ported.py tests/test_validate_audit.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage6_ported.py tests/test_stage7_ported.py tests/test_stage8_ported.py tests/test_acceleration.py tests/test_validate_audit.py tests/test_cli.py -q` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/latest_parity_loop.json` -> FAIL (stopped after ~30 minutes with the seeded full-run audit still regenerating stage 2 and no `PATCH_1/pm1.mat` or `select1.mat` yet emitted)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL (stopped after it remained in upstream stage-2 regeneration without producing `PATCH_1/pm1.mat` / `select1.mat` in either run root)
+  - Command: `rm -rf tmp/us005_patch1 && mkdir -p tmp/us005_patch1/PATCH_1 && cp inputs_and_outputs/InSAR_dataset_test_stage8diag/PATCH_1/{ps1.mat,ph1.mat,pm1.mat,da1.mat,bp1.mat,parms.mat} tmp/us005_patch1/PATCH_1/ && PYTHONPATH=. .venv/bin/python - <<'PY' ... stage3_select_ps(Path('tmp/us005_patch1/PATCH_1')) ... PY` -> FAIL (compute-bound; no artifact write before the run was stopped)
+- Files changed:
+  - pystamps/pipeline/ported.py
+  - tests/test_stage3_ported.py
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Traced the full `select1.mat` path against vendored `StaMPS/matlab/ps_select.m` and confirmed the working-tree stage-3 rewrite already matched MATLAB on per-row `ph_patch2` generation, valid-row handling, strict keep-thresholding, and reestimated threshold coefficient storage.
+  - Isolated the remaining stage-3 seam to the topofit re-estimation input precision: the oracle row reproduced exactly on `K_ps2`, `C_ps2`, and `coh_ps2` only when the normalized phase vector was narrowed to `complex64` before `_ps_topofit_single`.
+  - Patched the stage-3 re-estimation loop to pass `complex64` normalized phase into `_ps_topofit_single`, and kept the helper residual dtype aligned with the caller path instead of forcing an extra `complex64` cast inside the double-precision helper.
+  - Added a dataset-backed regression on the saved `PATCH_1` oracle row that exercises the stage-3 topofit residual seam directly.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - The maintained `InSAR_dataset_test_stage8diag/PATCH_1/select1.mat` artifact is stale relative to the current stage-3 working-tree logic; its threshold coefficients differ from the true oracle in `InSAR_dataset_test/PATCH_1/select1.mat`.
+    - For stage-3 re-estimation, MATLAB-backed parity depends on feeding a `complex64` normalized phase vector into `ps_topofit`; the `complex128` path leaves a small but audit-visible `ph_res2` seam.
+  - Gotchas encountered
+    - The full parity loop and the two-dataset audit both regenerate from stage 2 on seeded full-run copies, so they can stay compute-bound for tens of minutes before emitting any `select1.mat` evidence.
+    - A direct `PATCH_1` stage-3 replay is also expensive on the full candidate set and can remain CPU-bound for >20 minutes before writing artifacts.
+  - Useful context
+    - A direct compare of the first narrowed replay against `inputs_and_outputs/InSAR_dataset_test/PATCH_1/select1.mat` showed the pre-fix stage-3 drift had collapsed to the `ph_res2` boundary (`max_abs=7.15256e-07`) with `ix`, `keep_ix`, `ph_patch2`, and `coh_thresh_coeffs` already matching the oracle.
+---
 ## [2026-04-21 16:07:01 UTC] - US-003: Reproduce the current first-drift boundary against the oracle set
 Thread:
 Run: 20260421-123533-4172008 (iteration 3)
