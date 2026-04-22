@@ -266,7 +266,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-11.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 8820d2e feat(validation): reuse matching audit in parity loop (progress/activity commit pending)
+- Commit: 8820d2e feat(validation): reuse matching audit in parity loop; 9c3d786 docs(progress): record us-011 blocked status
 - Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after the implementation commit (for example `MANIFEST.in`, `docs/api/pipeline_ported.html`, `pyproject.toml`, `pystamps/pipeline/ported.py`, `tests/test_stage6_ported.py`, `dist/`, and `target/`)
 - Verification:
   - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py -q` -> PASS
