@@ -120,7 +120,7 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
     - `triangle` is available through the bundled build dependencies (`.build-deps/pkgs/triangle/usr/bin/triangle`) even when it is not on the shell `PATH`; using `_maybe_resolve_external_tool('triangle')` is required to mirror the MATLAB `ps_weed.m` path in this repo.
 ---
 ## [2026-04-22 02:20 UTC] - US-005: Fix stage-3 select artifact generation against the wrapper and MATLAB traces
-Thread: 
+Thread:
 Run: 20260421-123533-4172008 (iteration 5)
 Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-5.log
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-5.md
@@ -156,7 +156,7 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
     - A direct compare of the first narrowed replay against `inputs_and_outputs/InSAR_dataset_test/PATCH_1/select1.mat` showed the pre-fix stage-3 drift had collapsed to the `ph_res2` boundary (`max_abs=7.15256e-07`) with `ix`, `keep_ix`, `ph_patch2`, and `coh_thresh_coeffs` already matching the oracle.
 ---
 ## [2026-04-22 02:48 UTC] - US-005: Fix stage-3 select artifact generation against the wrapper and MATLAB traces
-Thread: 
+Thread:
 Run: 20260421-123533-4172008 (iteration 5)
 Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-5.log
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-5.md
@@ -754,4 +754,49 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
     - The audited `ph_patch` gap persists even when replayed directly from saved `ph_weight` and when CLAP is replayed one interferogram at a time, so a wrapper-unbacked precision toggle is not an acceptable fix.
   - Useful context
     - Historical experimental runs such as `20260414_stage2_clap128_safe` reduce but do not eliminate the same `ph_patch`/`ph_res` residual, which points to a deeper CLAP numeric seam rather than another topofit regression.
+---
+## [2026-04-22 16:32:23 UTC] - US-010: Extend parity recovery to all audited small-baseline workflows
+Thread:
+Run: 20260421-123533-4172008 (iteration 10)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-10.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-10.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: ae70a09 feat(validation): add small-baseline audit set
+- Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after this commit (for example `MANIFEST.in`, `docs/api/pipeline_ported.html`, `docs/function-reference.html`, `docs/function_reference.md`, `docs/getting_started.md`, `notebooks/*.ipynb`, `pyproject.toml`, `pystamps/_version.py`, `pystamps/kernels/accelerated.py`, `pystamps/pipeline/{ported.py,stages.py}`, `scripts/{benchmark_backends.py,derive_audit_stage_timings.py}`, `src/lib.rs`, `tests/test_{acceleration,kernels_accelerated,stage2_ported,stage2_trial_wraps,stage6_ported,stage7_ported,verify}.py`, plus untracked build artifacts under `.agent-memory/`, `.build-*`, `dist/`, `target/`, `pytest-of-rdelprete/`, and unrelated untracked sources such as `scripts/parity_bug_loop.py` and `tests/test_parity_bug_loop.py`)
+- Verification:
+  - Command: `TMPDIR=$PWD/.tmp_pytest PYTHONPATH=. .venv/bin/pytest tests/test_parity_contract.py tests/test_validate_audit.py tests/test_standalone_validation_contract.py -q` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag inputs_and_outputs/InSAR_dataset_small_baseline_stage7 --allow-subset --output inputs_and_outputs/validation_runs/latest_small_baseline_audit.json` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag inputs_and_outputs/InSAR_dataset_small_baseline_stage7 --allow-subset --output inputs_and_outputs/validation_runs/latest_small_baseline_parity_loop.json` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py -q` -> PASS
+  - Command: `TMPDIR=$PWD/.tmp_pytest PYTHONPATH=. .venv/bin/pytest tests/test_stage5_ported.py tests/test_validate_audit.py -q` -> PASS
+  - Command: `TMPDIR=$PWD/.tmp_pytest PYTHONPATH=. .venv/bin/pytest tests/test_stage6_ported.py tests/test_stage7_ported.py tests/test_stage8_ported.py tests/test_acceleration.py tests/test_validate_audit.py tests/test_cli.py -q` -> PASS
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/latest_parity_loop.json` -> FAIL (reproduced the pre-existing single-master `validate_audit.py` compute-bound stall for more than 30 minutes without a fresh `latest_parity_loop.json`)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL (the prompt’s older two-dataset command is stale after US-010; the audit contract now requires the two small-baseline datasets as well)
+- Files changed:
+  - AGENTS.md
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - Makefile
+  - README.md
+  - docs/release.md
+  - docs/testing.html
+  - pystamps/pipeline/types.py
+  - pystamps/parity_contract.py
+  - pystamps/data/audited_workflow_manifest.json
+  - scripts/validate_audit.py
+  - tests/test_parity_contract.py
+  - tests/test_validate_audit.py
+  - tests/test_standalone_validation_contract.py
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7
+- What was implemented
+  - Added the audited small-baseline dataset pair and wrapper-oracle stage-7 references to the manifest, with stage7-only workflow metadata and required-dataset propagation into the parity contract and local audit documentation.
+  - Extended `scripts/validate_audit.py` so manifest targets can drive seed roots, stage windows, clean patterns, and the new `small_baseline` workflow profile, then added tests that lock the stage7-only small-baseline replay behavior.
+  - Created compact audited small-baseline stage-7 datasets for the explicit-`bp2.mat` and rebuilt-`bp2.mat` paths, and verified both datasets pass `validate_audit` and `parity_bug_loop` exactly with no new parity exceptions.
+- **Learnings for future iterations:**
+  - The canonical full-validation dataset set must now come from `pystamps/data/audited_workflow_manifest.json` or `make audit`; the older two-dataset command is no longer valid after US-010.
+  - `tests/test_validate_audit.py` can exhaust `/tmp` because it copies large datasets; using `TMPDIR=$PWD/.tmp_pytest` keeps the required pytest groups reliable.
+  - The remaining global blocker is still the pre-existing single-master stage-6 compute-bound stall inside `scripts/validate_audit.py`, not the new small-baseline stage-7 audit surface added in this story.
 ---
