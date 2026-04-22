@@ -35,6 +35,7 @@ def test_validate_audit_writes_contract_and_passes(monkeypatch, tmp_path: Path) 
     }
 
     monkeypatch.setattr(module, "_resolve_contract", lambda: contract)
+    monkeypatch.setattr(module, "capture_code_state", lambda repo_root: {"git_commit": "abc123", "git_dirty": False})
     monkeypatch.setattr(
         module,
         "_repo_root",
@@ -79,6 +80,7 @@ def test_validate_audit_writes_contract_and_passes(monkeypatch, tmp_path: Path) 
         "InSAR_dataset_test_stage8diag_audit",
         "InSAR_dataset_test_audit",
     ]
+    assert payload["code_state"] == {"git_commit": "abc123", "git_dirty": False}
     assert payload["contract"] == contract
 
 

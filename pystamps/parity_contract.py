@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from importlib.resources import files
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ SUPPORTED_AUDIT_ENTRYPOINT = "scripts/validate_audit.py"
 SUPPORTED_AUDIT_OUTPUT = "inputs_and_outputs/validation_runs/latest_audit.json"
 SUPPORTED_AUDIT_RESULT_FIELDS: tuple[str, ...] = (
     "generated_at_utc",
+    "code_state",
     "contract",
     "missing_datasets",
     "audits",
@@ -284,3 +286,55 @@ def build_parity_contract(inputs_root: str | Path) -> dict[str, Any]:
         "datasets": [_dataset_payload(dataset, repo_root) for dataset in datasets],
         "workflows": REQUIRED_WORKFLOWS,
     }
+
+
+def capture_code_state(repo_root: str | Path) -> dict[str, Any]:
+    root = Path(repo_root).expanduser().resolve()
+    payload: dict[str, Any] = {
+        "repo_root": str(root),
+        "git_commit": None,
+        "git_commit_short": None,
+        "git_branch": None,
+        "git_dirty": None,
+        "git_status": [],
+    }
+
+    def _git_stdout(*args: str) -> str | None:
+        try:
+            completed = subprocess.run(
+                ["git", *args],
+                cwd=root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        except OSError:
+            return None
+        if completed.returncode != 0:
+            return None
+        return completed.stdout.rstrip()
+
+    def _is_generated_validation_status(line: str) -> bool:
+        if len(line) < 4:
+            return False
+        path_text = line[3:].strip()
+        if not path_text:
+            return False
+        candidates = [candidate.strip() for candidate in path_text.split(" -> ")]
+        return all(candidate.startswith("inputs_and_outputs/validation_runs/") for candidate in candidates)
+
+    commit = _git_stdout("rev-parse", "HEAD")
+    if commit is None:
+        return payload
+
+    payload["git_commit"] = commit
+    payload["git_commit_short"] = _git_stdout("rev-parse", "--short", "HEAD")
+    payload["git_branch"] = _git_stdout("rev-parse", "--abbrev-ref", "HEAD")
+    status_output = _git_stdout("status", "--short")
+    if status_output is None:
+        return payload
+
+    status_lines = [line for line in status_output.splitlines() if line and not _is_generated_validation_status(line)]
+    payload["git_status"] = status_lines
+    payload["git_dirty"] = bool(status_lines)
+    return payload

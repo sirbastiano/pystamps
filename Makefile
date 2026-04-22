@@ -38,6 +38,6 @@ benchmark:
 
 parity-loop:
 	$(PARITY_ENV) uv run python scripts/parity_bug_loop.py \
-		--datasets inputs_and_outputs/InSAR_dataset_test \
-		--allow-subset \
+		--datasets $(AUDIT_DATASETS) \
+		--audit-output $(AUDIT_OUTPUT) \
 		--output inputs_and_outputs/validation_runs/latest_parity_loop.json

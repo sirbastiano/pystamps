@@ -25,6 +25,7 @@ from pystamps.parity_contract import (
     STAGE78_CLEAN_PATTERNS,
     FULL_CLEAN_PATTERNS,
     build_parity_contract,
+    capture_code_state,
 )
 from pystamps.pipeline.stages import run_pipeline
 from pystamps.pipeline.types import PipelineContext
@@ -638,6 +639,7 @@ def _dataset_audit(
 def _base_payload(contract: dict[str, Any]) -> dict[str, Any]:
     return {
         "generated_at_utc": _now_utc(),
+        "code_state": capture_code_state(_repo_root()),
         "contract": contract,
         "missing_datasets": [],
         "audits": [],

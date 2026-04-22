@@ -32,10 +32,11 @@ def test_readme_and_makefile_expose_the_same_local_entrypoints() -> None:
     assert "make build" in README
     assert "make twine-check" in README
     assert "make audit" in README
+    assert "make parity-loop" in README
     assert "make verify" in README
     assert "make benchmark" in README
 
-    assert ".PHONY: setup test test-impl build twine-check audit verify benchmark" in MAKEFILE
+    assert ".PHONY: setup test test-impl build twine-check audit verify benchmark parity-loop" in MAKEFILE
     assert "PARITY_ENV = OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=." in MAKEFILE
     assert (
         "AUDIT_DATASETS = inputs_and_outputs/InSAR_dataset_test_stage8diag "
@@ -52,6 +53,10 @@ def test_readme_and_makefile_expose_the_same_local_entrypoints() -> None:
     assert "uv run --with build python -m build --sdist --wheel" in MAKEFILE
     assert "uv run --with twine python -m twine check dist/*" in MAKEFILE
     assert "uv run python scripts/validate_audit.py" in MAKEFILE
+    assert "uv run python scripts/parity_bug_loop.py" in MAKEFILE
+    assert "--datasets $(AUDIT_DATASETS)" in MAKEFILE
+    assert "--audit-output $(AUDIT_OUTPUT)" in MAKEFILE
+    assert "--output inputs_and_outputs/validation_runs/latest_parity_loop.json" in MAKEFILE
     assert "uv run pystamps verify --run $(VERIFY_RUN) --golden $(VERIFY_GOLDEN)" in MAKEFILE
     assert "uv run python scripts/benchmark_backends.py" in MAKEFILE
 

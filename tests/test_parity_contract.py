@@ -1,7 +1,9 @@
 import importlib.resources
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
+import pystamps.parity_contract as parity_contract
 from pystamps.parity_contract import build_parity_contract
 
 
@@ -17,6 +19,7 @@ def test_build_parity_contract_without_datasets(tmp_path: Path) -> None:
     assert contract["supported_audit"]["output_artifact"] == "inputs_and_outputs/validation_runs/latest_audit.json"
     assert contract["supported_audit"]["required_result_fields"] == [
         "generated_at_utc",
+        "code_state",
         "contract",
         "missing_datasets",
         "audits",
@@ -82,3 +85,28 @@ def test_packaged_parity_manifests_are_valid_json() -> None:
     ]
     assert all(target["required_for_done"] for target in workflow_manifest["workflow_targets"])
     assert all(target["status"] == "present" for target in workflow_manifest["workflow_targets"])
+
+
+def test_capture_code_state_ignores_generated_validation_outputs(monkeypatch, tmp_path: Path) -> None:
+    outputs = {
+        ("rev-parse", "HEAD"): "abc123\n",
+        ("rev-parse", "--short", "HEAD"): "abc123\n",
+        ("rev-parse", "--abbrev-ref", "HEAD"): "main\n",
+        (
+            "status",
+            "--short",
+        ): " M inputs_and_outputs/validation_runs/latest_audit.json\n M scripts/validate_audit.py\n?? inputs_and_outputs/validation_runs/latest_parity_loop.json\n",
+    }
+
+    def fake_run(cmd, cwd, text, capture_output, check):
+        key = tuple(cmd[1:])
+        return SimpleNamespace(returncode=0, stdout=outputs[key], stderr="")
+
+    monkeypatch.setattr(parity_contract.subprocess, "run", fake_run)
+
+    state = parity_contract.capture_code_state(tmp_path)
+
+    assert state["git_commit"] == "abc123"
+    assert state["git_branch"] == "main"
+    assert state["git_dirty"] is True
+    assert state["git_status"] == [" M scripts/validate_audit.py"]

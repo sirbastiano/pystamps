@@ -67,6 +67,7 @@ make test
 make build
 make twine-check
 make audit
+make parity-loop
 make verify
 make benchmark
 ```
