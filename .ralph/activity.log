@@ -151,3 +151,5 @@
 [2026-04-22 02:20:08] US-005 iteration 5: stopped the exact two-dataset validate_audit gate after it remained in upstream stage-2 regeneration with no PATCH_1 pm1/select1 outputs in either run root.
 [2026-04-22 02:21:08] US-005 iteration 5: appended the progress entry with the implementation commit, passing pytest gates, and the compute-bound parity/audit verification limits.
 [2026-04-22 02:21:18] US-005 iteration 5: creating the required progress/log commit with the run outcome and verification evidence.
+[2026-04-22 02:21:31] US-005 iteration 5: force-adding the required .ralph bookkeeping files because the directory is ignored in git, then creating the progress commit.
+[2026-04-22 02:21:52] US-005 iteration 5: implementation and progress commits created; capturing final head and remaining worktree status for handoff.
