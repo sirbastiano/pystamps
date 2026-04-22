@@ -5,6 +5,41 @@ Started: Sat Mar 14 05:18:43 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-04-22 04:01 UTC] - US-006: Fix stage-4 weed selection parity once select1 is exact
+Thread:
+Run: 20260421-123533-4172008 (iteration 6)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-6.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: fc02194 fix(stage4): regenerate weed triangulation
+- Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after this commit (for example `MANIFEST.in`, `README.md`, `pyproject.toml`, `pystamps/kernels/accelerated.py`, `pystamps/pipeline/stages.py`, `tests/test_acceleration.py`, and multiple untracked build artifacts under `dist/`, `target/`, and `.build-*`)
+- Verification:
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage5_ported.py tests/test_validate_audit.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/pytest tests/test_stage6_ported.py tests/test_stage7_ported.py tests/test_stage8_ported.py tests/test_acceleration.py tests/test_validate_audit.py tests/test_cli.py -q` -> PASS
+  - Command: `PYTHONPATH=. .venv/bin/python -u - <<'PY' ... stage4_weed_ps(tmp/us006_patch1_stage4_after_patch/PATCH_1, debug=True) + verify_run_against_golden(..., patterns=('PATCH_1/weed1.mat',)) ... PY` -> FAIL (`weed1.mat` now keeps `77888` PS, but `ix_weed` / `ix_weed2` still save as `(79228,)` / `(79225,)` instead of the oracle `(79227,)` / `(79224,)`)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/parity_bug_loop.py --datasets inputs_and_outputs/InSAR_dataset_test --allow-subset --output inputs_and_outputs/validation_runs/latest_parity_loop.json` -> FAIL (bounded run stopped after the fresh `20260422_034354` audit root still had not emitted `PATCH_1/pm1.mat`, `select1.mat`, or `weed1.mat`)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_outputs/InSAR_dataset_test --output inputs_and_outputs/validation_runs/latest_audit.json` -> FAIL (bounded run stopped after the fresh `20260422_035618` stage2_8 roots still lacked `PATCH_1/pm1.mat`, `select1.mat`, and `weed1.mat`)
+- Files changed:
+  - pystamps/pipeline/ported.py
+  - tests/test_stage4_ported.py
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added `_resolve_stage4_edges()` and changed `stage4_weed_ps()` to rebuild `psweed.2.edge` from the current post-duplicate node set whenever `triangle` is available, instead of trusting a stale checked-in edge file.
+  - Added focused stage-4 regressions that prove the helper regenerates current triangle edges and only falls back to an existing edge file when `triangle` is unavailable.
+  - Verified on the audited `PATCH_1` oracle input that the stale-edge fix restores the correct noise-population count (`77888` kept after dropping noisy pixels), but it does not eliminate the remaining one-row `ix_weed` / `ix_weed2` shape gap.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - The first real stage-4 bug was stale topology reuse: the saved `psweed.2.edge` in the audited dataset omits one current node, and reusing it inflates `ps_std` / `ps_max` enough to drop thousands of extra pixels.
+    - Regenerating triangle edges from the live post-duplicate population restores the oracle count exactly (`77888` kept) and matches the oracle `ps_max < 1` population (`33860`), so the large stage-4 drift was topology-driven rather than kernel-backend-driven.
+  - Gotchas encountered
+    - The remaining `ix_weed` / `ix_weed2` shape mismatch is tied to the low-D_A input population, not the noise kernel: dropping the smallest positive threshold-margin `select1` row (`keep_ix` row `6756`, PS index `6789`) plus fresh edge regeneration reproduces the oracle stage-4 shapes and kept-count, which points back to an upstream threshold-edge seam rather than more stage-4 math.
+    - The required parity-loop and audit gates still spend long stretches replaying stage 2 before producing fresh `PATCH_1` stage-3/4 artifacts, so bounded verification attempts need explicit evidence checks in the spawned run roots.
+  - Useful context
+    - `triangle` is available through the bundled build dependencies (`.build-deps/pkgs/triangle/usr/bin/triangle`) even when it is not on the shell `PATH`; using `_maybe_resolve_external_tool('triangle')` is required to mirror the MATLAB `ps_weed.m` path in this repo.
+---
 ## [2026-04-22 02:20 UTC] - US-005: Fix stage-3 select artifact generation against the wrapper and MATLAB traces
 Thread: 
 Run: 20260421-123533-4172008 (iteration 5)

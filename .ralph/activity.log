@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-04-22 02:50:59 | run=20260421-123533-4172008 | iter=5 | mode=build | story=US-005 | duration=10473s | status=success
 - 2026-04-21 23:56:21 | run=20260421-123533-4172008 | iter=4 | mode=build | story=US-004 | duration=27918s | status=success
 - 2026-04-21 16:10:58 | run=20260421-123533-4172008 | iter=3 | mode=build | story=US-003 | duration=2459s | status=success
 - 2026-04-21 15:29:54 | run=20260421-123533-4172008 | iter=2 | mode=build | story=US-002 | duration=4386s | status=success
@@ -156,3 +157,13 @@
 [2026-04-22 02:22:23] US-005 iteration 5: creating the final activity-log bookkeeping commit after capturing the handoff state.
 [2026-04-22 02:48:31] US-005 supplemental verification: exact topofit loop on oracle-selected rows completed in about 19s; full ph_patch2 regeneration remains runtime-bound at about 45m for PATCH_1.
 [2026-04-22 02:49:15] US-005 progress updated with supplemental verification showing exact topofit re-estimation is fast and the remaining blocker is full ph_patch2 regeneration.
+[2026-04-22 02:50:57] ITERATION 5 end (duration=10473s)
+[2026-04-22 02:51:03] ITERATION 6 start (mode=build story=US-006)
+[2026-04-22 02:53:14] US-006 discovery: located activity logger in PATH and narrowed search to stage-4 weed generation
+[2026-04-22 02:54:21] US-006 discovery: inspected stage-4 helpers and started collecting current weed1 drift evidence
+[2026-04-22 02:58:33] US-006 discovery: current archived run still shows stage-3 drift, running a fresh stage-3/4 repro before any stage-4 edit
+[2026-04-22 03:40:00] US-006 implementation: stage4 now regenerates psweed triangle edges from the current weeded node set before noise estimation.
+[2026-04-22 03:43:29] US-006 verification: pytest gates passed after stage4 triangle-regeneration patch; running parity loop and audit next.
+[2026-04-22 03:55:38] US-006 verification: stopped parity_bug_loop after a bounded run because the fresh audit root still had not emitted PATCH_1 pm1/select1/weed1 evidence.
+[2026-04-22 04:01:36] US-006 verification: stopped validate_audit after a bounded run because both fresh stage2_8 roots still lacked PATCH_1 pm1/select1/weed1 outputs.
+[2026-04-22 04:03:10] US-006 progress updated: recorded the stage4 triangle-regeneration fix, passing pytest gates, and the remaining one-row weed shape blocker.
