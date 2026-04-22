@@ -3079,7 +3079,7 @@ def _build_uw_interp_payload(
         z_nn = np.asarray(z_nn, dtype=np.int64)
         d0 = d_nn[:, [0]]
         tie_mask = np.isclose(d_nn, d0, rtol=0.0, atol=1e-12)
-        z_choose = np.max(np.where(tie_mask, z_nn, -1), axis=1)
+        z_choose = np.min(np.where(tie_mask, z_nn, np.iinfo(np.int64).max), axis=1)
         z_idx = z_choose.astype(np.int64) + 1
     Z = z_idx.reshape((nrow, ncol), order="F").astype(np.float64)
 
@@ -5533,10 +5533,12 @@ def stage6_unwrap(
             ph_w = ph_patch
     else:
         rc2_file = dataset_root / "rc2.mat"
+        has_rc2 = False
         if rc2_file.exists():
             rc2 = _read_mat_cached(rc2_file, cache, enabled=enable_mat_cache)
             try:
                 ph_w = _as_ps_ifg_complex(rc2.get("ph_rc"), n_ps, "rc2.ph_rc").astype(np.complex64)
+                has_rc2 = True
             except PortedStageError:
                 ph_w = ph2.astype(np.complex64)
         else:
@@ -5564,10 +5566,13 @@ def stage6_unwrap(
         else:
             bperp_vec = _as_ps_vector(ps2.get("bperp"), n_ifg, "ps2.bperp").astype(np.float32)
             bperp_mat = np.tile(bperp_vec[None, :], (n_ps, 1))
-        if small_baseline and k_ps_raw is not None:
+        if has_rc2 and k_ps_raw is not None:
             K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
             ph_w = ph_w * np.exp(1j * (K_ps[:, None] * bperp_mat))
-        elif not small_baseline:
+        elif small_baseline and k_ps_raw is not None:
+            K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
+            ph_w = ph_w * np.exp(1j * (K_ps[:, None] * bperp_mat))
+        elif not small_baseline and not has_rc2:
             ph_patch_nm = _as_ps_ifg_complex(pm2.get("ph_patch"), n_ps, "pm2.ph_patch").astype(np.complex64)
             ph_patch_full = np.concatenate(
                 [
@@ -5577,14 +5582,11 @@ def stage6_unwrap(
                 ],
                 axis=1,
             )
-            if rc2_file.exists():
-                ph_w = ph_w * np.conj(ph_patch_full)
-            else:
-                ph_w = ph_w * np.conj(ph_patch_full)
-                if k_ps_raw is not None:
-                    K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
-                    C_ps = _as_ps_vector(pm2.get("C_ps"), n_ps, "pm2.C_ps").astype(np.float32)
-                    ph_w = ph_w * np.exp(-1j * (K_ps[:, None] * bperp_mat + C_ps[:, None]))
+            ph_w = ph_w * np.conj(ph_patch_full)
+            if k_ps_raw is not None:
+                K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
+                C_ps = _as_ps_vector(pm2.get("C_ps"), n_ps, "pm2.C_ps").astype(np.float32)
+                ph_w = ph_w * np.exp(-1j * (K_ps[:, None] * bperp_mat + C_ps[:, None]))
 
     if not small_baseline:
         scla_path = dataset_root / "scla_smooth2.mat"

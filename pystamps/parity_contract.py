@@ -1,14 +1,29 @@
 from __future__ import annotations
 
+import json
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
 from pystamps.io.dataset import discover_dataset
 
 
-DEFAULT_REQUIRED_DATASETS: tuple[str, ...] = (
-    "inputs_and_outputs/InSAR_dataset_test_stage8diag",
-    "inputs_and_outputs/InSAR_dataset_test",
+_DATA_PACKAGE = "pystamps.data"
+ORACLE_CONTRACT_RESOURCE = "oracle_contract.json"
+AUDITED_WORKFLOW_RESOURCE = "audited_workflow_manifest.json"
+
+
+def _load_data_resource(name: str) -> dict[str, Any]:
+    return json.loads((files(_DATA_PACKAGE) / name).read_text(encoding="utf-8"))
+
+
+ORACLE_CONTRACT = _load_data_resource(ORACLE_CONTRACT_RESOURCE)
+AUDITED_WORKFLOW_MANIFEST = _load_data_resource(AUDITED_WORKFLOW_RESOURCE)
+
+DEFAULT_REQUIRED_DATASETS: tuple[str, ...] = tuple(
+    target["local_dataset_path"]
+    for target in AUDITED_WORKFLOW_MANIFEST["workflow_targets"]
+    if target["supports_validate_audit"] and target["local_dataset_path"]
 )
 
 SUPPORTED_AUDIT_ENTRYPOINT = "scripts/validate_audit.py"
@@ -78,7 +93,10 @@ STAGE2_CLEAN_PATTERNS = STAGE2_VERIFY_PATTERNS
 STAGE3_CLEAN_PATTERNS = STAGE3_VERIFY_PATTERNS
 STAGE4_CLEAN_PATTERNS = STAGE4_VERIFY_PATTERNS
 STAGE6_CLEAN_PATTERNS = STAGE6_VERIFY_PATTERNS
-STAGE68_CLEAN_PATTERNS = STAGE68_VERIFY_PATTERNS
+# Stage 6 reuses existing smoothed SCLA corrections when they are already
+# present in the seed run root, so do not delete that input before replaying
+# stages 5-8 or 6-8.
+STAGE68_CLEAN_PATTERNS = tuple(pattern for pattern in STAGE68_VERIFY_PATTERNS if pattern != "scla_smooth2.mat")
 STAGE28_CLEAN_PATTERNS = STAGE25_CLEAN_PATTERNS + STAGE68_CLEAN_PATTERNS
 FULL_CLEAN_PATTERNS = STAGE1_VERIFY_PATTERNS + STAGE28_CLEAN_PATTERNS
 STAGE78_VERIFY_PATTERNS: tuple[str, ...] = (
@@ -132,8 +150,9 @@ REQUIRED_WORKFLOWS: dict[str, dict[str, Any]] = {
         "driver": SUPPORTED_AUDIT_ENTRYPOINT,
         "command": (
             "uv run python scripts/validate_audit.py "
-            "--datasets inputs_and_outputs/InSAR_dataset_test_stage8diag "
-            "inputs_and_outputs/InSAR_dataset_test "
+            "--datasets "
+            + " ".join(DEFAULT_REQUIRED_DATASETS)
+            + " "
             "--output inputs_and_outputs/validation_runs/latest_audit.json"
         ),
         "output_artifact": SUPPORTED_AUDIT_OUTPUT,
@@ -237,6 +256,10 @@ def build_parity_contract(inputs_root: str | Path) -> dict[str, Any]:
     return {
         "contract_version": 1,
         "inputs_root": _relative_to_repo(root, repo_root),
+        "oracle_contract_manifest_path": f"pystamps/data/{ORACLE_CONTRACT_RESOURCE}",
+        "audited_workflow_manifest_path": f"pystamps/data/{AUDITED_WORKFLOW_RESOURCE}",
+        "oracle_contract": ORACLE_CONTRACT,
+        "audited_workflow_manifest": AUDITED_WORKFLOW_MANIFEST,
         "dataset_discovery_rule": "Immediate child directories of inputs_root with patch.list or at least one PATCH_* directory.",
         "supported_audit": {
             "entrypoint": SUPPORTED_AUDIT_ENTRYPOINT,

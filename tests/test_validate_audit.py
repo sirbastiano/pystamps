@@ -468,6 +468,7 @@ def test_build_run_copy_uses_run_full_gate_seed_for_dataset_test(monkeypatch, tm
     assert generation["end_step"] == 8
     assert generation["seed_name"] == "RUN_FULL_GATE_1e10"
     assert generation["workflow_profile"] == "legacy_post"
+    assert "scla_smooth2.mat" not in generation["clean_patterns"]
     assert captured["workflow_profile"] == "legacy_post"
     assert Path(generation["seed_root"]) == seed.resolve()
     assert (run_root / "patch.list").read_text(encoding="utf-8") == "PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n"
