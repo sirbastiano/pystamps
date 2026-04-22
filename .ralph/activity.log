@@ -216,3 +216,4 @@
 [2026-04-22 20:16:38] US-012 verification complete: contract doc tests and repo pytest gates passed; long parity-loop and full-audit commands stayed compute-bound in fresh validation roots
 [2026-04-22 20:18:03] US-012 pre-commit review: docs/tests-only diff, no runtime security or performance regression surface introduced
 [2026-04-22 20:19:10] US-012 progress updated after docs commit ec98da9; recording bounded validator failures and final contract cleanup
+[2026-04-22 20:19:44] US-012 final handoff updated: progress entry now references both the docs commit and the bookkeeping commit
