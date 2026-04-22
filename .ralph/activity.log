@@ -154,3 +154,5 @@
 [2026-04-22 02:21:31] US-005 iteration 5: force-adding the required .ralph bookkeeping files because the directory is ignored in git, then creating the progress commit.
 [2026-04-22 02:21:52] US-005 iteration 5: implementation and progress commits created; capturing final head and remaining worktree status for handoff.
 [2026-04-22 02:22:23] US-005 iteration 5: creating the final activity-log bookkeeping commit after capturing the handoff state.
+[2026-04-22 02:48:31] US-005 supplemental verification: exact topofit loop on oracle-selected rows completed in about 19s; full ph_patch2 regeneration remains runtime-bound at about 45m for PATCH_1.
+[2026-04-22 02:49:15] US-005 progress updated with supplemental verification showing exact topofit re-estimation is fast and the remaining blocker is full ph_patch2 regeneration.

@@ -41,6 +41,33 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context
     - A direct compare of the first narrowed replay against `inputs_and_outputs/InSAR_dataset_test/PATCH_1/select1.mat` showed the pre-fix stage-3 drift had collapsed to the `ph_res2` boundary (`max_abs=7.15256e-07`) with `ix`, `keep_ix`, `ph_patch2`, and `coh_thresh_coeffs` already matching the oracle.
 ---
+## [2026-04-22 02:48 UTC] - US-005: Fix stage-3 select artifact generation against the wrapper and MATLAB traces
+Thread: 
+Run: 20260421-123533-4172008 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260421-123533-4172008-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (supplemental verification only; implementation remains at `0ac6985 fix(stage3): match reestimate topofit precision`)
+- Post-commit status: dirty; pre-existing unrelated modifications remain in the worktree after the implementation commit
+- Verification:
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. .venv/bin/python - <<'PY' ... _ps_topofit_batch(...) over oracle-selected rows ... PY` -> PASS (`80938` rows re-estimated in `15.5s`; residuals stayed at float32-scale because saved `select1.mat` only preserves narrowed `ph_patch2`)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. .venv/bin/python - <<'PY' ... exact _ps_topofit_single loop over oracle-selected rows ... PY` -> PASS (`80938` rows re-estimated in `19.3s`; `C_ps2`/`coh_ps2`/`ph_res2` remained within `<=9.54e-07` of the oracle from saved `select1.mat` inputs)
+  - Command: `OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. .venv/bin/python - <<'PY' ... benchmark ph_patch2 regeneration loop for 100 PATCH_1 rows ... PY` -> PASS (estimated `~2713s` / `~45m` for full `PATCH_1`, which explains why the direct fresh replay and the seeded parity/audit gates stay compute-bound before emitting `select1.mat`)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - No code changes in this supplemental pass; this recorded targeted real-data verification around the committed stage-3 precision fix.
+  - Confirmed the exact stage-3 topofit loop itself is no longer the runtime bottleneck and the remaining evidence gap is the CLAP-backed `ph_patch2` regeneration needed for a fresh full-artifact compare.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - The saved oracle `select1.mat` narrows `ph_patch2` on disk, so re-estimating directly from that file can only prove float32-scale agreement, not pre-write complex128 exactness.
+  - Gotchas encountered
+    - Fresh `PATCH_1` `select1.mat` generation is dominated by per-row CLAP patch filtering, not by `_ps_topofit_single`.
+  - Useful context
+    - A full exact artifact compare for US-005 still requires a long direct replay or a longer-running seeded parity loop; the committed precision fix is not what keeps those commands from finishing.
+---
 ## [2026-04-21 16:07:01 UTC] - US-003: Reproduce the current first-drift boundary against the oracle set
 Thread:
 Run: 20260421-123533-4172008 (iteration 3)
