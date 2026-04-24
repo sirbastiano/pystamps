@@ -136,10 +136,10 @@ def test_stage2_row_invariant_bperp_vector_prefers_invariant_bp1_rows() -> None:
     np.testing.assert_allclose(observed, np.asarray([10.0, 20.0], dtype=np.float64), rtol=0.0, atol=0.0)
 
 
-def test_prepare_clap_stack_uses_legacy_fft_tile_buffer_precision() -> None:
+def test_prepare_clap_stack_retains_complex128_scratch_buffer() -> None:
     prepared = ported._prepare_clap_filt_grid_stack((24, 24, 3), n_win=24, n_pad=8, low_pass=np.zeros((32, 32)))
 
-    assert prepared.ph_bit.dtype == np.complex64
+    assert prepared.ph_bit.dtype == np.complex128
 
 
 def test_clap_stack_matches_scalar_per_ifg_legacy_path() -> None:

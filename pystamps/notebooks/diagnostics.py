@@ -94,7 +94,8 @@ def load_velocity_diagnostics(
     dataset_root = Path(root).expanduser().resolve()
     ps2 = read_mat(dataset_root / "ps2.mat")
     mean_v_payload = read_mat(dataset_root / "mean_v.mat")
-    mv2 = read_mat(dataset_root / "mv2.mat")
+    mv2_path = dataset_root / "mv2.mat"
+    mv2 = read_mat(mv2_path) if mv2_path.exists() else {}
 
     lonlat = _as_points(ps2.get("lonlat", np.empty((0, 2), dtype=np.float64)))
     n_ps = lonlat.shape[0]

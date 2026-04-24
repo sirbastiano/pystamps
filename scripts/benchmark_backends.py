@@ -38,7 +38,6 @@ DEFAULT_CLEAN_PATTERNS = (
     "scla2.mat",
     "scla_smooth2.mat",
     "mean_v.mat",
-    "mv2.mat",
     "uw_space_time.mat",
 )
 
@@ -51,7 +50,6 @@ STAGE67_CLEAN_PATTERNS = (
     "scla2.mat",
     "scla_smooth2.mat",
     "mean_v.mat",
-    "mv2.mat",
     "uw_space_time.mat",
 )
 
@@ -59,7 +57,6 @@ STAGE78_CLEAN_PATTERNS = (
     "scla2.mat",
     "scla_smooth2.mat",
     "mean_v.mat",
-    "mv2.mat",
     "uw_space_time.mat",
 )
 

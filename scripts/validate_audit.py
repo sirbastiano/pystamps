@@ -37,6 +37,13 @@ _STAGE_BOUNDARY_PATTERNS: dict[int, tuple[str, ...]] = {
     3: STAGE3_VERIFY_PATTERNS,
     4: STAGE4_VERIFY_PATTERNS,
 }
+_STAGE6_DEBUG_ENV = "PYSTAMPS_STAGE6_DEBUG_JSON"
+
+
+class RunCopyGenerationError(RuntimeError):
+    def __init__(self, message: str, *, debug_artifacts: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.debug_artifacts = debug_artifacts or {}
 
 
 def _parse_args() -> argparse.Namespace:
@@ -178,6 +185,24 @@ def _clean_outputs(dataset_root: Path, patterns: tuple[str, ...]) -> None:
                 path.unlink()
 
 
+def _load_stage6_debug(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    summary = {
+        "output_path": str(path.resolve()),
+        "status": payload.get("status"),
+        "phase": payload.get("phase"),
+        "timings_sec": payload.get("timings_sec", {}),
+    }
+    for key in ("n_ps", "n_ifg", "unwrap_ifg_total", "ifg_completed", "uw_edge_count", "uw_grid_ps_count"):
+        if key in payload:
+            summary[key] = payload[key]
+    if "exception" in payload:
+        summary["exception"] = payload["exception"]
+    return summary
+
+
 def _listed_patches(dataset_root: Path) -> list[str]:
     patch_list = dataset_root / "patch.list"
     if not patch_list.exists():
@@ -295,6 +320,7 @@ def _build_run_copy(
     _copy_dataset(seed_root, run_root)
     _align_run_copy_with_dataset(run_root, dataset_root, workflow_profile)
     _clean_outputs(run_root, clean_patterns)
+    stage6_debug_path = run_root / "stage6_debug.json"
 
     context = PipelineContext(
         dataset_root=run_root.resolve(),
@@ -304,7 +330,15 @@ def _build_run_copy(
         dry_run=False,
         workflow_profile=workflow_profile,
     )
-    report = run_pipeline(context)
+    old_stage6_debug = os.environ.get(_STAGE6_DEBUG_ENV)
+    os.environ[_STAGE6_DEBUG_ENV] = str(stage6_debug_path.resolve())
+    try:
+        report = run_pipeline(context)
+    finally:
+        if old_stage6_debug is None:
+            os.environ.pop(_STAGE6_DEBUG_ENV, None)
+        else:
+            os.environ[_STAGE6_DEBUG_ENV] = old_stage6_debug
     failures = [
         {
             "stage": result.stage_id,
@@ -315,10 +349,14 @@ def _build_run_copy(
         }
         for result in report.failures
     ]
+    stage6_debug = _load_stage6_debug(stage6_debug_path)
     if failures:
-        raise RuntimeError(f"Pipeline regeneration failed for {dataset_root.name}: {json.dumps(failures)}")
+        raise RunCopyGenerationError(
+            f"Pipeline regeneration failed for {dataset_root.name}: {json.dumps(failures)}",
+            debug_artifacts={"stage6_debug": stage6_debug} if stage6_debug is not None else None,
+        )
 
-    return run_root.resolve(), {
+    generation = {
         "start_step": start_step,
         "end_step": end_step,
         "seed_root": str(seed_root),
@@ -327,6 +365,9 @@ def _build_run_copy(
         "validation_run_dir": str(validation_dir.resolve()),
         "workflow_profile": workflow_profile,
     }
+    if stage6_debug is not None:
+        generation["stage6_debug"] = stage6_debug
+    return run_root.resolve(), generation
 
 
 def _latest_workflow_run(dataset_name: str, suffixes: tuple[str, ...]) -> Path | None:
@@ -722,6 +763,16 @@ def main() -> int:
                 "kind": "missing_run_copy",
                 "message": str(exc),
             }
+            _emit_payload(_finalize_payload(payload), args.output)
+            return 1
+        except RunCopyGenerationError as exc:
+            payload["interrupted"] = True
+            payload["interruption"] = {
+                "kind": "run_copy_generation_failed",
+                "message": str(exc),
+            }
+            if exc.debug_artifacts:
+                payload["interruption"]["debug_artifacts"] = exc.debug_artifacts
             _emit_payload(_finalize_payload(payload), args.output)
             return 1
         except RuntimeError as exc:

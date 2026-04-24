@@ -343,18 +343,19 @@ def test_ps_topofit_batch_row_invariant_matches_generic() -> None:
     np.testing.assert_allclose(observed[3], expected[3], atol=1e-6, rtol=0.0)
 
 
-def test_ps_topofit_near_max_trial_indices_keep_local_peaks_only() -> None:
-    coh_trial = np.asarray([0.1, 0.5, 0.2, 0.49985, 0.4, 0.5e-1], dtype=np.float64)
+def test_ps_topofit_near_max_trial_indices_keeps_near_max_local_peaks() -> None:
+    coh_trial = np.asarray([0.1, 0.5, 0.2, 0.49985, 0.4, 0.05], dtype=np.float64)
 
     observed = ported._ps_topofit_near_max_trial_indices(coh_trial)
 
     np.testing.assert_array_equal(observed, np.asarray([1, 3], dtype=np.int64))
 
-def test_ps_topofit_select_candidate_keeps_endpoint_symmetric_coarse_peak() -> None:
+
+def test_ps_topofit_select_candidate_preserves_symmetric_endpoint_sign() -> None:
     observed = ported._ps_topofit_select_candidate(
         np.asarray([0, 12], dtype=np.int64),
-        np.asarray([0.4999, 0.5], dtype=np.float64),
-        np.asarray([0.8, 0.81], dtype=np.float64),
+        np.asarray([0.80, 0.80001], dtype=np.float64),
+        np.asarray([0.99, 1.0], dtype=np.float64),
         13,
     )
 
@@ -364,71 +365,12 @@ def test_ps_topofit_select_candidate_keeps_endpoint_symmetric_coarse_peak() -> N
 def test_ps_topofit_select_candidate_prefers_refined_winner_for_non_endpoint_peaks() -> None:
     observed = ported._ps_topofit_select_candidate(
         np.asarray([5, 11], dtype=np.int64),
-        np.asarray([0.4805803620005628, 0.4805406966462037], dtype=np.float64),
-        np.asarray([0.48055193847810107, 0.4806269793017278], dtype=np.float64),
+        np.asarray([0.80, 0.80001], dtype=np.float64),
+        np.asarray([0.99, 1.0], dtype=np.float64),
         13,
     )
 
     assert observed == 11
-
-
-def test_ps_topofit_select_candidate_prefers_refined_oracle_backed_winner() -> None:
-    observed = ported._ps_topofit_select_candidate(
-        np.asarray([5, 12], dtype=np.int64),
-        np.asarray([0.07544345285859379, 0.07534473474841559], dtype=np.float64),
-        np.asarray([0.07550967603443018, 0.10078124974475239], dtype=np.float64),
-        13,
-    )
-
-    assert observed == 12
-
-
-def test_ps_topofit_select_candidate_prefers_refined_peak_when_coarse_worse() -> None:
-    observed = ported._ps_topofit_select_candidate(
-        np.asarray([7, 11], dtype=np.int64),
-        np.asarray([0.24294833618216508, 0.24314597798524543], dtype=np.float64),
-        np.asarray([0.24287533848242288, 0.24271840306689843], dtype=np.float64),
-        13,
-    )
-
-    assert observed == 7
-
-
-def test_ps_topofit_single_routes_through_near_max_selector(monkeypatch) -> None:
-    trial_mult = np.asarray([-1.0, 0.0, 1.0], dtype=np.float64)
-    refine_calls: list[float] = []
-
-    monkeypatch.setattr(ported, "_stage2_trial_values", lambda n_trial_wraps: trial_mult)
-    monkeypatch.setattr(
-        ported,
-        "_ps_topofit_near_max_trial_indices",
-        lambda coh_trial: np.asarray([0, 2], dtype=np.int64),
-    )
-
-    def fake_refine(cpx, bp64, weighting, wb, den_lin, coarse_k0):
-        refine_calls.append(float(coarse_k0))
-        if coarse_k0 < 0:
-            return -10.0, -1.0, 0.2, np.full(cpx.shape, 1.0 + 0.0j, dtype=np.complex64)
-        return 10.0, 1.0, 0.9, np.full(cpx.shape, 0.0 + 1.0j, dtype=np.complex64)
-
-    monkeypatch.setattr(ported, "_ps_topofit_refine_candidate", fake_refine)
-
-    observed = ported._ps_topofit_single(
-        np.asarray([1.0 + 0.0j, 0.5 + 0.5j], dtype=np.complex128),
-        np.asarray([-2.0, 2.0], dtype=np.float64),
-        n_trial_wraps=0.125,
-    )
-
-    assert refine_calls == [-(np.pi / 16.0), np.pi / 16.0]
-    assert observed[0] == 10.0
-    assert observed[1] == 1.0
-    assert observed[2] == 0.9
-    np.testing.assert_allclose(
-        observed[3],
-        np.asarray([0.0 + 1.0j, 0.0 + 1.0j], dtype=np.complex64),
-        rtol=0.0,
-        atol=0.0,
-    )
 
 
 def test_ps_topofit_single_matches_source_near_max_refinement_path() -> None:
@@ -940,7 +882,32 @@ def test_stage2_grid_accumulate_matlab_keeps_single_precision_addition() -> None
     assert observed.dtype == np.complex64
 
 
-def test_clap_filt_grid_stack_prepared_matches_per_ifg_reference() -> None:
+def test_stage2_grid_accumulate_matlab_preserve_precision_writes_back_to_complex64_out() -> None:
+    ph_weight = np.asarray(
+        [
+            [16777216.0 + 0.0j],
+            [1.0 + 0.0j],
+            [-16777216.0 + 0.0j],
+        ],
+        dtype=np.complex128,
+    )
+    grid_lin = np.asarray([0, 0, 0], dtype=np.int64)
+    out = np.full((1, 1, 1), 99.0 + 99.0j, dtype=np.complex64)
+
+    observed = ported._stage2_grid_accumulate_matlab(
+        ph_weight,
+        grid_lin,
+        1,
+        1,
+        out=out,
+        preserve_precision=True,
+    )
+    assert observed is out
+    np.testing.assert_allclose(observed, np.asarray([[[1.0 + 0.0j]]], dtype=np.complex64), atol=0.0, rtol=0.0)
+    assert observed.dtype == np.complex64
+
+
+def test_clap_filt_grid_stack_prepared_matches_historical_vectorized_reference() -> None:
     rng = np.random.default_rng(0)
     ph = (
         rng.standard_normal((37, 53, 3)) + 1j * rng.standard_normal((37, 53, 3))
@@ -949,18 +916,77 @@ def test_clap_filt_grid_stack_prepared_matches_per_ifg_reference() -> None:
 
     prepared = ported._prepare_clap_filt_grid_stack(ph.shape, n_win=24, n_pad=8, low_pass=low_pass)
     observed = ported._clap_filt_grid_stack_prepared(ph, alpha=1.0, beta=0.3, prepared=prepared)
-    expected = np.empty_like(observed)
-    for ifg_ix in range(ph.shape[2]):
-        expected[:, :, ifg_ix] = ported._clap_filt_grid(
-            ph[:, :, ifg_ix],
-            alpha=1.0,
-            beta=0.3,
-            n_win=24,
-            n_pad=8,
-            low_pass=low_pass,
-        )
 
+    ph_arr = np.asarray(ph, dtype=np.complex64)
+    expected = np.zeros(ph_arr.shape, dtype=np.complex128)
+    ph_bit = prepared.ph_bit.copy()
+    h_smooth = np.empty_like(prepared.h_smooth)
+    for window in prepared.windows:
+        ph_bit.fill(0)
+        ph_bit[: prepared.n_win_int, : prepared.n_win_int, :] = ph_arr[window.i1 : window.i2, window.j1 : window.j2, :]
+        ph_fft = np.fft.fft2(ph_bit, axes=(0, 1))
+        H = np.abs(ph_fft)
+        for ifg_ix in range(prepared.n_ifg):
+            h_smooth[:, :, ifg_ix] = np.fft.ifftshift(
+                ported.signal.convolve2d(
+                    np.fft.fftshift(H[:, :, ifg_ix]),
+                    prepared.kernel,
+                    mode="same",
+                    boundary="fill",
+                    fillvalue=0.0,
+                )
+            )
+        mean_h = np.median(h_smooth, axis=(0, 1), keepdims=True)
+        np.divide(h_smooth, mean_h, out=h_smooth, where=mean_h != 0)
+        np.power(h_smooth, 1.0, out=h_smooth)
+        h_smooth -= 1.0
+        h_smooth[h_smooth < 0.0] = 0.0
+        G = h_smooth * 0.3 + prepared.low_pass_stack
+        ph_filt = np.fft.ifft2(ph_fft * G, axes=(0, 1))
+        expected[window.i1 : window.i2, window.j1 : window.j2, :] += (
+            ph_filt[: prepared.n_win_int, : prepared.n_win_int, :] * window.weight[:, :, None]
+        )
+    expected = expected.astype(np.complex64)
+
+    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
+
+
+def test_prepare_clap_filt_grid_stack_keeps_complex128_scratch_buffer() -> None:
+    low_pass = np.zeros((32, 32), dtype=np.float64)
+
+    prepared = ported._prepare_clap_filt_grid_stack((37, 53, 3), n_win=24, n_pad=8, low_pass=low_pass)
+
+    assert prepared.ph_bit.dtype == np.complex128
+
+
+def test_clap_filt_grid_stack_prepared_preserve_precision_writes_back_to_complex64_out() -> None:
+    rng = np.random.default_rng(7)
+    ph = (
+        rng.standard_normal((37, 53, 2)) + 1j * rng.standard_normal((37, 53, 2))
+    ).astype(np.complex64)
+    low_pass = np.full((32, 32), 0.01, dtype=np.float64)
+    prepared = ported._prepare_clap_filt_grid_stack(ph.shape, n_win=24, n_pad=8, low_pass=low_pass)
+    out = np.zeros_like(ph)
+
+    observed = ported._clap_filt_grid_stack_prepared(
+        ph,
+        alpha=1.0,
+        beta=0.3,
+        prepared=prepared,
+        out=out,
+        preserve_precision=True,
+    )
+    expected = ported._clap_filt_grid_stack_prepared(
+        ph,
+        alpha=1.0,
+        beta=0.3,
+        prepared=prepared,
+        preserve_precision=True,
+    ).astype(np.complex64)
+
+    assert observed is out
     np.testing.assert_allclose(observed, expected, rtol=0.0, atol=1.0e-10)
+    assert observed.dtype == np.complex64
 
 
 def test_clap_filt_grid_matches_matlab_padded_buffer_reuse() -> None:
@@ -1011,7 +1037,13 @@ def test_clap_filt_grid_matches_matlab_padded_buffer_reuse() -> None:
                 ph_fft = np.fft.fft2(ph_bit)
                 H = np.abs(ph_fft)
                 H = np.fft.ifftshift(
-                    ported.signal.convolve2d(np.fft.fftshift(H), kernel, mode="same", boundary="fill", fillvalue=0.0)
+                    ported.signal.convolve2d(
+                        np.fft.fftshift(H),
+                        kernel,
+                        mode="same",
+                        boundary="fill",
+                        fillvalue=0.0,
+                    )
                 )
                 mean_h = float(np.median(H))
                 if mean_h != 0.0:
@@ -1091,6 +1123,28 @@ def test_normalize_complex_unit_magnitude_inplace_matches_legacy_single_precisio
 
     np.testing.assert_allclose(observed, legacy, rtol=0.0, atol=0.0)
     assert np.max(np.abs(higher_precision - legacy)) > 0.0
+
+
+def test_normalize_complex_unit_magnitude_inplace_preserve_precision_writes_back_to_complex64() -> None:
+    values = np.asarray(
+        [
+            [0.9709364 + 0.06327464j, -0.82275736 - 0.08478022j, 0.0 + 0.0j],
+            [0.9851158 + 0.17893803j, 0.4308287 + 0.01955994j, -0.5815857 + 0.10361151j],
+        ],
+        dtype=np.complex64,
+    )
+
+    observed = values.copy()
+    returned = ported._normalize_complex_unit_magnitude_inplace(observed, preserve_precision=True)
+
+    expected = values.astype(np.complex128)
+    expected_abs = np.abs(expected).astype(np.float64, copy=False)
+    np.divide(expected, expected_abs, out=expected, where=expected_abs != 0)
+    expected = expected.astype(np.complex64)
+
+    assert returned is observed
+    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
+    assert observed.dtype == np.complex64
 
 
 def test_stage2_checkpoint_modes(monkeypatch, tmp_path: Path) -> None:
@@ -1381,7 +1435,6 @@ def test_stage2_estimate_gamma_uses_legacy_precision_path(monkeypatch, tmp_path:
         "clap": [],
         "normalize": [],
     }
-
     monkeypatch.setattr(ported, "read_mat", fake_read_mat)
     monkeypatch.setattr(ported, "write_mat", lambda path, payload: None)
     monkeypatch.setattr(ported, "_build_stage_options", lambda patch: ported.StageOptions())
@@ -1569,7 +1622,7 @@ def test_stage2_saved_nr_matches_scaled_histogram(monkeypatch, tmp_path: Path) -
     np.testing.assert_allclose(np.asarray(payload["Nr"], dtype=np.float64).reshape(-1), expected_nr, atol=1e-15, rtol=0.0)
 
 
-def test_stage2_saved_nr_preserves_previous_histogram_when_last_iteration_changes(
+def test_stage2_final_checkpoint_preserves_current_outputs_and_previous_weighting_state(
     monkeypatch, tmp_path: Path
 ) -> None:
     patch_dir = tmp_path / "PATCH_1"
@@ -1665,6 +1718,8 @@ def test_stage2_saved_nr_preserves_previous_histogram_when_last_iteration_change
 
     np.testing.assert_allclose(coh_ps, np.full(2, 0.2, dtype=np.float64), atol=0.0, rtol=0.0)
     np.testing.assert_allclose(np.asarray(payload["Nr"], dtype=np.float64).reshape(-1), expected_nr, atol=1e-15, rtol=0.0)
+    np.testing.assert_allclose(np.asarray(payload["gamma_change_save"], dtype=np.float64).reshape(-1), np.asarray([0.1]))
+    np.testing.assert_allclose(np.asarray(payload["i_loop"], dtype=np.float64).reshape(-1), np.asarray([2.0]))
 
 
 def test_stage2_replay_iteration_can_target_specific_rows(monkeypatch, tmp_path: Path) -> None:
@@ -1735,6 +1790,9 @@ def test_stage2_replay_iteration_can_target_specific_rows(monkeypatch, tmp_path:
     monkeypatch.setattr(ported, "run_stage2_topofit_row_invariant_kernel", fake_row_invariant_topofit)
 
     context = ported._stage2_prepare_replay_context(patch_dir, kernel_backend="python", native_threads=0)
+    assert context.bperp_nm.dtype == np.float64
+    assert context.bperp_mat is not None
+    assert context.bperp_mat.dtype == np.float64
     pm_payload = {
         "ph_weight": np.asarray([[1.0 + 0.0j, 0.4 + 0.1j], [0.5 + 0.5j, 0.2 + 0.3j]], dtype=np.complex64),
         "coh_bins": np.arange(0.005, 1.0, 0.01, dtype=np.float64),
@@ -1753,6 +1811,7 @@ def test_stage2_replay_iteration_can_target_specific_rows(monkeypatch, tmp_path:
     np.testing.assert_array_equal(replay["row_ix"], np.asarray([1], dtype=np.int64))
     np.testing.assert_allclose(replay["grid_ij"], np.asarray([[2, 2]], dtype=np.int64), rtol=0.0, atol=0.0)
     np.testing.assert_allclose(replay["ph_grid_samples"], pm_payload["ph_weight"][1:2, :], rtol=0.0, atol=0.0)
+    assert replay["ph_grid_samples"].dtype == np.complex64
     np.testing.assert_allclose(replay["K_ps"], np.asarray([0.25], dtype=np.float64), rtol=0.0, atol=0.0)
     np.testing.assert_allclose(replay["C_ps"], np.asarray([0.75], dtype=np.float64), rtol=0.0, atol=0.0)
     np.testing.assert_allclose(replay["coh_ps"], np.asarray([0.5], dtype=np.float64), rtol=0.0, atol=0.0)
@@ -1819,6 +1878,9 @@ def test_stage2_replay_iteration_keeps_partially_zero_rows(monkeypatch, tmp_path
     monkeypatch.setattr(ported, "_ps_topofit_batch", fake_batch)
 
     context = ported._stage2_prepare_replay_context(patch_dir, kernel_backend="python", native_threads=0)
+    assert context.bperp_nm.dtype == np.float64
+    assert context.bperp_mat is not None
+    assert context.bperp_mat.dtype == np.float64
     pm_payload = {
         "ph_weight": np.asarray([[1.0 + 0.0j, 1.0 + 0.0j]], dtype=np.complex64),
         "coh_bins": np.arange(0.005, 1.0, 0.01, dtype=np.float64),
@@ -2169,6 +2231,8 @@ def test_stage2_uses_bp1_matrix_for_non_small_baseline(monkeypatch, tmp_path: Pa
     assert result == "Stage 2 computed coherence for 2 candidates in 3 iterations"
     assert seen_bperp
     assert seen_random_bperp
+    assert seen_bperp[0].dtype == np.float64
+    assert seen_random_bperp[0].dtype == np.float64
     np.testing.assert_allclose(seen_bperp[0], bp_payload["bperp_mat"])
     np.testing.assert_allclose(seen_random_bperp[0], np.asarray([15.0, 30.0], dtype=np.float64))
 

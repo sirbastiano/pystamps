@@ -9,7 +9,6 @@ use rayon::ThreadPool;
 use rayon::ThreadPoolBuilder;
 use std::f64::consts::PI;
 
-const NEAR_MAX_COH_TOL: f64 = 2.0e-4;
 const QUARTER_PI: f64 = PI / 4.0;
 const QUARTER_PI_F32: f32 = std::f32::consts::PI / 4.0;
 const STAGE8_NOISE_SCALE: f32 = 0.5;
@@ -243,7 +242,7 @@ fn stage7_outputs(
     }
 
     let unwrap_obs = unwrap_ix.len() - 1;
-    let coest_mean_vel = solve_ix.len() >= 4;
+    let coest_mean_vel = unwrap_ix.len() >= 4;
     let seq_coeff = if coest_mean_vel { 3 } else { 2 };
     let mut mean_bperp = vec![0.0; unwrap_obs];
     for obs_ix in 0..unwrap_obs {
@@ -469,29 +468,6 @@ fn stage7_outputs(
     })
 }
 
-fn near_max_trial_indices(coh: &[f64]) -> Vec<usize> {
-    if coh.len() <= 1 {
-        return vec![0];
-    }
-
-    let max_coh = coh.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let mut candidate_ix = Vec::new();
-
-    for idx in 0..coh.len() {
-        let left_ok = idx == 0 || coh[idx] >= coh[idx - 1];
-        let right_ok = idx + 1 == coh.len() || coh[idx] >= coh[idx + 1];
-        if left_ok && right_ok && coh[idx] >= max_coh - NEAR_MAX_COH_TOL {
-            candidate_ix.push(idx);
-        }
-    }
-
-    if candidate_ix.is_empty() {
-        return vec![argmax_first(coh)];
-    }
-
-    candidate_ix
-}
-
 fn argmax_first(values: &[f64]) -> usize {
     let mut best_ix = 0usize;
     let mut best_value = values.first().copied().unwrap_or(f64::NEG_INFINITY);
@@ -504,27 +480,58 @@ fn argmax_first(values: &[f64]) -> usize {
     best_ix
 }
 
-fn select_candidate(candidate_ix: &[usize], coarse_coh: &[f64], refined_coh: &[f64], trial_count: usize) -> usize {
-    let _ = refined_coh;
-    let _ = trial_count;
+const STAGE2_TOPOFIT_NEAR_MAX_COH_TOL: f64 = 5.0e-3;
+
+fn near_max_trial_indices(coh_trial: &[f64]) -> Vec<usize> {
+    if coh_trial.len() <= 1 {
+        return vec![0];
+    }
+
+    let mut local_max = vec![false; coh_trial.len()];
+    local_max[0] = coh_trial[0] >= coh_trial[1];
+    local_max[coh_trial.len() - 1] = coh_trial[coh_trial.len() - 1] >= coh_trial[coh_trial.len() - 2];
+    if coh_trial.len() > 2 {
+        for idx in 1..coh_trial.len() - 1 {
+            local_max[idx] = coh_trial[idx] >= coh_trial[idx - 1] && coh_trial[idx] >= coh_trial[idx + 1];
+        }
+    }
+
+    let max_coh = coh_trial.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let mut candidate_ix = local_max
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &is_local_max)| {
+            if is_local_max && coh_trial[idx] >= max_coh - STAGE2_TOPOFIT_NEAR_MAX_COH_TOL {
+                Some(idx)
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
+    if candidate_ix.is_empty() {
+        candidate_ix.push(argmax_first(coh_trial));
+    }
+    candidate_ix
+}
+
+fn select_candidate(candidate_ix: &[usize], candidate_coh: &[f64], refined_coh: &[f64], trial_count: usize) -> usize {
     if candidate_ix.is_empty() {
         return 0;
     }
 
-    let coarse_best_local = argmax_first(coarse_coh);
-    candidate_ix[coarse_best_local]
-}
-
-fn argmax_first_f32(values: &[f32]) -> usize {
-    let mut best_ix = 0usize;
-    let mut best_value = values.first().copied().unwrap_or(f32::NEG_INFINITY);
-    for (idx, &value) in values.iter().enumerate().skip(1) {
-        if value > best_value {
-            best_ix = idx;
-            best_value = value;
-        }
+    let coarse_best_local = argmax_first(candidate_coh);
+    let coarse_best_trial_ix = candidate_ix[coarse_best_local];
+    if candidate_ix.len() == 1 {
+        return coarse_best_trial_ix;
     }
-    best_ix
+
+    let endpoint_symmetric =
+        candidate_ix.len() == 2 && candidate_ix[0] == 0 && candidate_ix[candidate_ix.len() - 1] == trial_count - 1;
+    if endpoint_symmetric {
+        return coarse_best_trial_ix;
+    }
+
+    candidate_ix[argmax_first(refined_coh)]
 }
 
 fn collect_row(cpx_row: &[Complex64], bp_row: &[f64]) -> RowData {
@@ -825,9 +832,27 @@ fn solve_row_generic_single(cpx_row: &[Complex32], bp_row: &[f32], trial_mult: &
     }
 
     let coh_trial = coherence_trials_generic_single(&row, trial_mult);
-    let trial_ix = argmax_first_f32(&coh_trial);
-    let coarse_k0 = QUARTER_PI_F32 / row.bperp_range * trial_mult[trial_ix];
-    refine_candidate_single(&row, coarse_k0, store_phase)
+    let coh_trial_f64: Vec<f64> = coh_trial.iter().map(|&value| value as f64).collect();
+    let candidate_ix = near_max_trial_indices(&coh_trial_f64);
+    if candidate_ix.len() == 1 {
+        let coarse_k0 = QUARTER_PI_F32 / row.bperp_range * trial_mult[candidate_ix[0]];
+        return refine_candidate_single(&row, coarse_k0, store_phase);
+    }
+
+    let mut refined = Vec::with_capacity(candidate_ix.len());
+    let mut candidate_coh = Vec::with_capacity(candidate_ix.len());
+    for &trial_ix in &candidate_ix {
+        let coarse_k0 = QUARTER_PI_F32 / row.bperp_range * trial_mult[trial_ix];
+        refined.push(refine_candidate_single(&row, coarse_k0, store_phase));
+        candidate_coh.push(coh_trial_f64[trial_ix]);
+    }
+    let refined_coh = refined.iter().map(|row| row.coh).collect::<Vec<_>>();
+    let selected_trial_ix = select_candidate(&candidate_ix, &candidate_coh, &refined_coh, trial_mult.len());
+    let selected_local_ix = candidate_ix
+        .iter()
+        .position(|&trial_ix| trial_ix == selected_trial_ix)
+        .unwrap_or(0);
+    refined.remove(selected_local_ix)
 }
 
 fn solve_row_row_invariant(
@@ -859,19 +884,18 @@ fn solve_row_from_trials(row: &RowData, trial_mult: &[f64], coh_trial: &[f64], s
     }
 
     let mut refined = Vec::with_capacity(candidate_ix.len());
-    let mut refined_coh = Vec::with_capacity(candidate_ix.len());
     let mut candidate_coh = Vec::with_capacity(candidate_ix.len());
-
     for &trial_ix in &candidate_ix {
         let coarse_k0 = QUARTER_PI / row.bperp_range * trial_mult[trial_ix];
-        let refined_row = refine_candidate(row, coarse_k0, store_phase);
-        refined_coh.push(refined_row.coh);
+        refined.push(refine_candidate(row, coarse_k0, store_phase));
         candidate_coh.push(coh_trial[trial_ix]);
-        refined.push(refined_row);
     }
-
+    let refined_coh = refined.iter().map(|row| row.coh).collect::<Vec<_>>();
     let selected_trial_ix = select_candidate(&candidate_ix, &candidate_coh, &refined_coh, trial_mult.len());
-    let selected_local_ix = candidate_ix.iter().position(|&trial_ix| trial_ix == selected_trial_ix).unwrap_or(0);
+    let selected_local_ix = candidate_ix
+        .iter()
+        .position(|&trial_ix| trial_ix == selected_trial_ix)
+        .unwrap_or(0);
     refined.remove(selected_local_ix)
 }
 
@@ -1277,10 +1301,34 @@ fn histogram_with_centers<'py>(
         return Ok(Array1::from_vec(out).into_pyarray(py));
     }
 
+    let diffs: Vec<f64> = center_slice.windows(2).map(|pair| pair[1] - pair[0]).collect();
+    let max_abs_center = center_slice
+        .iter()
+        .fold(0.0_f64, |acc, &value| acc.max(value.abs()));
+    let equal_spacing = diffs.iter().all(|&diff| {
+        (diff - diffs[0]).abs() <= f64::EPSILON * (1.0_f64).max(max_abs_center)
+    });
+    if equal_spacing {
+        let d = if center_slice.len() < 3 {
+            1.0_f64
+        } else {
+            (center_slice[center_slice.len() - 1] - center_slice[0]) / ((center_slice.len() - 1) as f64)
+        };
+        let cutoff0 = (center_slice[0] + center_slice[1]) / 2.0;
+        let max_bin = (center_slice.len() - 1) as f64;
+        for &value in value_slice {
+            if !value.is_finite() {
+                continue;
+            }
+            let assignment = 1.0 + ((value - cutoff0) / d).ceil().clamp(0.0, max_bin);
+            out[(assignment as usize) - 1] += 1.0;
+        }
+        return Ok(Array1::from_vec(out).into_pyarray(py));
+    }
+
     let mids: Vec<f64> = center_slice.windows(2).map(|pair| (pair[0] + pair[1]) / 2.0).collect();
     for &value in value_slice {
-        if value.is_nan() {
-            out[center_slice.len() - 1] += 1.0;
+        if !value.is_finite() {
             continue;
         }
         let mut lo = 0usize;

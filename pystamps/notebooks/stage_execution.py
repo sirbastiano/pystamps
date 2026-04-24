@@ -53,8 +53,8 @@ STAGE_PATTERNS = {
         "ifgstd2.mat",
     ),
     6: STAGE6_VERIFY_PATTERNS,
-    7: ("scla2.mat", "scla_smooth2.mat", "mean_v.mat", "mv2.mat"),
-    8: ("uw_space_time.mat",),
+    7: ("scla2.mat", "scla_smooth2.mat"),
+    8: ("mean_v.mat", "uw_space_time.mat"),
 }
 
 LEGACY_CONTEXT = {
@@ -64,8 +64,8 @@ LEGACY_CONTEXT = {
     4: "Legacy context: this is still inside legacy `stamps(1,4)`, but pySTAMPS isolates weeding into stage 4.",
     5: "Legacy context: `run_stamps_post.sh` moves into the merged dataset flow. pySTAMPS shows stage 5 explicitly before unwrapping.",
     6: "Legacy context: the post script continues with merged outputs; pySTAMPS lets you inspect the unwrap products independently.",
-    7: "Legacy context: SCLA and velocity products are part of the merged legacy run; pySTAMPS exposes them as a separate stage.",
-    8: "Legacy context: final space-time filtering sits at the tail of the merged legacy flow. pySTAMPS surfaces it directly as stage 8.",
+    7: "Legacy context: `run_stamps_post.sh` drives `stamps(5,7)`, so stage 7 owns the raw and smoothed SCLA artifacts.",
+    8: "Legacy context: the post wrapper follows `stamps(5,7)` with `stamps(6,6)` and plotting, so pySTAMPS uses stage 8 for the final rerun-backed `mean_v.mat` and `uw_space_time.mat` outputs.",
 }
 
 

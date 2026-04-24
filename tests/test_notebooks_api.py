@@ -229,7 +229,31 @@ def test_load_velocity_diagnostics_falls_back_to_stage7_stability_proxy(tmp_path
     np.testing.assert_allclose(diag.slope, [0.1, 0.2, 0.3])
 
 
-def test_load_velocity_diagnostics_skips_stage7_proxy_when_std_exists(monkeypatch) -> None:
+def test_load_velocity_diagnostics_uses_mean_v_when_mv2_missing(tmp_path: Path) -> None:
+    write_mat(
+        tmp_path / 'ps2.mat',
+        {
+            'lonlat': np.array([[11.0, 44.0], [12.0, 45.0]], dtype=np.float64),
+            'day': np.array([10.0, 20.0, 30.0], dtype=np.float64),
+            'master_ix': np.asarray(2.0, dtype=np.float64),
+        },
+    )
+    write_mat(
+        tmp_path / 'mean_v.mat',
+        {'m': np.array([[1.0, 2.0], [0.1, 0.2]], dtype=np.float32)},
+    )
+    write_mat(tmp_path / 'scla2.mat', {'C_ps_uw': np.array([-2.0, 0.5], dtype=np.float32)})
+
+    diag = load_velocity_diagnostics(tmp_path, apply_step8=True)
+
+    assert diag.velocity_source == 'mean_v.m slope fallback'
+    assert diag.stability_source == 'abs(scla2.C_ps_uw) stability proxy'
+    np.testing.assert_allclose(diag.velocity, [0.1, 0.2])
+    np.testing.assert_allclose(diag.stability, [2.0, 0.5])
+
+
+def test_load_velocity_diagnostics_skips_stage7_proxy_when_std_exists(monkeypatch, tmp_path: Path) -> None:
+    (tmp_path / 'mv2.mat').touch()
     payloads = {
         'ps2.mat': {
             'lonlat': np.array([[11.0, 44.0], [12.0, 45.0]], dtype=np.float64),
@@ -251,7 +275,7 @@ def test_load_velocity_diagnostics_skips_stage7_proxy_when_std_exists(monkeypatc
 
     monkeypatch.setattr(diagnostics_module, 'read_mat', fake_read_mat)
 
-    diag = load_velocity_diagnostics('ignored', apply_step8=True)
+    diag = load_velocity_diagnostics(tmp_path, apply_step8=True)
 
     assert diag.stability_source == 'mv2.mean_v_std'
     np.testing.assert_allclose(diag.stability, [0.01, 0.02])

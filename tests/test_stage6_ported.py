@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import numpy as np
@@ -331,6 +332,8 @@ def test_stage6_unwrap_restores_scla_terms_in_phuw2(monkeypatch, tmp_path: Path)
         return grids.pop(0)
 
     monkeypatch.setattr(ported, "_load_float_grid", fake_load_float_grid)
+    debug_path = dataset_root / "stage6_debug.json"
+    monkeypatch.setenv("PYSTAMPS_STAGE6_DEBUG_JSON", str(debug_path))
 
     ported.stage6_unwrap(dataset_root, backend="python", enable_mat_cache=False, snaphu_path="/bin/true")
 
@@ -343,6 +346,121 @@ def test_stage6_unwrap_restores_scla_terms_in_phuw2(monkeypatch, tmp_path: Path)
     phuw2 = read_mat(dataset_root / "phuw2.mat")
     expected = np.zeros((n_ps, n_ifg), dtype=np.float32)
     expected[:, unwrap_cols] = np.asarray([[1.0, 3.0], [2.0, 4.0]], dtype=np.float32) + restore[:, unwrap_cols]
+    np.testing.assert_allclose(np.asarray(phuw2["ph_uw"], dtype=np.float32), expected)
+    debug_payload = json.loads(debug_path.read_text(encoding="utf-8"))
+    assert debug_payload["status"] == "completed"
+    assert debug_payload["phase"] == "completed"
+    assert debug_payload["unwrap_ifg_total"] == 2
+    assert debug_payload["ifg_completed"] == 2
+    assert debug_payload["timings_sec"]["snaphu_loop"] >= 0.0
+    assert debug_payload["timings_sec"]["uw_space_time"] >= 0.0
+
+
+def test_stage6_unwrap_ignores_incompatible_scla_smooth_seed(monkeypatch, tmp_path: Path) -> None:
+    dataset_root = tmp_path
+    n_ps = 2
+    n_ifg = 3
+    master_ix = 2
+    unwrap_cols = np.asarray([0, 2], dtype=np.int64)
+    unwrapped_without_restore = np.asarray([[1.0, 0.0, 3.0], [2.0, 0.0, 4.0]], dtype=np.float32)
+    ph_rc = np.exp(1j * unwrapped_without_restore).astype(np.complex64)
+
+    write_mat(
+        dataset_root / "ps2.mat",
+        {
+            "n_ps": np.asarray(float(n_ps), dtype=np.float64),
+            "n_ifg": np.asarray(float(n_ifg), dtype=np.float64),
+            "n_image": np.asarray(float(n_ifg), dtype=np.float64),
+            "master_ix": np.asarray(float(master_ix), dtype=np.float64),
+            "day": np.asarray([[10.0], [20.0], [30.0]], dtype=np.float64),
+            "bperp": np.asarray([[10.0], [0.0], [20.0]], dtype=np.float32),
+            "xy": np.asarray([[1.0, 0.0, 0.0], [2.0, 41.0, 0.0]], dtype=np.float32),
+            "ij": np.asarray([[1.0, 1.0, 1.0], [2.0, 2.0, 1.0]], dtype=np.float64),
+            "lonlat": np.asarray([[0.0, 0.0], [0.0, 1.0]], dtype=np.float64),
+            "ll0": np.asarray([0.0, 0.0], dtype=np.float64),
+            "mean_range": np.asarray(830000.0, dtype=np.float64),
+            "mean_incidence": np.asarray(np.deg2rad(23.0), dtype=np.float64),
+        },
+    )
+    write_mat(dataset_root / "ph2.mat", {"ph": np.ones((n_ps, n_ifg), dtype=np.complex64)})
+    write_mat(
+        dataset_root / "pm2.mat",
+        {
+            "K_ps": np.asarray([[0.0], [0.0]], dtype=np.float64),
+            "C_ps": np.asarray([[0.0], [0.0]], dtype=np.float64),
+            "coh_ps": np.asarray([[1.0], [1.0]], dtype=np.float64),
+            "ph_patch": np.ones((n_ps, n_ifg - 1), dtype=np.complex64),
+            "ph_res": np.zeros((n_ps, n_ifg - 1), dtype=np.float32),
+        },
+    )
+    write_mat(dataset_root / "rc2.mat", {"ph_rc": ph_rc})
+    write_mat(dataset_root / "bp2.mat", {"bperp_mat": np.asarray([[10.0, 20.0], [30.0, 40.0]], dtype=np.float32)})
+    write_mat(
+        dataset_root / "scla_smooth2.mat",
+        {
+            "K_ps_uw": np.asarray([[0.1], [0.2], [0.3]], dtype=np.float32),
+            "C_ps_uw": np.asarray([[0.5], [-0.25], [0.75]], dtype=np.float32),
+            "ph_ramp": np.zeros((3, 3), dtype=np.float32),
+        },
+    )
+    write_mat(
+        dataset_root / "uw_grid.mat",
+        {
+            "ph": np.ones((2, 2), dtype=np.complex64),
+            "nzix": np.asarray([[True, True], [False, False]], dtype=bool),
+            "grid_ij": np.asarray([[1.0, 1.0], [1.0, 2.0]], dtype=np.float64),
+            "n_ps": np.asarray(2.0, dtype=np.float64),
+        },
+    )
+    write_mat(
+        dataset_root / "uw_interp.mat",
+        {
+            "edgs": np.asarray([[1.0, 1.0, 2.0]], dtype=np.float64),
+            "rowix": np.zeros((1, 2), dtype=np.float64),
+            "colix": np.asarray([[1.0], [1.0]], dtype=np.float64),
+            "Z": np.asarray([[1, 2], [1, 2]], dtype=np.int64),
+            "n_edge": np.asarray(1.0, dtype=np.float64),
+        },
+    )
+    write_mat(
+        dataset_root / "parms.mat",
+        {
+            "small_baseline_flag": np.asarray("n"),
+            "unwrap_patch_phase": np.asarray("n"),
+            "unwrap_method": np.asarray("3D"),
+            "unwrap_la_error_flag": np.asarray("y"),
+            "unwrap_spatial_cost_func_flag": np.asarray("n"),
+            "unwrap_time_win": np.asarray(36.0, dtype=np.float64),
+            "lambda": np.asarray(0.0555, dtype=np.float64),
+            "max_topo_err": np.asarray(15.0, dtype=np.float64),
+        },
+    )
+
+    monkeypatch.setattr(
+        ported,
+        "_compute_active_single_master_uw_space_time",
+        lambda *args, **kwargs: (
+            np.zeros((2, 2), dtype=np.float64),
+            np.zeros((1, 2), dtype=np.complex64),
+            np.zeros((1, 2), dtype=np.float32),
+            np.zeros((1, 2), dtype=np.float32),
+            np.zeros((1, 2), dtype=np.float32),
+        ),
+    )
+    monkeypatch.setattr(ported, "_run_external_command", lambda *args, **kwargs: None)
+
+    grids = [
+        np.asarray([[1.0, 2.0], [9.0, 10.0]], dtype=np.float32),
+        np.asarray([[3.0, 4.0], [11.0, 12.0]], dtype=np.float32),
+    ]
+
+    monkeypatch.setattr(ported, "_load_float_grid", lambda path, ncol: grids.pop(0))
+
+    ported.stage6_unwrap(dataset_root, backend="python", enable_mat_cache=False, snaphu_path="/bin/true")
+
+    phuw2 = read_mat(dataset_root / "phuw2.mat")
+    expected = np.zeros((n_ps, n_ifg), dtype=np.float32)
+    expected[:, unwrap_cols] = np.asarray([[1.0, 3.0], [2.0, 4.0]], dtype=np.float32)
     np.testing.assert_allclose(np.asarray(phuw2["ph_uw"], dtype=np.float32), expected)
 
 

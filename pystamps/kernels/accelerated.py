@@ -673,7 +673,7 @@ def _stage7_scla_core(
     ph_seq = np.diff(ph_proc_arr[:, unwrap_ix_arr], axis=1)
     bperp_seq = np.diff(bperp_arr[:, unwrap_ix_arr], axis=1)
     day_seq = np.diff(day_arr[unwrap_ix_arr])
-    coest_mean_vel = solve_ix_arr.size >= 4
+    coest_mean_vel = unwrap_ix_arr.size >= 4
 
     mean_bperp = np.mean(bperp_seq, axis=0)
     if coest_mean_vel:

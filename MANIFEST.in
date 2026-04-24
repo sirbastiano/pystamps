@@ -2,6 +2,7 @@ include README.md
 include LICENSE
 include Cargo.toml
 recursive-include src *.rs
+recursive-include pystamps/data *.json
 recursive-include docs *.md
 prune dist
 prune build

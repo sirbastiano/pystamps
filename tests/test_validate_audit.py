@@ -18,6 +18,17 @@ def _load_validate_audit_module():
     return module
 
 
+def _copy_test_tree(src: Path, dst: Path) -> None:
+    for path in sorted(src.rglob("*")):
+        rel = path.relative_to(src)
+        target = dst / rel
+        if path.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+
+
 def test_validate_audit_writes_contract_and_passes(monkeypatch, tmp_path: Path) -> None:
     module = _load_validate_audit_module()
     inputs_root = tmp_path / "inputs_and_outputs"
@@ -345,7 +356,12 @@ def test_validate_audit_records_run_copy_generation_failure(monkeypatch, tmp_pat
     monkeypatch.setattr(
         module,
         "_prepare_run_selection",
-        lambda dataset_root, golden_base, audit_stamp: (_ for _ in ()).throw(RuntimeError("generation failed")),
+        lambda dataset_root, golden_base, audit_stamp: (_ for _ in ()).throw(
+            module.RunCopyGenerationError(
+                "generation failed",
+                debug_artifacts={"stage6_debug": {"phase": "snaphu_loop", "ifg_completed": 3}},
+            )
+        ),
     )
     monkeypatch.setattr(
         module,
@@ -365,6 +381,7 @@ def test_validate_audit_records_run_copy_generation_failure(monkeypatch, tmp_pat
     assert payload["interrupted"] is True
     assert payload["failed_workflows"] == ["full_validation"]
     assert payload["interruption"]["kind"] == "run_copy_generation_failed"
+    assert payload["interruption"]["debug_artifacts"]["stage6_debug"]["phase"] == "snaphu_loop"
 
 
 def test_resolve_run_selection_prefers_explicit_and_latest_validation_copy(monkeypatch, tmp_path: Path) -> None:
@@ -403,8 +420,9 @@ def test_build_run_copy_uses_stage2_when_stage1_artifacts_exist(monkeypatch, tmp
     for filename in ("ps1.mat", "ph1.mat", "bp1.mat", "da1.mat", "hgt1.mat", "pm1.mat", "select1.mat", "weed1.mat"):
         (patch / filename).write_text("stub", encoding="utf-8")
 
+    monkeypatch.setattr(module, "_repo_root", lambda: tmp_path)
     monkeypatch.setattr(module, "_inputs_root", lambda: tmp_path / "inputs_and_outputs")
-    monkeypatch.setattr(module, "_copy_dataset", lambda src, dst: shutil.copytree(src, dst))
+    monkeypatch.setattr(module, "_copy_dataset", _copy_test_tree)
 
     captured: dict[str, object] = {}
 
@@ -413,6 +431,18 @@ def test_build_run_copy_uses_stage2_when_stage1_artifacts_exist(monkeypatch, tmp
         captured["start_step"] = context.start_step
         captured["end_step"] = context.end_step
         captured["workflow_profile"] = context.workflow_profile
+        stage6_debug_path = Path(os.environ[module._STAGE6_DEBUG_ENV])
+        stage6_debug_path.write_text(
+            json.dumps(
+                {
+                    "status": "completed",
+                    "phase": "completed",
+                    "timings_sec": {"snaphu_loop": 12.5},
+                    "ifg_completed": 4,
+                }
+            ),
+            encoding="utf-8",
+        )
         return SimpleNamespace(failures=[])
 
     monkeypatch.setattr(module, "run_pipeline", fake_run_pipeline)
@@ -431,6 +461,8 @@ def test_build_run_copy_uses_stage2_when_stage1_artifacts_exist(monkeypatch, tmp
     assert not (run_root / "PATCH_1" / "pm1.mat").exists()
     assert not (run_root / "PATCH_1" / "select1.mat").exists()
     assert not (run_root / "PATCH_1" / "weed1.mat").exists()
+    assert generation["stage6_debug"]["status"] == "completed"
+    assert generation["stage6_debug"]["timings_sec"]["snaphu_loop"] == 12.5
 
 
 def test_build_run_copy_uses_run_full_gate_seed_for_dataset_test(monkeypatch, tmp_path: Path) -> None:
@@ -454,7 +486,7 @@ def test_build_run_copy_uses_run_full_gate_seed_for_dataset_test(monkeypatch, tm
 
     monkeypatch.setattr(module, "_inputs_root", lambda: inputs_root)
     monkeypatch.setattr(module, "_seed_root_for_dataset", lambda dataset_root: seed.resolve())
-    monkeypatch.setattr(module, "_copy_dataset", lambda src, dst: shutil.copytree(src, dst))
+    monkeypatch.setattr(module, "_copy_dataset", _copy_test_tree)
     captured: dict[str, object] = {}
 
     def fake_run_pipeline(context):
@@ -513,7 +545,7 @@ def test_build_run_copy_prefers_stage5_when_run_full_gate_seed_has_stage1_artifa
 
     monkeypatch.setattr(module, "_inputs_root", lambda: inputs_root)
     monkeypatch.setattr(module, "_seed_root_for_dataset", lambda dataset_root: seed.resolve())
-    monkeypatch.setattr(module, "_copy_dataset", lambda src, dst: shutil.copytree(src, dst))
+    monkeypatch.setattr(module, "_copy_dataset", _copy_test_tree)
     captured: dict[str, object] = {}
 
     def fake_run_pipeline(context):
@@ -569,8 +601,9 @@ def test_build_run_copy_uses_manifest_stage7_small_baseline_profile(monkeypatch,
     }
 
     monkeypatch.setattr(module, "_resolve_contract", lambda: contract)
+    monkeypatch.setattr(module, "_repo_root", lambda: tmp_path)
     monkeypatch.setattr(module, "_inputs_root", lambda: inputs_root)
-    monkeypatch.setattr(module, "_copy_dataset", lambda src, dst: shutil.copytree(src, dst))
+    monkeypatch.setattr(module, "_copy_dataset", _copy_test_tree)
     captured: dict[str, object] = {}
 
     def fake_run_pipeline(context):

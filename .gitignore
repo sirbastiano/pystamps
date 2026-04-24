@@ -17,9 +17,19 @@ __pycache__/
 /AGENTS.md
 /.github/
 /PLANS.md
+/.agent-memory/
+/.build-deps/
+/.build-venv/
+/.tmp_build/
+/.tmp_pip/
+/.tmp_test/
+/.tmp_test_us012/
+/pytest-of-rdelprete/
+/target/
 
 # Generated metadata
 *.egg-info/
+/pystamps/kernels/_stage2_native.cpython-*.so
 
 # Large repo-only assets not shipped in the package
 /build/

@@ -1706,6 +1706,53 @@ def _stage7_mean_velocity_fit(
     return np.vstack((intercept.astype(np.float32), slope.astype(np.float32)))
 
 
+def _stage8_mean_velocity_payload(
+    dataset_root: Path,
+    ps2: dict[str, Any],
+    parms_raw: dict[str, Any],
+    cache: dict[Path, dict[str, Any]],
+    *,
+    enable_mat_cache: bool,
+) -> dict[str, np.ndarray]:
+    n_ps = int(round(_mat_scalar(ps2.get("n_ps", 0), 0)))
+    if n_ps <= 0:
+        raise PortedStageError("ps2.mat missing valid n_ps for stage-8 mean velocity export")
+
+    phuw = _read_mat_cached(dataset_root / "phuw2.mat", cache, enabled=enable_mat_cache)
+    scla = _read_mat_cached(dataset_root / "scla2.mat", cache, enabled=enable_mat_cache)
+    ifgstd = _read_mat_cached(dataset_root / "ifgstd2.mat", cache, enabled=enable_mat_cache)
+
+    ph_uw = _as_ps_matrix(phuw.get("ph_uw"), n_ps, "phuw2.ph_uw").astype(np.float64)
+    ph_scla = _as_ps_matrix(scla.get("ph_scla"), n_ps, "scla2.ph_scla").astype(np.float64)
+    ph_plot, _ = _deramp_unwrapped_phase(ps2, ph_uw - ph_scla)
+
+    day_full = np.asarray(ps2.get("day"), dtype=np.float64).reshape(-1)
+    n_ifg = int(round(_mat_scalar(ps2.get("n_ifg", day_full.size), day_full.size)))
+    if day_full.size != n_ifg:
+        raise PortedStageError("ps2.day must match interferogram count for stage-8 mean velocity export")
+    master_ix = int(round(_mat_scalar(ps2.get("master_ix", 1), 1)))
+    if master_ix < 1 or master_ix > n_ifg:
+        raise PortedStageError("ps2.master_ix must be 1-based within the interferogram stack")
+
+    drop_ifg = _normalize_drop_index(parms_raw.get("drop_ifg_index", None))
+    drop_set = set(int(v) for v in drop_ifg.tolist())
+    unwrap_ifg = np.asarray([i for i in range(1, n_ifg + 1) if i not in drop_set and i != master_ix], dtype=np.int64)
+    if unwrap_ifg.size == 0:
+        raise PortedStageError("stage-8 mean velocity export requires at least one non-master interferogram")
+    unwrap_ix = unwrap_ifg - 1
+
+    ref_ix = _select_reference_ps(ps2, parms_raw)
+    ph_use = _center_to_reference(ph_plot[:, unwrap_ix], ref_ix)
+    ifg_std_full = _as_ps_vector(ifgstd.get("ifg_std"), n_ifg, "ifgstd2.ifg_std").astype(np.float64)
+    ifg_var = (ifg_std_full[unwrap_ix] * np.pi / 180.0) ** 2
+    cov = np.diag(ifg_var).astype(np.float64)
+    master_day = float(day_full[master_ix - 1])
+    day_use = day_full[unwrap_ix]
+    design = np.column_stack((np.ones(day_use.size, dtype=np.float64), day_use - master_day))
+    m = _weighted_lstsq_shared_design(design, ph_use.T, cov=cov).astype(np.float32)
+    return {"m": m}
+
+
 def _grid_neighbor_msd(ph_uw: np.ndarray, nzix: np.ndarray) -> np.ndarray:
     """Mirror uw_stat_costs.m MSD from neighboring unwrapped-grid jumps."""
     ph_uw_arr = np.asarray(ph_uw, dtype=np.float32)
@@ -2207,6 +2254,21 @@ def _write_stage3_debug(patch_dir: Path, payload: dict[str, Any] | None) -> None
     if payload is None:
         return
     (patch_dir / "stage3_debug.json").write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _stage6_debug_path(dataset_root: Path) -> Path | None:
+    del dataset_root
+    raw = os.environ.get("PYSTAMPS_STAGE6_DEBUG_JSON")
+    if raw is None or not raw.strip():
+        return None
+    return Path(raw).expanduser().resolve()
+
+
+def _write_stage6_debug(path: Path | None, payload: dict[str, Any] | None) -> None:
+    if path is None or payload is None:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _coh_threshold_from_dist(
@@ -5463,145 +5525,136 @@ def stage6_unwrap(
     triangle_path: str | None = None,
     snaphu_path: str | None = None,
 ) -> str:
+    stage6_t0 = time.perf_counter()
+    stage6_debug_path = _stage6_debug_path(dataset_root)
+    stage6_debug_payload: dict[str, Any] | None = None
+    current_phase = "initializing"
+    if stage6_debug_path is not None:
+        stage6_debug_payload = {
+            "status": "running",
+            "phase": current_phase,
+            "dataset_root": str(dataset_root.resolve()),
+            "updated_at_epoch_sec": time.time(),
+            "timings_sec": {"total": 0.0},
+        }
+        _write_stage6_debug(stage6_debug_path, stage6_debug_payload)
+
+    def _emit_stage6_debug(status: str, phase: str, *, extra: dict[str, Any] | None = None) -> None:
+        nonlocal current_phase
+        if stage6_debug_payload is None:
+            return
+        current_phase = phase
+        stage6_debug_payload["status"] = status
+        stage6_debug_payload["phase"] = phase
+        stage6_debug_payload["updated_at_epoch_sec"] = time.time()
+        timings = dict(stage6_debug_payload.get("timings_sec", {}))
+        timings["total"] = time.perf_counter() - stage6_t0
+        stage6_debug_payload["timings_sec"] = timings
+        if extra:
+            stage6_debug_payload.update(extra)
+        _write_stage6_debug(stage6_debug_path, stage6_debug_payload)
+
     cache = {} if mat_cache is None else mat_cache
-    if not (dataset_root / "ps2.mat").exists() or not (dataset_root / "ph2.mat").exists():
-        stage5_merge_and_ifgstd(
-            dataset_root,
-            backend=backend,
-            io_workers=io_workers,
-            mat_cache=cache,
-            enable_mat_cache=enable_mat_cache,
-        )
-
-    ps2 = _read_mat_cached(dataset_root / "ps2.mat", cache, enabled=enable_mat_cache)
-    n_ps = int(round(_mat_scalar(ps2.get("n_ps", 0), 0)))
-    if n_ps <= 0:
-        raise PortedStageError("ps2.mat missing valid n_ps")
-    ph2 = _as_ps_ifg_complex(
-        _read_mat_cached(dataset_root / "ph2.mat", cache, enabled=enable_mat_cache)["ph"], n_ps, "ph2.ph"
-    )
-    n_ps, n_ifg = ph2.shape
-    master_ix = int(round(_mat_scalar(ps2.get("master_ix", 1), 1)))
-
-    parms_raw: dict[str, Any] = {}
-    parms_file = _resolve_file(dataset_root, "parms.mat")
-    if parms_file is not None:
-        try:
-            parms_raw = _read_mat_cached(parms_file, cache, enabled=enable_mat_cache)
-        except Exception:
-            parms_raw = {}
-
-    small_baseline = _mat_text(parms_raw.get("small_baseline_flag", "n"), "n").lower() == "y"
-    unwrap_patch_phase = _mat_text(parms_raw.get("unwrap_patch_phase", "n"), "n").lower() == "y"
-    unwrap_method = _mat_text(parms_raw.get("unwrap_method", "3D"), "3D")
-    drop_ifg = _normalize_drop_index(parms_raw.get("drop_ifg_index", None))
-    drop_set = set(int(v) for v in drop_ifg.tolist())
-    unwrap_ifg = np.asarray([i for i in range(1, n_ifg + 1) if i not in drop_set], dtype=np.int64)
-    if not small_baseline:
-        unwrap_ifg = unwrap_ifg[unwrap_ifg != master_ix]
-    if unwrap_ifg.size == 0:
-        raise PortedStageError("No interferograms available for stage-6 unwrapping")
-    unwrap_ifg_ix = unwrap_ifg - 1
-    effective_unwrap_method = unwrap_method
-    lowfilt_flag = False
-    if unwrap_method.upper() in {"3D", "3D_NEW"}:
-        if small_baseline:
-            # Multi-master stacks follow uw_3d.m and enable low-pass support.
-            lowfilt_flag = True
-        else:
-            # Single-master stacks are promoted to 3D_FULL without low-pass filtering.
-            effective_unwrap_method = "3D_FULL"
-
-    # Build wrapped phase input as in ps_unwrap.m.
-    ph_w: np.ndarray
-    phase_restore = np.zeros((n_ps, n_ifg), dtype=np.float32)
-    pm2 = _read_mat_cached(dataset_root / "pm2.mat", cache, enabled=enable_mat_cache)
-    if unwrap_patch_phase:
-        ph_patch = _as_ps_ifg_complex(pm2["ph_patch"], n_ps, "pm2.ph_patch").astype(np.complex64)
-        patch_abs = np.abs(ph_patch)
-        ph_patch = np.divide(ph_patch, patch_abs, out=np.zeros_like(ph_patch), where=patch_abs != 0)
-        if not small_baseline:
-            ph_w = np.concatenate(
-                [
-                    ph_patch[:, : master_ix - 1],
-                    np.ones((n_ps, 1), dtype=np.complex64),
-                    ph_patch[:, master_ix - 1 :],
-                ],
-                axis=1,
+    try:
+        if not (dataset_root / "ps2.mat").exists() or not (dataset_root / "ph2.mat").exists():
+            stage5_merge_and_ifgstd(
+                dataset_root,
+                backend=backend,
+                io_workers=io_workers,
+                mat_cache=cache,
+                enable_mat_cache=enable_mat_cache,
             )
-        else:
-            ph_w = ph_patch
-    else:
-        rc2_file = dataset_root / "rc2.mat"
-        has_rc2 = False
-        if rc2_file.exists():
-            rc2 = _read_mat_cached(rc2_file, cache, enabled=enable_mat_cache)
-            try:
-                ph_w = _as_ps_ifg_complex(rc2.get("ph_rc"), n_ps, "rc2.ph_rc").astype(np.complex64)
-                has_rc2 = True
-            except PortedStageError:
-                ph_w = ph2.astype(np.complex64)
-        else:
-            ph_w = ph2.astype(np.complex64)
 
-        k_ps_raw = pm2.get("K_ps")
-        bp2_file = dataset_root / "bp2.mat"
-        if bp2_file.exists():
-            bp_nm = _as_ps_matrix(
-                _read_mat_cached(bp2_file, cache, enabled=enable_mat_cache).get("bperp_mat"),
-                n_ps,
-                "bp2.bperp_mat",
-            ).astype(np.float32)
+        ps2 = _read_mat_cached(dataset_root / "ps2.mat", cache, enabled=enable_mat_cache)
+        n_ps = int(round(_mat_scalar(ps2.get("n_ps", 0), 0)))
+        if n_ps <= 0:
+            raise PortedStageError("ps2.mat missing valid n_ps")
+        ph2 = _as_ps_ifg_complex(
+            _read_mat_cached(dataset_root / "ph2.mat", cache, enabled=enable_mat_cache)["ph"], n_ps, "ph2.ph"
+        )
+        n_ps, n_ifg = ph2.shape
+        master_ix = int(round(_mat_scalar(ps2.get("master_ix", 1), 1)))
+
+        parms_raw: dict[str, Any] = {}
+        parms_file = _resolve_file(dataset_root, "parms.mat")
+        if parms_file is not None:
+            try:
+                parms_raw = _read_mat_cached(parms_file, cache, enabled=enable_mat_cache)
+            except Exception:
+                parms_raw = {}
+
+        small_baseline = _mat_text(parms_raw.get("small_baseline_flag", "n"), "n").lower() == "y"
+        unwrap_patch_phase = _mat_text(parms_raw.get("unwrap_patch_phase", "n"), "n").lower() == "y"
+        unwrap_method = _mat_text(parms_raw.get("unwrap_method", "3D"), "3D")
+        drop_ifg = _normalize_drop_index(parms_raw.get("drop_ifg_index", None))
+        drop_set = set(int(v) for v in drop_ifg.tolist())
+        unwrap_ifg = np.asarray([i for i in range(1, n_ifg + 1) if i not in drop_set], dtype=np.int64)
+        if not small_baseline:
+            unwrap_ifg = unwrap_ifg[unwrap_ifg != master_ix]
+        if unwrap_ifg.size == 0:
+            raise PortedStageError("No interferograms available for stage-6 unwrapping")
+        unwrap_ifg_ix = unwrap_ifg - 1
+        effective_unwrap_method = unwrap_method
+        lowfilt_flag = False
+        if unwrap_method.upper() in {"3D", "3D_NEW"}:
+            if small_baseline:
+                lowfilt_flag = True
+            else:
+                effective_unwrap_method = "3D_FULL"
+
+        _emit_stage6_debug(
+            "running",
+            "build_wrapped_phase",
+            extra={
+                "small_baseline": bool(small_baseline),
+                "n_ps": int(n_ps),
+                "n_ifg": int(n_ifg),
+                "unwrap_ifg_total": int(unwrap_ifg_ix.size),
+                "ifg_completed": 0,
+            },
+        )
+        build_phase_t0 = time.perf_counter()
+
+        ph_w: np.ndarray
+        phase_restore = np.zeros((n_ps, n_ifg), dtype=np.float32)
+        pm2 = _read_mat_cached(dataset_root / "pm2.mat", cache, enabled=enable_mat_cache)
+        if unwrap_patch_phase:
+            ph_patch = _as_ps_ifg_complex(pm2["ph_patch"], n_ps, "pm2.ph_patch").astype(np.complex64)
+            patch_abs = np.abs(ph_patch)
+            ph_patch = np.divide(ph_patch, patch_abs, out=np.zeros_like(ph_patch), where=patch_abs != 0)
             if not small_baseline:
-                bperp_mat = np.concatenate(
+                ph_w = np.concatenate(
                     [
-                        bp_nm[:, : master_ix - 1],
-                        np.zeros((n_ps, 1), dtype=np.float32),
-                        bp_nm[:, master_ix - 1 :],
+                        ph_patch[:, : master_ix - 1],
+                        np.ones((n_ps, 1), dtype=np.complex64),
+                        ph_patch[:, master_ix - 1 :],
                     ],
                     axis=1,
                 )
             else:
-                bperp_mat = bp_nm
+                ph_w = ph_patch
         else:
-            bperp_vec = _as_ps_vector(ps2.get("bperp"), n_ifg, "ps2.bperp").astype(np.float32)
-            bperp_mat = np.tile(bperp_vec[None, :], (n_ps, 1))
-        if has_rc2 and k_ps_raw is not None:
-            K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
-            ph_w = ph_w * np.exp(1j * (K_ps[:, None] * bperp_mat))
-        elif small_baseline and k_ps_raw is not None:
-            K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
-            ph_w = ph_w * np.exp(1j * (K_ps[:, None] * bperp_mat))
-        elif not small_baseline and not has_rc2:
-            ph_patch_nm = _as_ps_ifg_complex(pm2.get("ph_patch"), n_ps, "pm2.ph_patch").astype(np.complex64)
-            ph_patch_full = np.concatenate(
-                [
-                    ph_patch_nm[:, : master_ix - 1],
-                    np.ones((n_ps, 1), dtype=np.complex64),
-                    ph_patch_nm[:, master_ix - 1 :],
-                ],
-                axis=1,
-            )
-            ph_w = ph_w * np.conj(ph_patch_full)
-            if k_ps_raw is not None:
-                K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
-                C_ps = _as_ps_vector(pm2.get("C_ps"), n_ps, "pm2.C_ps").astype(np.float32)
-                ph_w = ph_w * np.exp(-1j * (K_ps[:, None] * bperp_mat + C_ps[:, None]))
+            rc2_file = dataset_root / "rc2.mat"
+            has_rc2 = False
+            if rc2_file.exists():
+                rc2 = _read_mat_cached(rc2_file, cache, enabled=enable_mat_cache)
+                try:
+                    ph_w = _as_ps_ifg_complex(rc2.get("ph_rc"), n_ps, "rc2.ph_rc").astype(np.complex64)
+                    has_rc2 = True
+                except PortedStageError:
+                    ph_w = ph2.astype(np.complex64)
+            else:
+                ph_w = ph2.astype(np.complex64)
 
-    if not small_baseline:
-        scla_path = dataset_root / "scla_smooth2.mat"
-        if scla_path.exists():
-            scla = _read_mat_cached(scla_path, cache, enabled=enable_mat_cache)
-            k_ps_uw = scla.get("K_ps_uw")
-            if k_ps_uw is not None:
-                K_ps_uw = _as_ps_vector(k_ps_uw, n_ps, "scla_smooth2.K_ps_uw").astype(np.float32)
-                bp2_file = dataset_root / "bp2.mat"
-                if bp2_file.exists():
-                    bp_nm = _as_ps_matrix(
-                        _read_mat_cached(bp2_file, cache, enabled=enable_mat_cache).get("bperp_mat"),
-                        n_ps,
-                        "bp2.bperp_mat",
-                    ).astype(np.float32)
+            k_ps_raw = pm2.get("K_ps")
+            bp2_file = dataset_root / "bp2.mat"
+            if bp2_file.exists():
+                bp_nm = _as_ps_matrix(
+                    _read_mat_cached(bp2_file, cache, enabled=enable_mat_cache).get("bperp_mat"),
+                    n_ps,
+                    "bp2.bperp_mat",
+                ).astype(np.float32)
+                if not small_baseline:
                     bperp_mat = np.concatenate(
                         [
                             bp_nm[:, : master_ix - 1],
@@ -5610,323 +5663,444 @@ def stage6_unwrap(
                         ],
                         axis=1,
                     )
-                    k_phase = (K_ps_uw[:, None] * bperp_mat).astype(np.float32)
-                    ph_w = ph_w * np.exp(-1j * k_phase)
-                    phase_restore += k_phase
-            c_ps_uw = scla.get("C_ps_uw")
-            if c_ps_uw is not None:
-                C_ps_uw = _as_ps_vector(c_ps_uw, n_ps, "scla_smooth2.C_ps_uw").astype(np.float32)
-                ph_w = ph_w * np.exp(-1j * C_ps_uw[:, None])
-                phase_restore += C_ps_uw[:, None]
-            ph_ramp = scla.get("ph_ramp")
-            if ph_ramp is not None:
-                ph_ramp_arr = _as_ps_matrix(ph_ramp, n_ps, "scla_smooth2.ph_ramp").astype(np.float32)
-                if ph_ramp_arr.shape == ph_w.shape:
+                else:
+                    bperp_mat = bp_nm
+            else:
+                bperp_vec = _as_ps_vector(ps2.get("bperp"), n_ifg, "ps2.bperp").astype(np.float32)
+                bperp_mat = np.tile(bperp_vec[None, :], (n_ps, 1))
+            if has_rc2 and k_ps_raw is not None:
+                K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
+                ph_w = ph_w * np.exp(1j * (K_ps[:, None] * bperp_mat))
+            elif small_baseline and k_ps_raw is not None:
+                K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
+                ph_w = ph_w * np.exp(1j * (K_ps[:, None] * bperp_mat))
+            elif not small_baseline and not has_rc2:
+                ph_patch_nm = _as_ps_ifg_complex(pm2.get("ph_patch"), n_ps, "pm2.ph_patch").astype(np.complex64)
+                ph_patch_full = np.concatenate(
+                    [
+                        ph_patch_nm[:, : master_ix - 1],
+                        np.ones((n_ps, 1), dtype=np.complex64),
+                        ph_patch_nm[:, master_ix - 1 :],
+                    ],
+                    axis=1,
+                )
+                ph_w = ph_w * np.conj(ph_patch_full)
+                if k_ps_raw is not None:
+                    K_ps = _as_ps_vector(k_ps_raw, n_ps, "pm2.K_ps").astype(np.float32)
+                    C_ps = _as_ps_vector(pm2.get("C_ps"), n_ps, "pm2.C_ps").astype(np.float32)
+                    ph_w = ph_w * np.exp(-1j * (K_ps[:, None] * bperp_mat + C_ps[:, None]))
+
+        if not small_baseline:
+            scla_path = dataset_root / "scla_smooth2.mat"
+            if scla_path.exists():
+                scla = _read_mat_cached(scla_path, cache, enabled=enable_mat_cache)
+
+                def _optional_scla_vector(value: Any, name: str) -> np.ndarray | None:
+                    if value is None:
+                        return None
+                    try:
+                        return _as_ps_vector(value, n_ps, name).astype(np.float32)
+                    except PortedStageError:
+                        return None
+
+                def _optional_scla_matrix(value: Any, name: str) -> np.ndarray | None:
+                    if value is None:
+                        return None
+                    try:
+                        return _as_ps_matrix(value, n_ps, name).astype(np.float32)
+                    except PortedStageError:
+                        return None
+
+                k_ps_uw = scla.get("K_ps_uw")
+                K_ps_uw = _optional_scla_vector(k_ps_uw, "scla_smooth2.K_ps_uw")
+                if K_ps_uw is not None:
+                    bp2_file = dataset_root / "bp2.mat"
+                    if bp2_file.exists():
+                        bp_nm = _as_ps_matrix(
+                            _read_mat_cached(bp2_file, cache, enabled=enable_mat_cache).get("bperp_mat"),
+                            n_ps,
+                            "bp2.bperp_mat",
+                        ).astype(np.float32)
+                        bperp_mat = np.concatenate(
+                            [
+                                bp_nm[:, : master_ix - 1],
+                                np.zeros((n_ps, 1), dtype=np.float32),
+                                bp_nm[:, master_ix - 1 :],
+                            ],
+                            axis=1,
+                        )
+                        k_phase = (K_ps_uw[:, None] * bperp_mat).astype(np.float32)
+                        ph_w = ph_w * np.exp(-1j * k_phase)
+                        phase_restore += k_phase
+                c_ps_uw = scla.get("C_ps_uw")
+                C_ps_uw = _optional_scla_vector(c_ps_uw, "scla_smooth2.C_ps_uw")
+                if C_ps_uw is not None:
+                    ph_w = ph_w * np.exp(-1j * C_ps_uw[:, None])
+                    phase_restore += C_ps_uw[:, None]
+                ph_ramp = scla.get("ph_ramp")
+                ph_ramp_arr = _optional_scla_matrix(ph_ramp, "scla_smooth2.ph_ramp")
+                if ph_ramp_arr is not None and ph_ramp_arr.shape == ph_w.shape:
                     ph_w = ph_w * np.exp(-1j * ph_ramp_arr)
                     phase_restore += ph_ramp_arr
 
-    nz = ph_w != 0
-    ph_w[nz] = ph_w[nz] / np.abs(ph_w[nz])
+        nz = ph_w != 0
+        ph_w[nz] = ph_w[nz] / np.abs(ph_w[nz])
+        if stage6_debug_payload is not None:
+            stage6_debug_payload["timings_sec"]["build_wrapped_phase"] = time.perf_counter() - build_phase_t0
+        _emit_stage6_debug("running", "build_wrapped_phase_completed")
 
-    if not (dataset_root / "uw_grid.mat").exists():
-        pix_size = float(_mat_scalar(parms_raw.get("unwrap_grid_size", 20.0), 20.0))
-        prefilt_win = int(round(_mat_scalar(parms_raw.get("unwrap_gold_n_win", 32.0), 32.0)))
-        if prefilt_win <= 0:
-            prefilt_win = 32
-        gold_alpha = float(_mat_scalar(parms_raw.get("unwrap_gold_alpha", 0.8), 0.8))
-        goldfilt_flag = _mat_text(parms_raw.get("unwrap_prefilter_flag", "y"), "y").lower() == "y"
-        if pix_size <= 0:
-            pix_size = 20.0
+        if not (dataset_root / "uw_grid.mat").exists():
+            _emit_stage6_debug("running", "build_uw_grid")
+            grid_phase_t0 = time.perf_counter()
+            pix_size = float(_mat_scalar(parms_raw.get("unwrap_grid_size", 20.0), 20.0))
+            prefilt_win = int(round(_mat_scalar(parms_raw.get("unwrap_gold_n_win", 32.0), 32.0)))
+            if prefilt_win <= 0:
+                prefilt_win = 32
+            gold_alpha = float(_mat_scalar(parms_raw.get("unwrap_gold_alpha", 0.8), 0.8))
+            goldfilt_flag = _mat_text(parms_raw.get("unwrap_prefilter_flag", "y"), "y").lower() == "y"
+            if pix_size <= 0:
+                pix_size = 20.0
 
-        xy_in = _as_ps_dim(ps2.get("xy"), n_ps, 3, "ps2.xy").astype(np.float32)
-        x = xy_in[:, 1]
-        y = xy_in[:, 2]
-        pix_size32 = np.float32(pix_size)
-        grid_x_min = float(np.min(x))
-        grid_y_min = float(np.min(y))
+            xy_in = _as_ps_dim(ps2.get("xy"), n_ps, 3, "ps2.xy").astype(np.float32)
+            x = xy_in[:, 1]
+            y = xy_in[:, 2]
+            pix_size32 = np.float32(pix_size)
+            grid_x_min = float(np.min(x))
+            grid_y_min = float(np.min(y))
 
-        grid_i = np.ceil((y - np.float32(grid_y_min) + np.float32(1e-3)) / pix_size32).astype(np.int64)
-        grid_j = np.ceil((x - np.float32(grid_x_min) + np.float32(1e-3)) / pix_size32).astype(np.int64)
-        if grid_i.size > 0 and int(np.max(grid_i)) > 1:
-            max_i = int(np.max(grid_i))
-            grid_i[grid_i == max_i] = max_i - 1
-        if grid_j.size > 0 and int(np.max(grid_j)) > 1:
-            max_j = int(np.max(grid_j))
-            grid_j[grid_j == max_j] = max_j - 1
+            grid_i = np.ceil((y - np.float32(grid_y_min) + np.float32(1e-3)) / pix_size32).astype(np.int64)
+            grid_j = np.ceil((x - np.float32(grid_x_min) + np.float32(1e-3)) / pix_size32).astype(np.int64)
+            if grid_i.size > 0 and int(np.max(grid_i)) > 1:
+                max_i = int(np.max(grid_i))
+                grid_i[grid_i == max_i] = max_i - 1
+            if grid_j.size > 0 and int(np.max(grid_j)) > 1:
+                max_j = int(np.max(grid_j))
+                grid_j[grid_j == max_j] = max_j - 1
 
-        n_i = int(np.max(grid_i)) if grid_i.size > 0 else 1
-        n_j = int(np.max(grid_j)) if grid_j.size > 0 else 1
-        grid_ij = np.column_stack((grid_i, grid_j)).astype(np.float64)
+            n_i = int(np.max(grid_i)) if grid_i.size > 0 else 1
+            n_j = int(np.max(grid_j)) if grid_j.size > 0 else 1
+            grid_ij = np.column_stack((grid_i, grid_j)).astype(np.float64)
 
-        ph_in = ph_w[:, unwrap_ifg_ix].astype(np.complex64)
-        lin0 = ((grid_j - 1) * n_i + (grid_i - 1)).astype(np.int64)
-        n_ifg_nm = ph_in.shape[1]
-        group_lin, grouped_cols = _group_reduce_by_index(ph_in, lin0)
-        ph_grid_flat0 = _accumulate_grid_column(group_lin, grouped_cols[:, 0], n_i * n_j)
-        nz_flat = ph_grid_flat0 != 0
-        n_ps_grid = int(np.sum(nz_flat))
-        if n_ps_grid <= 0:
-            raise PortedStageError("uw_grid has no non-zero points in first interferogram")
-        nz_lin = np.flatnonzero(nz_flat).astype(np.int64)
-        nz_i = (nz_lin % n_i) + 1
-        nz_j = (nz_lin // n_i) + 1
+            ph_in = ph_w[:, unwrap_ifg_ix].astype(np.complex64)
+            lin0 = ((grid_j - 1) * n_i + (grid_i - 1)).astype(np.int64)
+            n_ifg_nm = ph_in.shape[1]
+            group_lin, grouped_cols = _group_reduce_by_index(ph_in, lin0)
+            ph_grid_flat0 = _accumulate_grid_column(group_lin, grouped_cols[:, 0], n_i * n_j)
+            nz_flat = ph_grid_flat0 != 0
+            n_ps_grid = int(np.sum(nz_flat))
+            if n_ps_grid <= 0:
+                raise PortedStageError("uw_grid has no non-zero points in first interferogram")
+            nz_lin = np.flatnonzero(nz_flat).astype(np.int64)
+            nz_i = (nz_lin % n_i) + 1
+            nz_j = (nz_lin // n_i) + 1
 
-        if (goldfilt_flag or lowfilt_flag) and min(n_i, n_j) < prefilt_win:
-            raise PortedStageError(
-                f"Minimum resampled grid dimension ({min(n_i, n_j)}) is smaller than prefilter window ({prefilt_win})"
-            )
-
-        if goldfilt_flag or lowfilt_flag:
-            ph_grid_vals = np.zeros((n_ps_grid, n_ifg_nm), dtype=np.complex64)
-            ph_lowpass_vals = np.zeros((n_ps_grid, n_ifg_nm), dtype=np.complex64) if lowfilt_flag else None
-
-            def _compute_grid_column(i_ifg: int) -> tuple[int, np.ndarray, np.ndarray | None]:
-                ph_grid_flat = _accumulate_grid_column(group_lin, grouped_cols[:, i_ifg], n_i * n_j)
-                ph_grid_2d = ph_grid_flat.reshape((n_i, n_j), order="F")
-                ph_gold, _ph_low = _wrap_filt_global(
-                    ph_grid_2d,
-                    n_win=prefilt_win,
-                    alpha=gold_alpha,
-                    low_flag="y" if lowfilt_flag else "n",
+            if (goldfilt_flag or lowfilt_flag) and min(n_i, n_j) < prefilt_win:
+                raise PortedStageError(
+                    f"Minimum resampled grid dimension ({min(n_i, n_j)}) is smaller than prefilter window ({prefilt_win})"
                 )
-                if goldfilt_flag:
-                    col = ph_gold.reshape(-1, order="F")[nz_flat]
+
+            if goldfilt_flag or lowfilt_flag:
+                ph_grid_vals = np.zeros((n_ps_grid, n_ifg_nm), dtype=np.complex64)
+                ph_lowpass_vals = np.zeros((n_ps_grid, n_ifg_nm), dtype=np.complex64) if lowfilt_flag else None
+
+                def _compute_grid_column(i_ifg: int) -> tuple[int, np.ndarray, np.ndarray | None]:
+                    ph_grid_flat = _accumulate_grid_column(group_lin, grouped_cols[:, i_ifg], n_i * n_j)
+                    ph_grid_2d = ph_grid_flat.reshape((n_i, n_j), order="F")
+                    ph_gold, _ph_low = _wrap_filt_global(
+                        ph_grid_2d,
+                        n_win=prefilt_win,
+                        alpha=gold_alpha,
+                        low_flag="y" if lowfilt_flag else "n",
+                    )
+                    if goldfilt_flag:
+                        col = ph_gold.reshape(-1, order="F")[nz_flat]
+                    else:
+                        col = ph_grid_2d.reshape(-1, order="F")[nz_flat]
+                    low_col = _ph_low.reshape(-1, order="F")[nz_flat] if lowfilt_flag else None
+                    return i_ifg, np.asarray(col, dtype=np.complex64), (
+                        np.asarray(low_col, dtype=np.complex64) if low_col is not None else None
+                    )
+
+                worker_count = _resolve_io_workers(io_workers, n_ifg_nm)
+                if n_ifg_nm > 1 and worker_count > 1:
+                    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="pystamps-stage6") as pool:
+                        for i_ifg, col, low_col in pool.map(_compute_grid_column, range(n_ifg_nm)):
+                            ph_grid_vals[:, i_ifg] = col
+                            if lowfilt_flag and low_col is not None:
+                                ph_lowpass_vals[:, i_ifg] = low_col
                 else:
-                    col = ph_grid_2d.reshape(-1, order="F")[nz_flat]
-                low_col = _ph_low.reshape(-1, order="F")[nz_flat] if lowfilt_flag else None
-                return i_ifg, np.asarray(col, dtype=np.complex64), (
-                    np.asarray(low_col, dtype=np.complex64) if low_col is not None else None
-                )
-
-            worker_count = _resolve_io_workers(io_workers, n_ifg_nm)
-            if n_ifg_nm > 1 and worker_count > 1:
-                with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="pystamps-stage6") as pool:
-                    for i_ifg, col, low_col in pool.map(_compute_grid_column, range(n_ifg_nm)):
+                    for i_ifg in range(n_ifg_nm):
+                        _, col, low_col = _compute_grid_column(i_ifg)
                         ph_grid_vals[:, i_ifg] = col
                         if lowfilt_flag and low_col is not None:
                             ph_lowpass_vals[:, i_ifg] = low_col
             else:
-                for i_ifg in range(n_ifg_nm):
-                    _, col, low_col = _compute_grid_column(i_ifg)
-                    ph_grid_vals[:, i_ifg] = col
-                    if lowfilt_flag and low_col is not None:
-                        ph_lowpass_vals[:, i_ifg] = low_col
-        else:
-            keep_group = grouped_cols[:, 0] != 0
-            ph_grid_vals = grouped_cols[keep_group, :].astype(np.complex64, copy=False)
-            ph_lowpass_vals = None
+                keep_group = grouped_cols[:, 0] != 0
+                ph_grid_vals = grouped_cols[keep_group, :].astype(np.complex64, copy=False)
+                ph_lowpass_vals = None
 
-        nzix = nz_flat.reshape((n_i, n_j), order="F")
-        n_ps_grid = int(ph_grid_vals.shape[0])
+            nzix = nz_flat.reshape((n_i, n_j), order="F")
+            n_ps_grid = int(ph_grid_vals.shape[0])
 
-        xy_grid = np.column_stack(
-            (
-                np.arange(1, n_ps_grid + 1, dtype=np.float64),
-                (nz_j.astype(np.float64) - 0.5) * pix_size,
-                (nz_i.astype(np.float64) - 0.5) * pix_size,
+            xy_grid = np.column_stack(
+                (
+                    np.arange(1, n_ps_grid + 1, dtype=np.float64),
+                    (nz_j.astype(np.float64) - 0.5) * pix_size,
+                    (nz_i.astype(np.float64) - 0.5) * pix_size,
+                )
             )
-        )
-        ij_grid = np.column_stack((nz_i, nz_j)).astype(np.float64)
+            ij_grid = np.column_stack((nz_i, nz_j)).astype(np.float64)
 
-        uw_grid_payload = {
-            "ph": ph_grid_vals,
-            "ph_in": ph_in,
-            "ph_lowpass": ph_lowpass_vals if ph_lowpass_vals is not None else _matlab_empty(np.complex64),
-            "ph_uw_predef": _matlab_empty(np.complex64),
-            "ph_in_predef": _matlab_empty(np.complex64),
-            "xy": xy_grid,
-            "ij": ij_grid,
-            "nzix": nzix,
-            "grid_x_min": np.asarray(grid_x_min, dtype=np.float32),
-            "grid_y_min": np.asarray(grid_y_min, dtype=np.float32),
-            "n_i": np.asarray(n_i, dtype=np.float32),
-            "n_j": np.asarray(n_j, dtype=np.float32),
-            "n_ifg": np.asarray(ph_in.shape[1], dtype=np.float64),
-            "n_ps": np.asarray(n_ps_grid, dtype=np.float64),
-            "grid_ij": grid_ij,
-            "pix_size": np.asarray(pix_size, dtype=np.float64),
-        }
-        write_mat(dataset_root / "uw_grid.mat", uw_grid_payload)
-        _cache_mat_payload(dataset_root / "uw_grid.mat", uw_grid_payload, cache, enabled=enable_mat_cache)
+            uw_grid_payload = {
+                "ph": ph_grid_vals,
+                "ph_in": ph_in,
+                "ph_lowpass": ph_lowpass_vals if ph_lowpass_vals is not None else _matlab_empty(np.complex64),
+                "ph_uw_predef": _matlab_empty(np.complex64),
+                "ph_in_predef": _matlab_empty(np.complex64),
+                "xy": xy_grid,
+                "ij": ij_grid,
+                "nzix": nzix,
+                "grid_x_min": np.asarray(grid_x_min, dtype=np.float32),
+                "grid_y_min": np.asarray(grid_y_min, dtype=np.float32),
+                "n_i": np.asarray(n_i, dtype=np.float32),
+                "n_j": np.asarray(n_j, dtype=np.float32),
+                "n_ifg": np.asarray(ph_in.shape[1], dtype=np.float64),
+                "n_ps": np.asarray(n_ps_grid, dtype=np.float64),
+                "grid_ij": grid_ij,
+                "pix_size": np.asarray(pix_size, dtype=np.float64),
+            }
+            write_mat(dataset_root / "uw_grid.mat", uw_grid_payload)
+            _cache_mat_payload(dataset_root / "uw_grid.mat", uw_grid_payload, cache, enabled=enable_mat_cache)
+            if stage6_debug_payload is not None:
+                stage6_debug_payload["timings_sec"]["uw_grid"] = time.perf_counter() - grid_phase_t0
+                stage6_debug_payload["uw_grid_shape"] = [int(n_i), int(n_j)]
+                stage6_debug_payload["uw_grid_ps_count"] = int(n_ps_grid)
 
-    if not (dataset_root / "uw_interp.mat").exists():
+        if not (dataset_root / "uw_interp.mat").exists():
+            _emit_stage6_debug("running", "build_uw_interp")
+            interp_phase_t0 = time.perf_counter()
+            uw_grid_payload = _read_mat_cached(dataset_root / "uw_grid.mat", cache, enabled=enable_mat_cache)
+            uw_interp_payload = _build_uw_interp_payload(
+                dataset_root,
+                uw_grid_payload,
+                triangle_path=triangle_path,
+            )
+            write_mat(dataset_root / "uw_interp.mat", uw_interp_payload)
+            _cache_mat_payload(dataset_root / "uw_interp.mat", uw_interp_payload, cache, enabled=enable_mat_cache)
+            if stage6_debug_payload is not None:
+                stage6_debug_payload["timings_sec"]["uw_interp"] = time.perf_counter() - interp_phase_t0
+
         uw_grid_payload = _read_mat_cached(dataset_root / "uw_grid.mat", cache, enabled=enable_mat_cache)
-        uw_interp_payload = _build_uw_interp_payload(
-            dataset_root,
-            uw_grid_payload,
-            triangle_path=triangle_path,
+        uw_interp_payload = _read_mat_cached(dataset_root / "uw_interp.mat", cache, enabled=enable_mat_cache)
+        n_ps_grid = int(round(_mat_scalar(uw_grid_payload.get("n_ps", 0), 0)))
+        if n_ps_grid <= 0:
+            raise PortedStageError("uw_grid.mat missing valid n_ps")
+        uw_ph = _as_ps_ifg_complex(uw_grid_payload.get("ph"), n_ps_grid, "uw_grid.ph").astype(np.complex64)
+        nzix = np.asarray(uw_grid_payload.get("nzix"), dtype=bool)
+        grid_ij = _as_ps_dim(uw_grid_payload.get("grid_ij"), n_ps, 2, "uw_grid.grid_ij").astype(np.int64)
+        n_i_grid, n_j_grid = nzix.shape
+        if grid_ij.shape[0] != n_ps:
+            raise PortedStageError("uw_grid.grid_ij has incompatible length for ps2")
+        if np.any(grid_ij[:, 0] < 1) or np.any(grid_ij[:, 0] > n_i_grid) or np.any(grid_ij[:, 1] < 1) or np.any(grid_ij[:, 1] > n_j_grid):
+            raise PortedStageError("uw_grid.grid_ij contains out-of-range indices")
+
+        la_flag = _mat_text(parms_raw.get("unwrap_la_error_flag", "y"), "y").lower() == "y"
+        scf_flag = _mat_text(parms_raw.get("unwrap_spatial_cost_func_flag", "n"), "n").lower() == "y"
+        if small_baseline or effective_unwrap_method.upper() != "3D_FULL" or not la_flag or scf_flag:
+            raise PortedStageError(
+                "Stage 6 legacy parity path currently supports only single-master unwrap_method=3D_FULL "
+                "with unwrap_la_error_flag='y' and unwrap_spatial_cost_func_flag='n'"
+            )
+
+        _emit_stage6_debug("running", "compute_active_single_master_uw_space_time")
+        snaphu_exe = _resolve_external_tool("snaphu", snaphu_path)
+        day_full = np.asarray(ps2.get("day"), dtype=np.float64).reshape(-1)
+        if day_full.size != n_ifg:
+            raise PortedStageError("ps2.day must match merged interferogram count")
+        unwrap_ifg_expected, _ifgday_ix = _build_single_master_ifg_geometry(n_ifg, master_ix)
+        if not np.array_equal(unwrap_ifg, unwrap_ifg_expected):
+            raise PortedStageError("active single-master unwrap path does not support dropped or reordered IFGs")
+        day_rel = day_full - day_full[master_ix - 1]
+        bperp_full = _as_ps_vector(ps2.get("bperp"), n_ifg, "ps2.bperp").astype(np.float64)
+        bperp_use = bperp_full[unwrap_ifg_ix]
+        max_topo_err = float(_mat_scalar(parms_raw.get("max_topo_err", 15.0), 15.0))
+        lambda_m = float(_mat_scalar(parms_raw.get("lambda", 0.0555), 0.0555))
+        mean_range = float(_mat_scalar(ps2.get("mean_range", 830000.0), 830000.0))
+        mean_incidence = float(_mat_scalar(ps2.get("mean_incidence", np.deg2rad(23.0)), np.deg2rad(23.0)))
+        max_K = max_topo_err / (lambda_m * mean_range * math.sin(mean_incidence) / (4.0 * math.pi))
+        n_trial_wraps = float(np.max(bperp_full) - np.min(bperp_full)) * max_K / (2.0 * math.pi)
+        time_win = float(_mat_scalar(parms_raw.get("unwrap_time_win", 36.0), 36.0))
+
+        edgs = np.asarray(uw_interp_payload.get("edgs"), dtype=np.float64)
+        space_time_t0 = time.perf_counter()
+        _G, _dph_space, _dph_smooth_ifg, dph_noise, dph_space_uw = _compute_active_single_master_uw_space_time(
+            uw_ph,
+            edgs,
+            day=day_rel,
+            master_ix=master_ix,
+            bperp=bperp_use,
+            unwrap_ifg=unwrap_ifg,
+            time_win=time_win,
+            n_trial_wraps=n_trial_wraps,
         )
-        write_mat(dataset_root / "uw_interp.mat", uw_interp_payload)
-        _cache_mat_payload(dataset_root / "uw_interp.mat", uw_interp_payload, cache, enabled=enable_mat_cache)
+        if stage6_debug_payload is not None:
+            stage6_debug_payload["timings_sec"]["uw_space_time"] = time.perf_counter() - space_time_t0
+            stage6_debug_payload["uw_edge_count"] = int(edgs.shape[0]) if edgs.ndim >= 2 else 0
+            stage6_debug_payload["unwrap_method_effective"] = str(effective_unwrap_method)
 
-    uw_grid_payload = _read_mat_cached(dataset_root / "uw_grid.mat", cache, enabled=enable_mat_cache)
-    uw_interp_payload = _read_mat_cached(dataset_root / "uw_interp.mat", cache, enabled=enable_mat_cache)
-    n_ps_grid = int(round(_mat_scalar(uw_grid_payload.get("n_ps", 0), 0)))
-    if n_ps_grid <= 0:
-        raise PortedStageError("uw_grid.mat missing valid n_ps")
-    uw_ph = _as_ps_ifg_complex(uw_grid_payload.get("ph"), n_ps_grid, "uw_grid.ph").astype(np.complex64)
-    nzix = np.asarray(uw_grid_payload.get("nzix"), dtype=bool)
-    grid_ij = _as_ps_dim(uw_grid_payload.get("grid_ij"), n_ps, 2, "uw_grid.grid_ij").astype(np.int64)
-    n_i_grid, n_j_grid = nzix.shape
-    if grid_ij.shape[0] != n_ps:
-        raise PortedStageError("uw_grid.grid_ij has incompatible length for ps2")
-    if np.any(grid_ij[:, 0] < 1) or np.any(grid_ij[:, 0] > n_i_grid) or np.any(grid_ij[:, 1] < 1) or np.any(grid_ij[:, 1] > n_j_grid):
-        raise PortedStageError("uw_grid.grid_ij contains out-of-range indices")
+        nrow, ncol = nzix.shape
+        rowix = np.asarray(uw_interp_payload.get("rowix"), dtype=np.float64).reshape((nrow - 1, ncol), order="F").copy()
+        colix = np.asarray(uw_interp_payload.get("colix"), dtype=np.float64).reshape((nrow, ncol - 1), order="F").copy()
+        Z = np.asarray(uw_interp_payload.get("Z"), dtype=np.int64).reshape((nrow, ncol), order="F")
+        n_edge = int(round(_mat_scalar(uw_interp_payload.get("n_edge", 0), 0)))
+        grid_edges = np.concatenate((np.abs(colix[np.abs(colix) > 0]), np.abs(rowix[np.abs(rowix) > 0]))).astype(np.int64)
+        n_edges = np.bincount(grid_edges, minlength=n_edge + 1)[1:]
+        sigsq_noise = (np.std(dph_noise, axis=1, ddof=1 if dph_noise.shape[1] > 1 else 0) / (2.0 * math.pi)) ** 2
 
-    la_flag = _mat_text(parms_raw.get("unwrap_la_error_flag", "y"), "y").lower() == "y"
-    scf_flag = _mat_text(parms_raw.get("unwrap_spatial_cost_func_flag", "n"), "n").lower() == "y"
-    if small_baseline or effective_unwrap_method.upper() != "3D_FULL" or not la_flag or scf_flag:
-        raise PortedStageError(
-            "Stage 6 legacy parity path currently supports only single-master unwrap_method=3D_FULL "
-            "with unwrap_la_error_flag='y' and unwrap_spatial_cost_func_flag='n'"
-        )
+        bad_lookup = np.zeros((n_edge + 1,), dtype=bool)
+        bad_lookup[np.flatnonzero(~np.isfinite(sigsq_noise)) + 1] = True
+        row_abs = np.abs(np.nan_to_num(rowix, nan=0.0)).astype(np.int64)
+        col_abs = np.abs(np.nan_to_num(colix, nan=0.0)).astype(np.int64)
+        rowix[bad_lookup[row_abs]] = np.nan
+        colix[bad_lookup[col_abs]] = np.nan
 
-    snaphu_exe = _resolve_external_tool("snaphu", snaphu_path)
-    day_full = np.asarray(ps2.get("day"), dtype=np.float64).reshape(-1)
-    if day_full.size != n_ifg:
-        raise PortedStageError("ps2.day must match merged interferogram count")
-    unwrap_ifg_expected, _ifgday_ix = _build_single_master_ifg_geometry(n_ifg, master_ix)
-    if not np.array_equal(unwrap_ifg, unwrap_ifg_expected):
-        raise PortedStageError("active single-master unwrap path does not support dropped or reordered IFGs")
-    day_rel = day_full - day_full[master_ix - 1]
-    bperp_full = _as_ps_vector(ps2.get("bperp"), n_ifg, "ps2.bperp").astype(np.float64)
-    bperp_use = bperp_full[unwrap_ifg_ix]
-    max_topo_err = float(_mat_scalar(parms_raw.get("max_topo_err", 15.0), 15.0))
-    lambda_m = float(_mat_scalar(parms_raw.get("lambda", 0.0555), 0.0555))
-    mean_range = float(_mat_scalar(ps2.get("mean_range", 830000.0), 830000.0))
-    mean_incidence = float(_mat_scalar(ps2.get("mean_incidence", np.deg2rad(23.0)), np.deg2rad(23.0)))
-    max_K = max_topo_err / (lambda_m * mean_range * math.sin(mean_incidence) / (4.0 * math.pi))
-    n_trial_wraps = float(np.max(bperp_full) - np.min(bperp_full)) * max_K / (2.0 * math.pi)
-    time_win = float(_mat_scalar(parms_raw.get("unwrap_time_win", 36.0), 36.0))
+        costscale = 100.0
+        nshortcycle = 200.0
+        maxshort = 32000
+        sigsq_raw = np.rint((sigsq_noise * (nshortcycle**2) / costscale) * n_edges)
+        sigsq = np.ones((n_edge,), dtype=np.int16)
+        finite_sigsq = np.isfinite(sigsq_raw)
+        sigsq[finite_sigsq] = np.clip(sigsq_raw[finite_sigsq], 1, np.iinfo(np.int16).max).astype(np.int16)
+        nzrowix = np.abs(rowix) > 0
+        nzcolix = np.abs(colix) > 0
+        rowcost_base = np.zeros((nrow - 1, ncol * 4), dtype=np.int16)
+        colcost_base = np.zeros((nrow, (ncol - 1) * 4), dtype=np.int16)
+        rowcost_base[:, 2::4] = maxshort
+        colcost_base[:, 2::4] = maxshort
+        rowcost_base[:, 3::4] = (np.asarray(~np.isnan(rowix), dtype=np.int16) * (-1 - maxshort) + 1).astype(np.int16)
+        colcost_base[:, 3::4] = (np.asarray(~np.isnan(colix), dtype=np.int16) * (-1 - maxshort) + 1).astype(np.int16)
+        rowstdgrid = np.ones(rowix.shape, dtype=np.int16)
+        colstdgrid = np.ones(colix.shape, dtype=np.int16)
+        rowstdgrid[nzrowix] = sigsq[np.abs(rowix[nzrowix]).astype(np.int64) - 1]
+        colstdgrid[nzcolix] = sigsq[np.abs(colix[nzcolix]).astype(np.int64) - 1]
+        rowcost_base[:, 1::4] = rowstdgrid
+        colcost_base[:, 1::4] = colstdgrid
 
-    edgs = np.asarray(uw_interp_payload.get("edgs"), dtype=np.float64)
-    G, dph_space, dph_smooth_ifg, dph_noise, dph_space_uw = _compute_active_single_master_uw_space_time(
-        uw_ph,
-        edgs,
-        day=day_rel,
-        master_ix=master_ix,
-        bperp=bperp_use,
-        unwrap_ifg=unwrap_ifg,
-        time_win=time_win,
-        n_trial_wraps=n_trial_wraps,
-    )
-
-    nrow, ncol = nzix.shape
-    rowix = np.asarray(uw_interp_payload.get("rowix"), dtype=np.float64).reshape((nrow - 1, ncol), order="F").copy()
-    colix = np.asarray(uw_interp_payload.get("colix"), dtype=np.float64).reshape((nrow, ncol - 1), order="F").copy()
-    Z = np.asarray(uw_interp_payload.get("Z"), dtype=np.int64).reshape((nrow, ncol), order="F")
-    n_edge = int(round(_mat_scalar(uw_interp_payload.get("n_edge", 0), 0)))
-    grid_edges = np.concatenate((np.abs(colix[np.abs(colix) > 0]), np.abs(rowix[np.abs(rowix) > 0]))).astype(np.int64)
-    n_edges = np.bincount(grid_edges, minlength=n_edge + 1)[1:]
-    sigsq_noise = (np.std(dph_noise, axis=1, ddof=1 if dph_noise.shape[1] > 1 else 0) / (2.0 * math.pi)) ** 2
-
-    bad_lookup = np.zeros((n_edge + 1,), dtype=bool)
-    bad_lookup[np.flatnonzero(~np.isfinite(sigsq_noise)) + 1] = True
-    row_abs = np.abs(np.nan_to_num(rowix, nan=0.0)).astype(np.int64)
-    col_abs = np.abs(np.nan_to_num(colix, nan=0.0)).astype(np.int64)
-    rowix[bad_lookup[row_abs]] = np.nan
-    colix[bad_lookup[col_abs]] = np.nan
-
-    costscale = 100.0
-    nshortcycle = 200.0
-    maxshort = 32000
-    sigsq_raw = np.rint((sigsq_noise * (nshortcycle**2) / costscale) * n_edges)
-    sigsq = np.ones((n_edge,), dtype=np.int16)
-    finite_sigsq = np.isfinite(sigsq_raw)
-    sigsq[finite_sigsq] = np.clip(sigsq_raw[finite_sigsq], 1, np.iinfo(np.int16).max).astype(np.int16)
-    nzrowix = np.abs(rowix) > 0
-    nzcolix = np.abs(colix) > 0
-    rowcost_base = np.zeros((nrow - 1, ncol * 4), dtype=np.int16)
-    colcost_base = np.zeros((nrow, (ncol - 1) * 4), dtype=np.int16)
-    rowcost_base[:, 2::4] = maxshort
-    colcost_base[:, 2::4] = maxshort
-    rowcost_base[:, 3::4] = (np.asarray(~np.isnan(rowix), dtype=np.int16) * (-1 - maxshort) + 1).astype(np.int16)
-    colcost_base[:, 3::4] = (np.asarray(~np.isnan(colix), dtype=np.int16) * (-1 - maxshort) + 1).astype(np.int16)
-    rowstdgrid = np.ones(rowix.shape, dtype=np.int16)
-    colstdgrid = np.ones(colix.shape, dtype=np.int16)
-    rowstdgrid[nzrowix] = sigsq[np.abs(rowix[nzrowix]).astype(np.int64) - 1]
-    colstdgrid[nzcolix] = sigsq[np.abs(colix[nzcolix]).astype(np.int64) - 1]
-    rowcost_base[:, 1::4] = rowstdgrid
-    colcost_base[:, 1::4] = colstdgrid
-
-    ph_uw_some = np.zeros((n_ps_grid, uw_ph.shape[1]), dtype=np.float32)
-    msd_some = np.zeros((uw_ph.shape[1],), dtype=np.float64)
-    for i_ifg in range(uw_ph.shape[1]):
         rowcost = rowcost_base.copy()
         colcost = colcost_base.copy()
-        dph_smooth_col = (dph_space_uw[:, i_ifg] - dph_noise[:, i_ifg]).astype(np.float32)
-        offset_cycle = (np.angle(np.exp(1j * dph_space_uw[:, i_ifg])) - dph_smooth_col) / (2.0 * math.pi)
-        offgrid = np.zeros(rowix.shape, dtype=np.int16)
-        offgrid[nzrowix] = np.rint(
-            offset_cycle[np.abs(rowix[nzrowix]).astype(np.int64) - 1] * np.sign(rowix[nzrowix]) * nshortcycle
-        ).astype(np.int16)
-        rowcost[:, 0::4] = -offgrid
-        offgrid = np.zeros(colix.shape, dtype=np.int16)
-        offgrid[nzcolix] = np.rint(
-            offset_cycle[np.abs(colix[nzcolix]).astype(np.int64) - 1] * np.sign(colix[nzcolix]) * nshortcycle
-        ).astype(np.int16)
-        colcost[:, 0::4] = offgrid
-        _write_binary_matrix(dataset_root / "snaphu.costinfile", rowcost)
-        with (dataset_root / "snaphu.costinfile").open("ab") as fid:
-            _write_binary_matrix(fid, colcost)
-        ifgw = np.asarray(uw_ph[Z - 1, i_ifg], dtype=np.complex64)
-        _write_complex_raster(dataset_root / "snaphu.in", ifgw)
-        with (dataset_root / "snaphu.conf").open("w", encoding="utf-8") as fid:
+        wrapped_space_uw = np.angle(np.exp(1j * dph_space_uw)).astype(np.float32, copy=False)
+        snaphu_conf = dataset_root / "snaphu.conf"
+        with snaphu_conf.open("w", encoding="utf-8") as fid:
             fid.write("INFILE  snaphu.in\n")
             fid.write("OUTFILE snaphu.out\n")
             fid.write("COSTINFILE snaphu.costinfile\n")
             fid.write("STATCOSTMODE  DEFO\n")
             fid.write("INFILEFORMAT  COMPLEX_DATA\n")
             fid.write("OUTFILEFORMAT FLOAT_DATA\n")
-        _run_external_command(
-            [snaphu_exe, "-d", "-f", "snaphu.conf", str(ncol)],
-            cwd=dataset_root,
-            log_path=dataset_root / "snaphu.log",
-        )
-        ifguw = _load_float_grid(dataset_root / "snaphu.out", ncol)
-        diff1 = (ifguw[:-1, :] - ifguw[1:, :]).reshape(-1)
-        diff1 = diff1[diff1 != 0]
-        diff2 = (ifguw[:, :-1] - ifguw[:, 1:]).reshape(-1)
-        diff2 = diff2[diff2 != 0]
-        denom = diff1.size + diff2.size
-        if denom > 0:
-            msd_some[i_ifg] = (
-                float(np.sum(diff1.astype(np.float64) ** 2) + np.sum(diff2.astype(np.float64) ** 2)) / float(denom)
+
+        ph_uw_some = np.zeros((n_ps_grid, uw_ph.shape[1]), dtype=np.float32)
+        msd_some = np.zeros((uw_ph.shape[1],), dtype=np.float64)
+        snaphu_loop_t0 = time.perf_counter()
+        snaphu_input_dt = 0.0
+        snaphu_process_dt = 0.0
+        snaphu_output_dt = 0.0
+        checkpoint_every = max(1, uw_ph.shape[1] // 8)
+        _emit_stage6_debug("running", "snaphu_loop")
+        for i_ifg in range(uw_ph.shape[1]):
+            input_t0 = time.perf_counter()
+            dph_smooth_col = (dph_space_uw[:, i_ifg] - dph_noise[:, i_ifg]).astype(np.float32)
+            offset_cycle = (wrapped_space_uw[:, i_ifg] - dph_smooth_col) / (2.0 * math.pi)
+            offgrid = np.zeros(rowix.shape, dtype=np.int16)
+            offgrid[nzrowix] = np.rint(
+                offset_cycle[np.abs(rowix[nzrowix]).astype(np.int64) - 1] * np.sign(rowix[nzrowix]) * nshortcycle
+            ).astype(np.int16)
+            rowcost[:, 0::4] = -offgrid
+            offgrid = np.zeros(colix.shape, dtype=np.int16)
+            offgrid[nzcolix] = np.rint(
+                offset_cycle[np.abs(colix[nzcolix]).astype(np.int64) - 1] * np.sign(colix[nzcolix]) * nshortcycle
+            ).astype(np.int16)
+            colcost[:, 0::4] = offgrid
+            _write_binary_matrix(dataset_root / "snaphu.costinfile", rowcost)
+            with (dataset_root / "snaphu.costinfile").open("ab") as fid:
+                _write_binary_matrix(fid, colcost)
+            ifgw = np.asarray(uw_ph[Z - 1, i_ifg], dtype=np.complex64)
+            _write_complex_raster(dataset_root / "snaphu.in", ifgw)
+            snaphu_input_dt += time.perf_counter() - input_t0
+
+            process_t0 = time.perf_counter()
+            _run_external_command(
+                [snaphu_exe, "-d", "-f", "snaphu.conf", str(ncol)],
+                cwd=dataset_root,
+                log_path=dataset_root / "snaphu.log",
             )
-        ph_uw_some[:, i_ifg] = _extract_grid_values_for_ps(ifguw, nzix)
+            snaphu_process_dt += time.perf_counter() - process_t0
 
-    uw_phaseuw_payload = {"ph_uw": ph_uw_some, "msd": _matlab_col(msd_some, np.float64)}
-    write_mat(dataset_root / "uw_phaseuw.mat", uw_phaseuw_payload)
-    _cache_mat_payload(dataset_root / "uw_phaseuw.mat", uw_phaseuw_payload, cache, enabled=enable_mat_cache)
+            output_t0 = time.perf_counter()
+            ifguw = _load_float_grid(dataset_root / "snaphu.out", ncol)
+            diff1 = (ifguw[:-1, :] - ifguw[1:, :]).reshape(-1)
+            diff1 = diff1[diff1 != 0]
+            diff2 = (ifguw[:, :-1] - ifguw[:, 1:]).reshape(-1)
+            diff2 = diff2[diff2 != 0]
+            denom = diff1.size + diff2.size
+            if denom > 0:
+                msd_some[i_ifg] = (
+                    float(np.sum(diff1.astype(np.float64) ** 2) + np.sum(diff2.astype(np.float64) ** 2)) / float(denom)
+                )
+            ph_uw_some[:, i_ifg] = _extract_grid_values_for_ps(ifguw, nzix)
+            snaphu_output_dt += time.perf_counter() - output_t0
 
-    gridix_flat = np.zeros(n_i_grid * n_j_grid, dtype=np.int64)
-    nz_flat_f = np.flatnonzero(nzix.reshape(-1, order="F"))
-    gridix_flat[nz_flat_f] = np.arange(1, n_ps_grid + 1, dtype=np.int64)
-    gridix = gridix_flat.reshape((n_i_grid, n_j_grid), order="F")
-    ps_grid_idx = gridix[grid_ij[:, 0] - 1, grid_ij[:, 1] - 1]
-    ph_in_raw = uw_grid_payload.get("ph_in")
-    if ph_in_raw is not None and np.asarray(ph_in_raw).size > 0:
-        ph_in_sel = _as_ps_ifg_complex(ph_in_raw, n_ps, "uw_grid.ph_in").astype(np.complex64)
-    else:
-        ph_in_sel = ph_w[:, unwrap_ifg_ix].astype(np.complex64)
-    ph_uw_sel = np.full((n_ps, unwrap_ifg_ix.size), np.nan, dtype=np.float32)
-    valid = ps_grid_idx > 0
-    if np.any(valid):
-        ph_uw_pix = ph_uw_some[ps_grid_idx[valid] - 1, :].astype(np.float32)
-        ph_uw_sel[valid, :] = ph_uw_pix + np.angle(ph_in_sel[valid, :] * np.exp(-1j * ph_uw_pix)).astype(
-            np.float32
-        )
-        if not small_baseline:
-            ph_uw_sel[valid, :] += phase_restore[valid, :][:, unwrap_ifg_ix]
-    ph_uw = np.zeros((n_ps, n_ifg), dtype=np.float32)
-    msd = np.zeros((n_ifg,), dtype=np.float32)
-    ph_uw[:, unwrap_ifg_ix] = ph_uw_sel
-    msd[unwrap_ifg_ix] = msd_some.astype(np.float32)
-    phuw2_payload = {"ph_uw": ph_uw, "msd": _matlab_col(msd, np.float32)}
-    write_mat(dataset_root / "phuw2.mat", phuw2_payload)
-    _cache_mat_payload(dataset_root / "phuw2.mat", phuw2_payload, cache, enabled=enable_mat_cache)
+            if stage6_debug_payload is not None and (((i_ifg + 1) % checkpoint_every) == 0 or (i_ifg + 1) == uw_ph.shape[1]):
+                stage6_debug_payload["ifg_completed"] = int(i_ifg + 1)
+                stage6_debug_payload["current_ifg_index"] = int(i_ifg)
+                stage6_debug_payload["timings_sec"]["snaphu_loop"] = time.perf_counter() - snaphu_loop_t0
+                stage6_debug_payload["timings_sec"]["snaphu_input_prepare"] = snaphu_input_dt
+                stage6_debug_payload["timings_sec"]["snaphu_external"] = snaphu_process_dt
+                stage6_debug_payload["timings_sec"]["snaphu_output_load"] = snaphu_output_dt
+                _emit_stage6_debug("running", "snaphu_loop")
 
-    return f"Stage 6 unwrapped {n_ps} PS across {n_ifg} interferograms"
+        write_phase_t0 = time.perf_counter()
+        uw_phaseuw_payload = {"ph_uw": ph_uw_some, "msd": _matlab_col(msd_some, np.float64)}
+        write_mat(dataset_root / "uw_phaseuw.mat", uw_phaseuw_payload)
+        _cache_mat_payload(dataset_root / "uw_phaseuw.mat", uw_phaseuw_payload, cache, enabled=enable_mat_cache)
+
+        gridix_flat = np.zeros(n_i_grid * n_j_grid, dtype=np.int64)
+        nz_flat_f = np.flatnonzero(nzix.reshape(-1, order="F"))
+        gridix_flat[nz_flat_f] = np.arange(1, n_ps_grid + 1, dtype=np.int64)
+        gridix = gridix_flat.reshape((n_i_grid, n_j_grid), order="F")
+        ps_grid_idx = gridix[grid_ij[:, 0] - 1, grid_ij[:, 1] - 1]
+        ph_in_raw = uw_grid_payload.get("ph_in")
+        if ph_in_raw is not None and np.asarray(ph_in_raw).size > 0:
+            ph_in_sel = _as_ps_ifg_complex(ph_in_raw, n_ps, "uw_grid.ph_in").astype(np.complex64)
+        else:
+            ph_in_sel = ph_w[:, unwrap_ifg_ix].astype(np.complex64)
+        ph_uw_sel = np.full((n_ps, unwrap_ifg_ix.size), np.nan, dtype=np.float32)
+        valid = ps_grid_idx > 0
+        if np.any(valid):
+            ph_uw_pix = ph_uw_some[ps_grid_idx[valid] - 1, :].astype(np.float32)
+            ph_uw_sel[valid, :] = ph_uw_pix + np.angle(ph_in_sel[valid, :] * np.exp(-1j * ph_uw_pix)).astype(
+                np.float32
+            )
+            if not small_baseline:
+                ph_uw_sel[valid, :] += phase_restore[valid, :][:, unwrap_ifg_ix]
+        ph_uw = np.zeros((n_ps, n_ifg), dtype=np.float32)
+        msd = np.zeros((n_ifg,), dtype=np.float32)
+        ph_uw[:, unwrap_ifg_ix] = ph_uw_sel
+        msd[unwrap_ifg_ix] = msd_some.astype(np.float32)
+        phuw2_payload = {"ph_uw": ph_uw, "msd": _matlab_col(msd, np.float32)}
+        write_mat(dataset_root / "phuw2.mat", phuw2_payload)
+        _cache_mat_payload(dataset_root / "phuw2.mat", phuw2_payload, cache, enabled=enable_mat_cache)
+        if stage6_debug_payload is not None:
+            stage6_debug_payload["timings_sec"]["write_outputs"] = time.perf_counter() - write_phase_t0
+            stage6_debug_payload["timings_sec"]["snaphu_loop"] = time.perf_counter() - snaphu_loop_t0
+            stage6_debug_payload["timings_sec"]["snaphu_input_prepare"] = snaphu_input_dt
+            stage6_debug_payload["timings_sec"]["snaphu_external"] = snaphu_process_dt
+            stage6_debug_payload["timings_sec"]["snaphu_output_load"] = snaphu_output_dt
+            stage6_debug_payload["ifg_completed"] = int(uw_ph.shape[1])
+        _emit_stage6_debug("completed", "completed")
+        return f"Stage 6 unwrapped {n_ps} PS across {n_ifg} interferograms"
+    except Exception as exc:
+        _emit_stage6_debug("failed", current_phase, extra={"exception": f"{type(exc).__name__}: {exc}"})
+        raise
 
 
 def stage7_calc_scla(
@@ -6045,9 +6219,6 @@ def stage7_calc_scla(
     C_ps_uw = np.asarray(stage7_payload["C_ps_uw"], dtype=np.float32).reshape(-1)
     ph_scla = np.asarray(stage7_payload["ph_scla"], dtype=np.float32)
     ifg_vcm = np.asarray(stage7_payload["ifg_vcm"], dtype=np.float64)
-    mean_v = np.asarray(stage7_payload["mean_v"], dtype=np.float32).reshape(-1)
-    mean_v_m = np.asarray(stage7_payload["m"], dtype=np.float32)
-
     payload = {
         "K_ps_uw": _matlab_col(K_ps_uw, np.float32),
         "C_ps_uw": _matlab_col(C_ps_uw, np.float32),
@@ -6072,32 +6243,7 @@ def stage7_calc_scla(
         cache,
         enabled=enable_mat_cache,
     )
-
-    m = mean_v_m
-    write_mat(dataset_root / "mean_v.mat", {"m": m})
-    _cache_mat_payload(dataset_root / "mean_v.mat", {"m": m}, cache, enabled=enable_mat_cache)
-    write_mat(
-        dataset_root / "mv2.mat",
-        {
-            "mean_v": mean_v,
-            "mean_v_std": np.zeros_like(mean_v, dtype=np.float32),
-            "n_boot": np.asarray(0.0, dtype=np.float64),
-            "subtract_switches": "do",
-        },
-    )
-    _cache_mat_payload(
-        dataset_root / "mv2.mat",
-        {
-            "mean_v": mean_v,
-            "mean_v_std": np.zeros_like(mean_v, dtype=np.float32),
-            "n_boot": np.asarray(0.0, dtype=np.float64),
-            "subtract_switches": "do",
-        },
-        cache,
-        enabled=enable_mat_cache,
-    )
-
-    return f"Stage 7 estimated SCLA and mean velocity for {n_ps} PS"
+    return f"Stage 7 estimated SCLA for {n_ps} PS"
 
 
 def stage8_filter_scn(
@@ -6123,6 +6269,16 @@ def stage8_filter_scn(
             triangle_path=triangle_path,
         )
 
+    stage6_unwrap(
+        dataset_root,
+        backend=backend,
+        io_workers=io_workers,
+        enable_mat_cache=enable_mat_cache,
+        mat_cache=cache,
+        triangle_path=triangle_path,
+        snaphu_path=snaphu_path,
+    )
+
     ps2_file = dataset_root / "ps2.mat"
     if not ps2_file.exists():
         raise PortedStageError("Missing required artifact: ps2.mat (stage-5 merged output) before stage 8")
@@ -6130,17 +6286,6 @@ def stage8_filter_scn(
     n_ps = int(round(_mat_scalar(ps2.get("n_ps", 0), 0)))
     if n_ps <= 0:
         raise PortedStageError("ps2.mat missing valid n_ps")
-
-    if not (dataset_root / "uw_grid.mat").exists() or not (dataset_root / "uw_interp.mat").exists():
-        stage6_unwrap(
-            dataset_root,
-            backend=backend,
-            io_workers=io_workers,
-            enable_mat_cache=enable_mat_cache,
-            mat_cache=cache,
-            triangle_path=triangle_path,
-            snaphu_path=snaphu_path,
-        )
 
     uw_grid = _read_mat_cached(dataset_root / "uw_grid.mat", cache, enabled=enable_mat_cache)
     uw_interp = _read_mat_cached(dataset_root / "uw_interp.mat", cache, enabled=enable_mat_cache)
@@ -6170,6 +6315,17 @@ def stage8_filter_scn(
             "Stage 8 legacy parity path currently supports only single-master unwrap_method=3D_FULL "
             "with unwrap_la_error_flag='y' and unwrap_spatial_cost_func_flag='n'"
         )
+
+    mean_v_payload = _stage8_mean_velocity_payload(
+        dataset_root,
+        ps2,
+        parms_raw,
+        cache,
+        enable_mat_cache=enable_mat_cache,
+    )
+    write_mat(dataset_root / "mean_v.mat", mean_v_payload)
+    _cache_mat_payload(dataset_root / "mean_v.mat", mean_v_payload, cache, enabled=enable_mat_cache)
+
     unwrap_ifg, _ifgday_ix = _build_single_master_ifg_geometry(n_ifg, master_ix)
     bperp_full = _as_ps_vector(ps2.get("bperp"), n_ifg, "ps2.bperp").astype(np.float64)
     bperp_use = bperp_full[unwrap_ifg - 1]
@@ -6203,4 +6359,4 @@ def stage8_filter_scn(
     }
     write_mat(dataset_root / "uw_space_time.mat", payload)
     _cache_mat_payload(dataset_root / "uw_space_time.mat", payload, cache, enabled=enable_mat_cache)
-    return f"Stage 8 produced space-time noise model for {edgs.shape[0]} arcs"
+    return f"Stage 8 produced mean velocity and space-time noise model for {edgs.shape[0]} arcs"

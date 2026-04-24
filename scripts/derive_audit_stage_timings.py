@@ -14,7 +14,7 @@ STAGE_PATTERNS = {
     5: ["ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "hgt2.mat", "la2.mat", "rc2.mat", "psver.mat"],
     6: ["ifgstd2.mat", "phuw2.mat", "uw_phaseuw.mat", "uw_grid.mat", "uw_interp.mat"],
     7: ["scla2.mat", "scla_smooth2.mat"],
-    8: ["mean_v.mat", "mv2.mat", "uw_space_time.mat"],
+    8: ["mean_v.mat", "uw_space_time.mat"],
 }
 
 

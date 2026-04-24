@@ -59,8 +59,8 @@ PATCH_STAGE_BUNDLES: dict[int, list[str]] = {
 MERGED_STAGE_BUNDLES: dict[int, list[str]] = {
     5: ["ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "hgt2.mat", "la2.mat", "rc2.mat", "psver.mat", "ifgstd2.mat"],
     6: ["ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "ifgstd2.mat", "phuw2.mat", "uw_phaseuw.mat", "uw_grid.mat", "uw_interp.mat"],
-    7: ["scla2.mat", "scla_smooth2.mat", "mean_v.mat", "mv2.mat"],
-    8: ["uw_space_time.mat"],
+    7: ["scla2.mat", "scla_smooth2.mat"],
+    8: ["mean_v.mat", "uw_space_time.mat"],
 }
 
 
@@ -287,14 +287,20 @@ def _run_patch_stage_timed(stage: StageDef, patch_dir: Path, context: PipelineCo
     return result
 
 
-def _run_merged_stage(stage: StageDef, dataset_root: Path, context: PipelineContext) -> StageResult:
+def _run_merged_stage(
+    stage: StageDef,
+    dataset_root: Path,
+    context: PipelineContext,
+    *,
+    force_run: bool = False,
+) -> StageResult:
     expected = expected_stage_artifact(stage.stage_id, "merged")
     if expected is None:
         return StageResult(stage.stage_id, "merged", dataset_root.name, "skipped", "No expected artifact mapping")
 
     artifact = dataset_root / expected
     bundle = MERGED_STAGE_BUNDLES.get(stage.stage_id, [expected])
-    if all((dataset_root / filename).exists() for filename in bundle):
+    if not force_run and all((dataset_root / filename).exists() for filename in bundle):
         return StageResult(stage.stage_id, "merged", dataset_root.name, "skipped_existing", f"{expected} present")
 
     if context.dry_run:
@@ -326,6 +332,8 @@ def _run_merged_stage(stage: StageDef, dataset_root: Path, context: PipelineCont
                 backend=context.run_config.runtime.backend,
                 io_workers=context.run_config.runtime.io_workers,
                 enable_mat_cache=context.run_config.runtime.enable_mat_stage_cache,
+                triangle_path=context.run_config.tools.triangle,
+                snaphu_path=context.run_config.tools.snaphu,
             )
         elif stage.stage_id == 7:
             details = stage7_calc_scla(
@@ -334,6 +342,7 @@ def _run_merged_stage(stage: StageDef, dataset_root: Path, context: PipelineCont
                 chunk_ps=context.run_config.runtime.stage7_chunk_ps,
                 enable_mat_cache=context.run_config.runtime.enable_mat_stage_cache,
                 io_workers=context.run_config.runtime.io_workers,
+                triangle_path=context.run_config.tools.triangle,
             )
         elif stage.stage_id == 8:
             details = stage8_filter_scn(
@@ -343,6 +352,8 @@ def _run_merged_stage(stage: StageDef, dataset_root: Path, context: PipelineCont
                 chunk_ps=context.run_config.runtime.stage7_chunk_ps,
                 enable_mat_cache=context.run_config.runtime.enable_mat_stage_cache,
                 io_workers=context.run_config.runtime.io_workers,
+                triangle_path=context.run_config.tools.triangle,
+                snaphu_path=context.run_config.tools.snaphu,
             )
         else:
             raise PortedStageError(f"No ported merged implementation for stage {stage.stage_id}")
@@ -355,9 +366,15 @@ def _run_merged_stage(stage: StageDef, dataset_root: Path, context: PipelineCont
     return StageResult(stage.stage_id, "merged", dataset_root.name, "completed", details)
 
 
-def _run_merged_stage_timed(stage: StageDef, dataset_root: Path, context: PipelineContext) -> StageResult:
+def _run_merged_stage_timed(
+    stage: StageDef,
+    dataset_root: Path,
+    context: PipelineContext,
+    *,
+    force_run: bool = False,
+) -> StageResult:
     t0 = time.perf_counter()
-    result = _run_merged_stage(stage, dataset_root, context)
+    result = _run_merged_stage(stage, dataset_root, context, force_run=force_run)
     result.duration_sec = time.perf_counter() - t0
     return result
 
@@ -428,7 +445,14 @@ def run_pipeline(context: PipelineContext) -> PipelineReport:
             else:
                 try:
                     if task_kind == "cpu":
-                        result = executor.submit("cpu", _run_merged_stage_timed, stage, dataset.root, context).result()
+                        result = executor.submit(
+                            "cpu",
+                            _run_merged_stage_timed,
+                            stage,
+                            dataset.root,
+                            context,
+                            force_run=False,
+                        ).result()
                     else:
                         result = _run_merged_stage_timed(stage, dataset.root, context)
                     report.add(result)

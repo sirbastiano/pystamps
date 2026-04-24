@@ -1,0 +1,48 @@
+{
+  "manifest_version": 1,
+  "purpose": "Freeze the oracle sources used for pySTAMPS parity decisions.",
+  "matlab_source": {
+    "vendor_path": "StaMPS",
+    "upstream_repository_url": "https://github.com/dbekaert/StaMPS",
+    "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed",
+    "pinned_source_paths": [
+      "StaMPS/matlab",
+      "StaMPS/bin",
+      "StaMPS/src"
+    ]
+  },
+  "manual_references": [
+    {
+      "kind": "repo_readme",
+      "path": "StaMPS/README.md",
+      "notes": "Workflow overview and supported processing modes."
+    },
+    {
+      "kind": "manual_pdf",
+      "path": "StaMPS/Manual/StaMPS_Manual.pdf",
+      "notes": "Pinned user/manual reference for the vendored StaMPS checkout."
+    },
+    {
+      "kind": "manual_source",
+      "path": "StaMPS/Manual/StaMPS_Manual.tex",
+      "notes": "Tracked manual source used to audit wording and section references."
+    }
+  ],
+  "cpp_wrapper": {
+    "repository_url": "https://github.com/dbekaert/StaMPS",
+    "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed",
+    "pinned_source_paths": [
+      "StaMPS/src"
+    ],
+    "notes": "StaMPS ships the C/C++ helper programs in the same upstream repository as the MATLAB sources; the pinned repository URL and revision above are the wrapper oracle reference for this repo."
+  },
+  "precedence_rule": {
+    "ordered_sources": [
+      "cpp_wrapper",
+      "matlab_source",
+      "manual_references"
+    ],
+    "rule": "When the pinned StaMPS C/C++ helper behavior intentionally differs from the pinned MATLAB scripts, treat the pinned C/C++ helper path as the practical parity oracle and record that choice in the parity evidence."
+  },
+  "negative_completion_rule": "If cpp_wrapper.repository_url or cpp_wrapper.pinned_revision is empty, this manifest is invalid and downstream stories must not claim oracle-backed completion."
+}

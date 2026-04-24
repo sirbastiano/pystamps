@@ -1,0 +1,1 @@
+"""Packaged parity contract manifests."""

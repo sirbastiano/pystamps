@@ -27,6 +27,7 @@ def _ctx(
     stage2_native_threads: int = 0,
     io_workers: int = 8,
     cpu_workers: int = 0,
+    workflow_profile: str = "default",
 ) -> PipelineContext:
     return PipelineContext(
         dataset_root=Path("."),
@@ -43,6 +44,7 @@ def _ctx(
         start_step=1,
         end_step=8,
         dry_run=False,
+        workflow_profile=workflow_profile,
     )
 
 
@@ -174,7 +176,7 @@ def test_run_merged_stage_uses_kernel_backend_override(
 
     monkeypatch.setattr(
         "pystamps.pipeline.stages.stage7_calc_scla",
-        lambda dataset_root, backend, chunk_ps, enable_mat_cache, io_workers: captured.setdefault("backend", backend)
+        lambda dataset_root, backend, chunk_ps, enable_mat_cache, io_workers, triangle_path: captured.setdefault("backend", backend)
         or "ok",
     )
 
@@ -182,6 +184,72 @@ def test_run_merged_stage_uses_kernel_backend_override(
 
     assert result.status == "completed"
     assert captured == {"backend": "cuda"}
+
+
+def test_run_merged_stage_force_run_bypasses_existing_bundle(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    context = _ctx()
+    for filename in ("scla2.mat", "scla_smooth2.mat"):
+        (tmp_path / filename).write_text("stub", encoding="utf-8")
+
+    captured: dict[str, bool] = {}
+
+    def fake_stage7_calc_scla(dataset_root, backend, chunk_ps, enable_mat_cache, io_workers, triangle_path):
+        captured["called"] = True
+        return "ok"
+
+    monkeypatch.setattr("pystamps.pipeline.stages.stage7_calc_scla", fake_stage7_calc_scla)
+
+    result = _run_merged_stage(STAGE_DEFS[6], tmp_path, context, force_run=True)
+
+    assert result.status == "completed"
+    assert captured == {"called": True}
+
+
+def test_run_pipeline_legacy_post_preserves_wrapper_stage_order(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    context = PipelineContext(
+        dataset_root=tmp_path,
+        run_config=RunConfig(),
+        start_step=6,
+        end_step=8,
+        dry_run=False,
+        workflow_profile="legacy_post",
+    )
+
+    class _Dataset:
+        root = tmp_path
+        patches: list[Path] = []
+
+    calls: list[tuple[int, bool]] = []
+
+    class _FakeExecutor:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> "_FakeExecutor":
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def submit(self, kind: str, fn: object, *args: object, **kwargs: object):
+            class _Future:
+                def result(self_nonlocal):
+                    return fn(*args, **kwargs)
+
+            return _Future()
+
+    def fake_run_merged_stage_timed(stage, dataset_root, run_context, *, force_run=False):
+        calls.append((stage.stage_id, force_run))
+        return StageResult(stage_id=stage.stage_id, scope="merged", target=dataset_root.name, status="completed", details="ok")
+
+    monkeypatch.setattr("pystamps.pipeline.stages.discover_dataset", lambda path: _Dataset())
+    monkeypatch.setattr("pystamps.pipeline.stages.HybridExecutor", _FakeExecutor)
+    monkeypatch.setattr("pystamps.pipeline.stages._run_merged_stage_timed", fake_run_merged_stage_timed)
+
+    report = run_pipeline(context)
+
+    assert [result.stage_id for result in report.results] == [6, 7, 8]
+    assert calls == [(6, False), (7, False), (8, False)]
 
 
 def test_run_pipeline_serializes_stage2_patches_when_default_uses_full_cpu(

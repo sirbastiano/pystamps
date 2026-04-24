@@ -104,8 +104,10 @@ Move to the dedicated [Verification](verification.html) guide for the compare co
 - stage 4: weed out poor candidates
 - stage 5: promote selected patch outputs into merged artifacts
 - stage 6: unwrap temporal phase products
-- stage 7: estimate SCLA and velocity-related products
-- stage 8: perform final space-time filtering outputs
+- stage 7: estimate raw SCLA and write `scla2.mat` plus the smoothed `scla_smooth2.mat` artifact used by the final replay
+- stage 8: rerun the final unwrap-backed products and write `mean_v.mat` plus `uw_space_time.mat`
+
+For legacy single-master parity runs, the wrapper-backed post flow maps to `stamps(5,7)` followed by `stamps(6,6)` and the `ps_plot('v-do', ...)` export, so pySTAMPS keeps SCLA in stage 7 and the final unwrap-backed outputs in stage 8.
 
 You do not need to master the mathematics of each stage to operate the pipeline responsibly. You mainly need to know which range you intend to run and whether the required inputs already exist.
 

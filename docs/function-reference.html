@@ -96,7 +96,7 @@
           <thead><tr><th>Object</th><th>Role</th><th>Notes</th></tr></thead>
           <tbody>
             <tr><td><code>pystamps.pipeline.stages.run_pipeline()</code></td><td>Main scheduler</td><td>Discovers the dataset, selects stages, skips existing artifacts when appropriate, and aggregates results.</td></tr>
-            <tr><td><code>pystamps.pipeline.stages._selected_stages()</code></td><td>Stage-range resolver</td><td>Maps <span class="code-inline">start_step</span> and <span class="code-inline">end_step</span> onto concrete stage definitions.</td></tr>
+            <tr><td><code>pystamps.pipeline.stages._selected_stage_runs()</code></td><td>Stage-range resolver</td><td>Maps <span class="code-inline">start_step</span>, <span class="code-inline">end_step</span>, and the internal workflow profile onto a concrete merged-stage execution plan.</td></tr>
             <tr><td><code>pystamps.pipeline.stages._run_patch_stage()</code></td><td>Patch-stage executor</td><td>Runs one patch-scoped stage and records its outcome.</td></tr>
             <tr><td><code>pystamps.pipeline.stages._run_merged_stage()</code></td><td>Merged-stage executor</td><td>Runs one merged-stage function against the dataset root.</td></tr>
             <tr><td><code>pystamps.pipeline.stages._replay_from_reference()</code></td><td>Compatibility helper</td><td>Copies artifacts from a reference tree when strict reference replay is enabled.</td></tr>
@@ -116,8 +116,8 @@
         <li><code>stage5_correct_and_promote()</code>: promote patch outputs into stage-5 corrected artifacts.</li>
         <li><code>stage5_merge_and_ifgstd()</code>: merge patch outputs and calculate merged statistics.</li>
         <li><code>stage6_unwrap()</code>: perform temporal unwrap workflow.</li>
-        <li><code>stage7_calc_scla()</code>: estimate SCLA and velocity-like terms.</li>
-        <li><code>stage8_filter_scn()</code>: perform the final space-time filtering pass.</li>
+        <li><code>stage7_calc_scla()</code>: estimate raw SCLA and write the smoothed <span class="code-inline">scla_smooth2.mat</span> envelope.</li>
+        <li><code>stage8_filter_scn()</code>: follow the wrapper-backed rerun path and write <span class="code-inline">mean_v.mat</span> plus the final space-time filtering result.</li>
       </ul>
       <div class="callout info"><strong>Reading tip:</strong> use the stage entrypoints and the grouped helper families as your map. Do not start by reading every private helper in file order.</div>
     </section>

@@ -166,10 +166,12 @@ Purpose: orchestration layer for deciding which stages run, in what order, and w
 - `_run_ported_patch_stage(...)`: run one Python-ported patch stage
 - `_run_patch_stage(...)`: run one patch-level stage
 - `_run_patch_stage_timed(...)`: timed wrapper for patch execution
-- `_run_merged_stage(...)`: run one merged-stage operation
+- `_run_merged_stage(...)`: run one merged-stage operation, with optional forced rerun support for explicit replay cases
 - `_run_merged_stage_timed(...)`: timed wrapper for merged execution
 - `_selected_stages(start_step: int, end_step: int) -> list[StageDef]`: select the active stage definitions for a requested range
 - `run_pipeline(context: PipelineContext) -> PipelineReport`: main pipeline orchestration entrypoint
+
+`PipelineContext` still carries `workflow_profile`, but the wrapper-backed legacy post flow is modeled inside stage ownership rather than by expanding the outer stage list.
 
 ## `pystamps.pipeline.ported`
 
@@ -238,6 +240,8 @@ Examples:
 - `_weighted_lstsq`
 - `_weighted_slope_fit`
 - `_weighted_affine_fit`
+
+For the merged post flow, stage 7 owns the raw `scla2.mat` output and the smoothed `scla_smooth2.mat` envelope. Stage 8 then reruns the final unwrap-backed products and writes `mean_v.mat` together with the final `uw_space_time.mat` result.
 - `_stage7_mean_velocity_fit`
 - `_clap_filter_kernel`
 - `_clap_filt_patch`
