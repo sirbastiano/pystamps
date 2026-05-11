@@ -30,6 +30,11 @@ __pycache__/
 # Generated metadata
 *.egg-info/
 /pystamps/kernels/_stage2_native.cpython-*.so
+/pystamps/kernels/_stage2_native.c
+/pystamps/kernels/_stage2_native.pyx
+
+# Local reports
+/summary_final_report.md
 
 # Large repo-only assets not shipped in the package
 /build/
