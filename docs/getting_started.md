@@ -2,6 +2,8 @@
 
 This document is for readers who want to use pySTAMPS without already knowing interferometry.
 
+For the complete program-and-science tutorial, read [pipeline_science_guide.md](pipeline_science_guide.md). This page is the shorter beginner path.
+
 ## What problem pySTAMPS solves
 
 pySTAMPS processes a radar time-series dataset through a sequence of stages and writes a collection of `.mat` outputs that later stages and validation tools can use.
@@ -13,6 +15,7 @@ It helps you:
 - run part or all of the processing chain
 - validate your outputs before trusting a new run
 - tune runtime settings through a config file
+- switch between reference Python kernels and optimized Rust/native kernels
 
 ## The minimum interferometry background you need
 
@@ -62,12 +65,32 @@ Reference datasets in this repo:
 - `inputs_and_outputs/InSAR_dataset_test`
 - `inputs_and_outputs/InSAR_dataset_test_stage8diag`
 
+## Install and check the runtime
+
+From a local checkout, use `uv`:
+
+```bash
+git clone git@github.com:sirbastiano/pystamps.git
+cd pystamps
+uv sync
+uv run pystamps describe-backends
+```
+
+If you use editable `pip` installs, source builds require Rust because the optimized native extension is compiled locally:
+
+```bash
+python -m pip install -e .
+python -m pip install -e ".[dev]"
+```
+
+`describe-backends` tells you whether the `python`, `native`, and optional `cuda` kernel backends are registered on your machine.
+
 ## First commands to learn
 
 ### Inspect a dataset
 
 ```bash
-pystamps status --dataset inputs_and_outputs/InSAR_dataset_test
+uv run pystamps status --dataset inputs_and_outputs/InSAR_dataset_test
 ```
 
 Use this first when you are not sure whether the dataset layout is ready.
@@ -75,7 +98,7 @@ Use this first when you are not sure whether the dataset layout is ready.
 ### Preview a run
 
 ```bash
-pystamps run \
+uv run pystamps run \
   --dataset inputs_and_outputs/InSAR_dataset_test \
   --start-step 1 --end-step 8 --dry-run
 ```
@@ -85,12 +108,61 @@ Use this when you want to see the requested range without doing the expensive wo
 ### Run selected stages
 
 ```bash
-pystamps run \
-  --dataset inputs_and_outputs/InSAR_dataset_test \
+cp -a inputs_and_outputs/InSAR_dataset_test_stage8diag /tmp/pystamps_first_run
+uv run pystamps run \
+  --dataset /tmp/pystamps_first_run \
   --start-step 6 --end-step 8
 ```
 
-Use a partial range when earlier products already exist.
+Use a partial range when earlier products already exist. Always run on a copy because pySTAMPS writes artifacts into the dataset tree.
+
+The checked-in reference datasets already contain many outputs, so some stages can report `skipped_existing`. That is expected for completed examples.
+
+### Use optimized Rust/native kernels
+
+Create `native-kernels.yaml`:
+
+```yaml
+runtime:
+  backend: auto
+  stage2_kernel_backend: native
+  stage2_native_threads: 0
+  kernel_backend_overrides:
+    stage2_grid_accumulate: native
+    stage2_histogram: native
+    stage2_topofit: native
+    stage2_topofit_row_invariant: native
+    stage2_topofit_coh_row_invariant: native
+    stage4_edge_stats: native
+    stage7_scla: native
+    stage8_edge_noise: native
+  io_workers: 8
+  cpu_workers: 0
+  stage7_chunk_ps: 100000
+  stage8_chunk_edges: 200000
+```
+
+Run the same dataset copy with that config:
+
+```bash
+uv run pystamps --config native-kernels.yaml run \
+  --dataset /tmp/pystamps_first_run \
+  --start-step 2 --end-step 8
+```
+
+The CLI skips stages whose expected output artifacts already exist. Use a dataset copy that still needs those stages if you want the pipeline to execute the optimized kernels, or use the direct kernel/benchmark examples in [howtorun.md](../howtorun.md) on the repo golden data.
+
+Use `stage2_kernel_backend: python` or a per-kernel override such as `stage8_edge_noise: python` when you need the reference implementation for debugging.
+
+### Verify and benchmark
+
+```bash
+uv run pystamps verify \
+  --run /tmp/pystamps_first_run \
+  --golden inputs_and_outputs/InSAR_dataset_test_stage8diag
+```
+
+Use `make benchmark` to measure backend speed on the maintained benchmark dataset. Use `make audit` for the full repo parity audit; it reads the maintained dataset list from `pystamps/data/audited_workflow_manifest.json`.
 
 ### Verification workflow
 
@@ -114,7 +186,7 @@ You do not need to master the mathematics of each stage to operate the pipeline 
 ## Recommended learning path
 
 1. Read [howtorun.md](../howtorun.md)
-2. Open `examples/00_pystamps_beginner_walkthrough.ipynb`
+2. Open `notebooks/00_pystamps_beginner_walkthrough.ipynb`
 3. Use `status` on `inputs_and_outputs/InSAR_dataset_test`
 4. Try a `--dry-run`
 5. Run a small stage range on a copy of a dataset
@@ -122,6 +194,7 @@ You do not need to master the mathematics of each stage to operate the pipeline 
 
 ## Where to go next
 
+- [docs/pipeline_science_guide.md](pipeline_science_guide.md): full program and science guide
 - [howtorun.md](../howtorun.md): operational run guide
 - [docs/function_reference.md](function_reference.md): module and function reference
 - [docs/architecture.md](architecture.md): package structure and design

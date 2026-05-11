@@ -24,25 +24,103 @@ pySTAMPS works with StaMPS-style dataset folders by orchestrating stage executio
 
 ## Install
 
+Recommended local setup from a checkout:
+
 ```bash
-git clone https://github.com/sirbastiano/pystamps.git
+git clone git@github.com:sirbastiano/pystamps.git
 cd pystamps
-python -m pip install -e .
+uv sync
+uv run pystamps describe-backends
 ```
 
-Source and editable installs now compile the stage-2 native extension with Rust. Install a Rust toolchain first, for example with `rustup`.
-
-For local development (including docs and tests), use:
+Editable `pip` install:
 
 ```bash
+python -m pip install -e .
+# Developer tools, tests, and notebooks:
 python -m pip install -e ".[dev]"
 ```
 
-Supported PyPI installs use platform wheels for the Rust extension. Source builds still require a local Rust toolchain.
+Source and editable installs compile the Rust-backed native extension. Install a Rust toolchain first, for example with `rustup`, and confirm `cargo --version` works. Supported PyPI installs use platform wheels for the Rust extension when available; source builds still require Rust locally.
 
-Stage 2 can use the compiled native kernels automatically when they are available. To force the reference path or require the native path, set `runtime.stage2_kernel_backend` to `python` or `native` in your run config. With the default `runtime.stage2_native_threads: 0`, pySTAMPS now gives each stage-2 patch the full detected CPU budget and runs stage-2 patches one at a time to avoid oversubscription. `runtime.cpu_workers: 0` now means “use all detected CPU workers” rather than reserving one core. Set a positive `runtime.stage2_native_threads` value to force a fixed native worker count instead.
+Optional GPU dependencies:
 
-Built-in kernel backends are `python`, `native`, and `cuda`. Use `runtime.kernel_backend_overrides` to pin individual kernels without changing the runtime-wide backend, for example `stage7_scla: gpu` or `stage8_edge_noise: python`. Run `pystamps describe-backends` to print the registered backend providers and the current per-kernel coverage matrix.
+```bash
+python -m pip install -e ".[gpu]"
+```
+
+## First run
+
+Always run on a copy because pySTAMPS writes outputs into the dataset directory:
+
+```bash
+cp -a inputs_and_outputs/InSAR_dataset_test_stage8diag /tmp/pystamps_stage8diag_run
+uv run pystamps status --dataset /tmp/pystamps_stage8diag_run
+uv run pystamps run --dataset /tmp/pystamps_stage8diag_run --start-step 6 --end-step 8
+uv run pystamps verify \
+  --run /tmp/pystamps_stage8diag_run \
+  --golden inputs_and_outputs/InSAR_dataset_test_stage8diag
+```
+
+The checked-in diagnostic datasets already contain many outputs, so some stages can report `skipped_existing`. That is expected; use your own incomplete dataset copy for real processing.
+
+Use `--dry-run` first if you only want to see the selected stage range:
+
+```bash
+uv run pystamps run --dataset /tmp/pystamps_stage8diag_run --start-step 1 --end-step 8 --dry-run
+```
+
+## Optimized kernels
+
+Built-in kernel backends are `python`, `native`, and `cuda`. `native` is the compiled Rust/CPU path. Inspect what is available on your machine:
+
+```bash
+uv run pystamps describe-backends
+```
+
+Force the optimized native kernels from a config file:
+
+```bash
+cat > native-kernels.yaml <<'YAML'
+runtime:
+  backend: auto
+  stage2_kernel_backend: native
+  stage2_native_threads: 0
+  kernel_backend_overrides:
+    stage2_grid_accumulate: native
+    stage2_histogram: native
+    stage2_topofit: native
+    stage2_topofit_row_invariant: native
+    stage2_topofit_coh_row_invariant: native
+    stage4_edge_stats: native
+    stage7_scla: native
+    stage8_edge_noise: native
+  io_workers: 8
+  cpu_workers: 0
+  stage7_chunk_ps: 100000
+  stage8_chunk_edges: 200000
+YAML
+
+uv run pystamps --config native-kernels.yaml run \
+  --dataset /tmp/pystamps_stage8diag_run \
+  --start-step 2 --end-step 8
+```
+
+Normal CLI execution skips a stage when that stage's expected output artifact is already present. To exercise optimized kernels through the pipeline, run this config on a dataset copy that still needs those stages. To exercise kernels on the checked-in golden data without changing stage artifacts, use the direct kernel API example in `howtorun.md` or the benchmark script below.
+
+Use `stage2_kernel_backend: python` or per-kernel overrides such as `stage8_edge_noise: python` when you need the reference path for debugging. Stage 2 accepts `auto`, `python`, or `native`; stage 4, 7, and 8 can use `python`, `native`, and `cuda` where registered. With `stage2_native_threads: 0`, pySTAMPS gives each stage-2 patch the detected CPU budget and runs stage-2 patches one at a time to avoid oversubscription. `cpu_workers: 0` uses all detected CPU workers.
+
+Benchmark the configured backends on the maintained dataset:
+
+```bash
+make benchmark
+# or customize directly:
+uv run python scripts/benchmark_backends.py \
+  --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag \
+  --start-step 6 --end-step 8 \
+  --backends threads native \
+  --repeat 3 --warmup 1
+```
 
 ## Fresh-clone validation commands:
 
@@ -92,6 +170,7 @@ The internal parity-audit regeneration path for `RUN_FULL_GATE_1e10` also mirror
 ## Read the full docs
 
 - [Introduction (docs index)](https://sirbastiano.github.io/pystamps/)
+- [Pipeline and science guide](https://sirbastiano.github.io/pystamps/pipeline-science-guide.html)
 - [Quick Start](https://sirbastiano.github.io/pystamps/quickstart.html)
 - [Getting Started](https://sirbastiano.github.io/pystamps/getting-started.html)
 - [Usage and command patterns](https://sirbastiano.github.io/pystamps/usage.html)

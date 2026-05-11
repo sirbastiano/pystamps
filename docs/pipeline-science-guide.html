@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pipeline and Science Guide - pySTAMPS Docs</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script defer src="assets/scripts.js"></script>
+</head>
+<body>
+<div class="site">
+  <aside class="sidebar">
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>Science, program model, and pipeline run guide.</small>
+    <nav>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a class="active" href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li><li><a href="api/kernels.html">kernels</a></li></ul></div>
+    </nav>
+  </aside>
+  <main class="content">
+    <div class="breadcrumb">Home / Pipeline Guide</div>
+
+    <section class="hero">
+      <span class="badge">Program and science</span>
+      <h1>Learn what the pipeline computes and how to run it safely.</h1>
+      <p>This guide joins the scientific concepts behind StaMPS-style persistent-scatterer processing with the pySTAMPS commands used to inspect, execute, accelerate, verify, and benchmark a dataset.</p>
+      <div class="hero-actions">
+        <a class="button-link" href="#first-run">Run the pipeline</a>
+        <a class="button-link secondary" href="#stages">Understand stages</a>
+        <a class="button-link secondary" href="#kernels">Switch kernels</a>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>What pySTAMPS is</h2>
+      <p>pySTAMPS is a Python-first runtime for StaMPS-style InSAR processing. It works on a dataset directory, discovers patch folders and stage artifacts, runs selected stages from 1 to 8, and writes new <span class="code-inline">.mat</span> products back into that same tree.</p>
+      <div class="quick-links">
+        <div class="highlight-card"><h3>Program role</h3><p>CLI, Python API, config model, scheduler, kernel registry, and verification tools.</p></div>
+        <div class="highlight-card"><h3>Science role</h3><p>Persistent-scatterer processing from candidate organization through unwrapping, correction, and filtering.</p></div>
+        <div class="highlight-card"><h3>Migration role</h3><p>Explicit parity against trusted MATLAB/StaMPS outputs through golden datasets and audit manifests.</p></div>
+      </div>
+      <div class="callout tip">Run on a copy of your dataset. pySTAMPS writes outputs in place.</div>
+    </section>
+
+    <section class="card">
+      <h2>Minimum science background</h2>
+      <div class="concept-grid">
+        <div class="highlight-card"><h3>SAR observations</h3><p>A radar satellite revisits the same area and records complex values whose phase is sensitive to geometry, atmosphere, motion, topography, and noise.</p></div>
+        <div class="highlight-card"><h3>Interferogram</h3><p>An interferogram compares two radar acquisitions. Single-master workflows compare many slaves to one master; small-baseline workflows organize pairs differently.</p></div>
+        <div class="highlight-card"><h3>Wrapped phase</h3><p>Radar phase repeats every <span class="code-inline">2*pi</span>. Unwrapping converts repeating phase cycles into a more continuous estimate.</p></div>
+        <div class="highlight-card"><h3>Persistent scatterer</h3><p>A point that remains stable across acquisitions and is useful for time-series analysis.</p></div>
+        <div class="highlight-card"><h3>Coherence</h3><p>A practical reliability signal. Higher coherence usually means a point is easier to trust later.</p></div>
+        <div class="highlight-card"><h3>SCLA</h3><p>Spatially correlated look-angle error, a structured phase component estimated and corrected in late-stage processing.</p></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Dataset mental model</h2>
+      <p>A pySTAMPS run points at one dataset root. The root usually contains patch directories, optional <span class="code-inline">patch.list</span>, source folders, and merged stage artifacts.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-text">DATASET/
+  patch.list
+  PATCH_1/
+    ps1.mat
+    ph1.mat
+    pm1.mat
+    select1.mat
+    weed1.mat
+  PATCH_2/
+  diff0/
+  geo/
+  rslc/
+  ps2.mat
+  ph2.mat
+  phuw2.mat
+  scla2.mat
+  uw_space_time.mat</code></pre>
+      <p>Use status first:</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset DATASET</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Artifact-driven execution</h2>
+      <p>Each stage has expected output artifacts. If the artifact or merged-stage bundle already exists, the pipeline reports <span class="code-inline">skipped_existing</span> instead of recomputing it.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>planned</code></td><td>Dry-run selected the stage but did not execute it.</td></tr>
+            <tr><td><code>completed</code></td><td>Stage executed or strict reference replay copied the expected bundle.</td></tr>
+            <tr><td><code>skipped_existing</code></td><td>Expected artifacts were already present.</td></tr>
+            <tr><td><code>failed</code></td><td>Stage raised an execution error.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info">For speed tests, use <span class="code-inline">make benchmark</span>, the direct kernel API, or a dataset copy that actually needs the target outputs.</div>
+    </section>
+
+    <section id="first-run" class="card">
+      <h2>Install and first run</h2>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">git clone git@github.com:sirbastiano/pystamps.git
+cd pystamps
+uv sync
+uv run pystamps describe-backends</code></pre>
+      <p>Editable installs compile the native Rust/CPU extension, so source builds require Rust and Cargo.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">python -m pip install -e .
+python -m pip install -e ".[dev]"
+cargo --version</code></pre>
+      <p>Run on a copy:</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">cp -a /path/to/source_dataset /tmp/pystamps_run
+uv run pystamps status --dataset /tmp/pystamps_run
+uv run pystamps run --dataset /tmp/pystamps_run --start-step 1 --end-step 8 --dry-run
+uv run pystamps run --dataset /tmp/pystamps_run --start-step 1 --end-step 8</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>CLI command map</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Command</th><th>Purpose</th><th>Typical use</th></tr></thead>
+          <tbody>
+            <tr><td><code>status</code></td><td>Inspect dataset and inferred progress.</td><td>First command on any dataset.</td></tr>
+            <tr><td><code>run</code></td><td>Execute or dry-run stages.</td><td>Normal processing.</td></tr>
+            <tr><td><code>verify</code></td><td>Compare a run tree against a golden tree.</td><td>Trust but verify.</td></tr>
+            <tr><td><code>describe-inputs</code></td><td>Print logical input contracts.</td><td>Learning and debugging.</td></tr>
+            <tr><td><code>describe-backends</code></td><td>Print kernel/backend availability.</td><td>Backend setup and speed work.</td></tr>
+            <tr><td><code>list-legacy</code></td><td>List StaMPS legacy scripts.</td><td>Migration support.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps describe-inputs --stage all
+uv run pystamps describe-inputs --stage 1 --dataset DATASET --patch PATCH_1
+uv run pystamps describe-backends</code></pre>
+    </section>
+
+    <section id="stages" class="card">
+      <h2>Stage-by-stage science and outputs</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Stage</th><th>Scope</th><th>Science question</th><th>Main outputs</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Patch</td><td>What candidate points and metadata are available?</td><td><code>ps1.mat</code>, <code>ph1.mat</code>, <code>bp1.mat</code></td></tr>
+            <tr><td>2</td><td>Patch</td><td>How well does each candidate fit the phase model?</td><td><code>pm1.mat</code></td></tr>
+            <tr><td>3</td><td>Patch</td><td>Which candidates are good persistent scatterers?</td><td><code>select1.mat</code></td></tr>
+            <tr><td>4</td><td>Patch</td><td>Which selected points are noisy or redundant?</td><td><code>weed1.mat</code></td></tr>
+            <tr><td>5</td><td>Patch and merged</td><td>How do patch results become one dataset view?</td><td><code>ph2.mat</code>, <code>ifgstd2.mat</code></td></tr>
+            <tr><td>6</td><td>Merged</td><td>What is the unwrapped phase estimate?</td><td><code>phuw2.mat</code>, <code>uw_grid.mat</code>, <code>uw_interp.mat</code></td></tr>
+            <tr><td>7</td><td>Merged</td><td>What slow correction terms should be estimated?</td><td><code>scla2.mat</code>, <code>scla_smooth2.mat</code></td></tr>
+            <tr><td>8</td><td>Merged</td><td>What are the final filtered space-time products?</td><td><code>mean_v.mat</code>, <code>uw_space_time.mat</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="kernels" class="card">
+      <h2>Switch kernel modality</h2>
+      <p>The CLI command stays the same. Switch between reference Python, optimized native Rust/CPU, and optional CUDA providers through config.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-yaml">runtime:
+  backend: auto
+  stage2_kernel_backend: native
+  stage2_native_threads: 0
+  kernel_backend_overrides:
+    stage2_grid_accumulate: native
+    stage2_histogram: native
+    stage2_topofit: native
+    stage2_topofit_row_invariant: native
+    stage2_topofit_coh_row_invariant: native
+    stage4_edge_stats: native
+    stage7_scla: native
+    stage8_edge_noise: native
+  io_workers: 8
+  cpu_workers: 0
+  stage7_chunk_ps: 100000
+  stage8_chunk_edges: 200000</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps --config native-kernels.yaml run \
+  --dataset /tmp/pystamps_run \
+  --start-step 2 --end-step 8</code></pre>
+      <p>Current optimized kernel names are <span class="code-inline">stage2_grid_accumulate</span>, <span class="code-inline">stage2_histogram</span>, <span class="code-inline">stage2_topofit</span>, <span class="code-inline">stage2_topofit_row_invariant</span>, <span class="code-inline">stage2_topofit_coh_row_invariant</span>, <span class="code-inline">stage4_edge_stats</span>, <span class="code-inline">stage7_scla</span>, and <span class="code-inline">stage8_edge_noise</span>.</p>
+    </section>
+
+    <section class="card">
+      <h2>Python API examples</h2>
+      <pre><button class="copy-btn">Copy</button><code class="language-python">from pystamps.status import collect_status
+
+status = collect_status("/tmp/pystamps_run")
+print(status.merged_stage)
+for patch in status.patch_statuses:
+    print(patch.patch, patch.stage)</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-python">from pathlib import Path
+
+from pystamps.config import RunConfig
+from pystamps.pipeline.stages import run_pipeline
+from pystamps.pipeline.types import PipelineContext
+
+context = PipelineContext(
+    dataset_root=Path("/tmp/pystamps_run"),
+    run_config=RunConfig(),
+    start_step=6,
+    end_step=8,
+    dry_run=False,
+)
+report = run_pipeline(context)</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Verify parity and benchmark speed</h2>
+      <p>Use verification or audit evidence for parity claims.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify \
+  --run /tmp/pystamps_run \
+  --golden inputs_and_outputs/InSAR_dataset_test_stage8diag
+make audit</code></pre>
+      <p>Use repeatable benchmarks for speed claims.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make benchmark
+uv run python scripts/benchmark_backends.py \
+  --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag \
+  --start-step 1 --end-step 8 \
+  --repeat 3 --warmup 1</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Troubleshooting</h2>
+      <ul>
+        <li><strong>Stage skipped:</strong> <span class="code-inline">skipped_existing</span> means expected artifacts already exist. Use a fresh copy that still needs the stage to force execution.</li>
+        <li><strong>Native unavailable:</strong> run <span class="code-inline">uv run pystamps describe-backends</span>, install Rust, and rebuild the editable environment.</li>
+        <li><strong>Unwrapping fails:</strong> check <span class="code-inline">triangle</span> and <span class="code-inline">snaphu</span> availability or configure their paths under <span class="code-inline">tools</span>.</li>
+        <li><strong>Verification fails:</strong> ensure <span class="code-inline">--run</span> and <span class="code-inline">--golden</span> refer to comparable dataset states.</li>
+        <li><strong>Audit is slow:</strong> full audit processes every dataset in the maintained manifest; use targeted tests during development and audit for release evidence.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+</body>
+</html>

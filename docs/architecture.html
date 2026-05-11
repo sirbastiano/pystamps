@@ -13,8 +13,8 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>System structure, module roles, and data flow.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
-      <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li><li><a href="api/kernels.html">kernels</a></li></ul></div>
     </nav>
   </aside>
   <main class="content">
@@ -22,93 +22,146 @@
 
     <section class="hero">
       <span class="badge">System map</span>
-      <h1>pySTAMPS is layered by orchestration, stage execution, and I/O.</h1>
-      <p>The architecture is easiest to understand if you separate control flow from numerical work. The CLI decides intent, the pipeline decides stage scheduling, and the ported stage functions perform scientific transformations.</p>
-    </section>
-
-    <section class="card">
-      <h2>Core layers</h2>
-      <div class="quick-links">
-        <div class="highlight-card"><h3>CLI layer</h3><p><span class="code-inline">pystamps.cli</span> parses commands and builds the execution context.</p></div>
-        <div class="highlight-card"><h3>Scheduling layer</h3><p><span class="code-inline">pystamps.pipeline.stages</span> chooses the stage range, checks existing artifacts, and records results.</p></div>
-        <div class="highlight-card"><h3>Stage layer</h3><p><span class="code-inline">pystamps.pipeline.ported</span> contains the concrete stage implementations and many stage-specific helpers.</p></div>
-        <div class="highlight-card"><h3>Support layer</h3><p><span class="code-inline">pystamps.io</span>, <span class="code-inline">pystamps.runtime</span>, and <span class="code-inline">pystamps.kernels</span> provide the shared infrastructure.</p></div>
-      </div>
-    </section>
-
-    <section class="diagram-card">
-      <h2>Workflow graph (Figma)</h2>
-      <p>This diagram focuses on the command flow around <span class="code-inline">status</span> and <span class="code-inline">run</span>. It is exported from the linked Figma draft as the PNG used below, with zoom controls so you can inspect the full layout.</p>
-      <a class="diagram-link" href="https://www.figma.com/online-whiteboard/create-diagram/2cd2c194-7c86-4c16-9a10-d964fc5a1b40?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=&request_id=72140c10-d529-4949-8a78-a575e6a13883">
-        <strong>Open the source graph in Figma</strong>
-      </a>
-      <div class="diagram-zoom-wrap">
-        <div class="diagram-zoom-controls">
-          <label for="architecture-diagram-zoom">
-            <span>Diagram zoom</span>
-            <output id="architecture-diagram-zoom-value" for="architecture-diagram-zoom">100%</output>
-          </label>
-          <input
-            id="architecture-diagram-zoom"
-            class="diagram-zoom-slider"
-            type="range"
-            min="60"
-            max="180"
-            value="100"
-            data-diagram-zoom="#architecture-diagram"
-            data-diagram-zoom-output="#architecture-diagram-zoom-value"
-          />
-        </div>
-        <div class="diagram-zoom-frame">
-          <picture>
-            <source srcset="assets/pystamps-workflow.svg" type="image/svg+xml" />
-            <img
-              id="architecture-diagram"
-              class="diagram-zoom-image"
-              src="assets/pystamps-workflow.png"
-              alt="pySTAMPS status/run workflow graph"
-            />
-          </picture>
-        </div>
+      <h1>pySTAMPS is organized around the dataset directory as the source of truth.</h1>
+      <p>The CLI, runtime scheduler, ported stages, optimized kernels, and verification tools all read from or write to the same StaMPS-style dataset tree.</p>
+      <div class="hero-actions">
+        <a class="button-link" href="pipeline-science-guide.html">Read the pipeline guide</a>
+        <a class="button-link secondary" href="function-reference.html">Open function reference</a>
       </div>
     </section>
 
     <section class="card">
-      <h2>Folder structure</h2>
+      <h2>Runtime layers</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Path</th><th>Purpose</th></tr></thead>
+          <thead><tr><th>Layer</th><th>Main modules</th><th>Responsibility</th></tr></thead>
           <tbody>
-            <tr><td><code>pystamps/cli.py</code></td><td>Command-line interface and dispatch</td></tr>
-            <tr><td><code>pystamps/config.py</code></td><td>Typed runtime, tolerance, and compatibility configuration</td></tr>
-            <tr><td><code>pystamps/pipeline/</code></td><td>Pipeline orchestration, typed results, and stage implementations</td></tr>
-            <tr><td><code>pystamps/io/</code></td><td>Dataset discovery and MATLAB file I/O helpers</td></tr>
-            <tr><td><code>pystamps/runtime/</code></td><td>Hybrid thread/process execution primitives</td></tr>
-            <tr><td><code>pystamps/kernels/</code></td><td>Kernel registry and CPU/GPU dispatch</td></tr>
+            <tr><td>CLI</td><td><code>pystamps.cli</code></td><td>Parse commands, load config, print JSON reports.</td></tr>
+            <tr><td>Configuration</td><td><code>pystamps.config</code></td><td>Normalize runtime, kernel, tolerance, tool, and compatibility settings.</td></tr>
+            <tr><td>Dataset I/O</td><td><code>pystamps.io.dataset</code>, <code>pystamps.io.mat</code></td><td>Discover patches and read/write MATLAB-compatible artifacts.</td></tr>
+            <tr><td>Pipeline orchestration</td><td><code>pystamps.pipeline.stages</code></td><td>Select stages, skip existing artifacts, schedule patch or merged work.</td></tr>
+            <tr><td>Scientific stages</td><td><code>pystamps.pipeline.ported</code></td><td>Implement StaMPS-style stage behavior in Python.</td></tr>
+            <tr><td>Kernels</td><td><code>pystamps.kernels</code></td><td>Dispatch hot numerical kernels to Python, native Rust/CPU, or CUDA providers.</td></tr>
+            <tr><td>Verification</td><td><code>pystamps.verify</code>, <code>scripts/validate_audit.py</code></td><td>Compare outputs against golden datasets and audit manifests.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <section class="card">
-      <h2>Data flow</h2>
-      <ol>
-        <li>The CLI receives a command such as <span class="code-inline">run</span> or <span class="code-inline">status</span>.</li>
-        <li>A <span class="code-inline">RunConfig</span> is loaded, and a <span class="code-inline">PipelineContext</span> is created for pipeline work.</li>
-        <li>The dataset root is discovered into patch directories and merged-stage artifacts.</li>
-        <li>Selected stages either reuse existing outputs or execute the ported implementation.</li>
-        <li>Pipeline reports are recorded so downstream checks can validate outputs from this run.</li>
-      </ol>
-      <div class="callout tip">This artifact-driven design is why pySTAMPS is good at resumable workflows: it can skip work when expected stage outputs are already present.</div>
+      <h2>Pipeline model</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Stage</th><th>Scope</th><th>Pipeline name</th><th>Expected progress artifact</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td>Patch</td><td>Initial load</td><td><code>PATCH_*/ps1.mat</code></td></tr>
+            <tr><td>2</td><td>Patch</td><td>Estimate gamma</td><td><code>PATCH_*/pm1.mat</code></td></tr>
+            <tr><td>3</td><td>Patch</td><td>Select PS pixels</td><td><code>PATCH_*/select1.mat</code></td></tr>
+            <tr><td>4</td><td>Patch</td><td>Weed adjacent pixels</td><td><code>PATCH_*/weed1.mat</code></td></tr>
+            <tr><td>5</td><td>Patch and merged</td><td>Correct phase and merge</td><td><code>PATCH_*/ph2.mat</code>, root <code>ifgstd2.mat</code></td></tr>
+            <tr><td>6</td><td>Merged</td><td>Unwrap phase</td><td>root <code>phuw2.mat</code></td></tr>
+            <tr><td>7</td><td>Merged</td><td>Calculate SCLA</td><td>root <code>scla2.mat</code></td></tr>
+            <tr><td>8</td><td>Merged</td><td>Filter SCN</td><td>root <code>uw_space_time.mat</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout info">Patch-scoped stages run once per discovered <span class="code-inline">PATCH_*</span> directory. Merged stages run once at the dataset root.</div>
     </section>
 
     <section class="card">
-      <h2>Design decisions that matter in practice</h2>
+      <h2>Artifact-driven scheduling</h2>
+      <p>Before running a stage, <span class="code-inline">pystamps.pipeline.stages</span> checks the expected artifact or merged stage bundle. If the artifacts already exist, the result status is <span class="code-inline">skipped_existing</span>.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>planned</code></td><td>Dry-run selected the stage but did not execute it.</td></tr>
+            <tr><td><code>completed</code></td><td>Stage executed or strict reference replay copied the expected bundle.</td></tr>
+            <tr><td><code>skipped_existing</code></td><td>Expected artifacts were already present.</td></tr>
+            <tr><td><code>skipped</code></td><td>No artifact mapping exists for that scope.</td></tr>
+            <tr><td><code>failed</code></td><td>Stage raised an execution error.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Backend and kernel architecture</h2>
+      <p>pySTAMPS separates runtime scheduling from numerical kernel selection. Runtime settings control thread/process/GPU-oriented scheduling. Kernel settings choose the reference Python implementation, compiled native Rust/CPU implementation, or CUDA provider where available.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps describe-backends</code></pre>
+      <div class="quick-links">
+        <div class="highlight-card"><h3>Runtime backends</h3><p><span class="code-inline">auto</span>, <span class="code-inline">threads</span>, <span class="code-inline">processes</span>, <span class="code-inline">gpu</span>, <span class="code-inline">native</span>.</p></div>
+        <div class="highlight-card"><h3>Kernel backends</h3><p><span class="code-inline">python</span>, <span class="code-inline">native</span>, <span class="code-inline">cuda</span>, <span class="code-inline">auto</span>.</p></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Optimized kernels</h2>
       <ul>
-        <li><strong>Stage ranges are explicit:</strong> you can isolate late stages when debugging or benchmarking.</li>
-        <li><strong>Execution is hybrid:</strong> the runtime can use threads for I/O-heavy work and processes for CPU-heavy work.</li>
-        <li><strong>Compatibility is configurable:</strong> strict reference replay can copy known-good artifacts into a run tree before stage execution.</li>
-        <li><strong>Output checks are separated:</strong> use <a href="verification.html">Verification</a> for comparison commands and parity audits.</li>
+        <li><span class="code-inline">stage2_grid_accumulate</span></li>
+        <li><span class="code-inline">stage2_histogram</span></li>
+        <li><span class="code-inline">stage2_topofit</span></li>
+        <li><span class="code-inline">stage2_topofit_row_invariant</span></li>
+        <li><span class="code-inline">stage2_topofit_coh_row_invariant</span></li>
+        <li><span class="code-inline">stage4_edge_stats</span></li>
+        <li><span class="code-inline">stage7_scla</span></li>
+        <li><span class="code-inline">stage8_edge_noise</span></li>
+      </ul>
+      <pre><button class="copy-btn">Copy</button><code class="language-yaml">runtime:
+  backend: auto
+  stage2_kernel_backend: native
+  stage2_native_threads: 0
+  kernel_backend_overrides:
+    stage2_grid_accumulate: native
+    stage2_histogram: native
+    stage2_topofit: native
+    stage2_topofit_row_invariant: native
+    stage2_topofit_coh_row_invariant: native
+    stage4_edge_stats: native
+    stage7_scla: native
+    stage8_edge_noise: native
+  io_workers: 8
+  cpu_workers: 0
+  stage7_chunk_ps: 100000
+  stage8_chunk_edges: 200000</code></pre>
+    </section>
+
+    <section class="diagram-card">
+      <h2>Workflow graph (Figma)</h2>
+      <p>This diagram focuses on the command flow around <span class="code-inline">status</span> and <span class="code-inline">run</span>.</p>
+      <a class="diagram-link" href="https://www.figma.com/online-whiteboard/create-diagram/2cd2c194-7c86-4c16-9a10-d964fc5a1b40?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=&request_id=72140c10-d529-4949-8a78-a575e6a13883">
+        <strong>Open the source graph in Figma</strong>
+      </a>
+      <div class="diagram-zoom-wrap">
+        <div class="diagram-zoom-controls">
+          <label for="architecture-diagram-zoom"><span>Diagram zoom</span><output id="architecture-diagram-zoom-value" for="architecture-diagram-zoom">100%</output></label>
+          <input id="architecture-diagram-zoom" class="diagram-zoom-slider" type="range" min="60" max="180" value="100" data-diagram-zoom="#architecture-diagram" data-diagram-zoom-output="#architecture-diagram-zoom-value" />
+        </div>
+        <div class="diagram-zoom-frame">
+          <picture>
+            <source srcset="assets/pystamps-workflow.svg" type="image/svg+xml" />
+            <img id="architecture-diagram" class="diagram-zoom-image" src="assets/pystamps-workflow.png" alt="pySTAMPS status/run workflow graph" />
+          </picture>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Verification architecture</h2>
+      <p>Single-run verification compares one run tree to one golden tree. Full parity audit is handled by <span class="code-inline">make audit</span> and reads the maintained manifest.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run RUN_DIR --golden GOLDEN_DIR
+make audit</code></pre>
+      <p>The audit dataset list is owned by <span class="code-inline">pystamps/data/audited_workflow_manifest.json</span>. Oracle precedence is owned by <span class="code-inline">pystamps/data/oracle_contract.json</span>.</p>
+    </section>
+
+    <section class="card">
+      <h2>Practical boundaries</h2>
+      <ul>
+        <li>The package implements stages 1 through 8 in <span class="code-inline">pystamps.pipeline.ported</span>.</li>
+        <li>The optimized native extension accelerates selected hot kernels, not every line of the pipeline.</li>
+        <li>External tools such as <span class="code-inline">triangle</span> and <span class="code-inline">snaphu</span> are still required for relevant unwrapping workflows.</li>
+        <li>Parity should be claimed from <span class="code-inline">verify</span> or audit evidence, not from command completion alone.</li>
+        <li>Speed should be claimed from <span class="code-inline">make benchmark</span> or <span class="code-inline">scripts/benchmark_backends.py</span>, not from a skipped pipeline run.</li>
       </ul>
     </section>
   </main>

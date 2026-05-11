@@ -2,7 +2,7 @@
 
 This guide explains how to run pySTAMPS if you are new both to the package and to interferometry.
 
-If you want a slower, more tutorial-style introduction first, read [docs/getting_started.md](docs/getting_started.md) and then open `notebooks/00_pystamps_beginner_walkthrough.ipynb`.
+If you want a slower, more tutorial-style introduction first, read [docs/pipeline_science_guide.md](docs/pipeline_science_guide.md), then [docs/getting_started.md](docs/getting_started.md), and then open `notebooks/00_pystamps_beginner_walkthrough.ipynb`.
 
 ## What pySTAMPS is doing
 
@@ -25,12 +25,29 @@ You need:
 - this repository checked out locally
 - `uv` installed
 - the Python environment synced with `uv sync` or `make setup`
+- Rust installed when building from source or editable mode, because the optimized native kernels are compiled locally
 
 External tools are also needed for some workflows:
 - `triangle`
 - `snaphu`
 
 These tools are required for parts of the full processing flow, especially later stages and parity workflows.
+
+Recommended setup:
+
+```bash
+git clone git@github.com:sirbastiano/pystamps.git
+cd pystamps
+uv sync
+uv run pystamps describe-backends
+```
+
+Editable `pip` setup:
+
+```bash
+python -m pip install -e .
+python -m pip install -e ".[dev]"
+```
 
 ## A few plain-language terms
 
@@ -119,6 +136,7 @@ A practical interpretation:
 - lower stage numbers are earlier preparation and selection steps
 - higher stage numbers are later merged products and filtering steps
 - partial runs are useful when you already have earlier artifacts and only want to continue from a later point
+- if an expected output already exists, pySTAMPS reports `skipped_existing` for that stage instead of recomputing it
 
 ## Step 4: optional config file
 
@@ -146,7 +164,124 @@ Then run:
 uv run pystamps --config accel.yaml run --dataset /path/to/dataset --start-step 1 --end-step 8
 ```
 
-## Step 5: understand what gets written
+## Step 5: run the optimized Rust/native kernels
+
+The easiest way to see which optimized kernels are available is:
+
+```bash
+uv run pystamps describe-backends
+```
+
+The important backend names are:
+- `python`: reference NumPy/Python implementation
+- `native`: compiled Rust/CPU implementation
+- `cuda`: CuPy implementation where that kernel and dependency are available
+
+Create a native-kernel config:
+
+```yaml
+runtime:
+  backend: auto
+  stage2_kernel_backend: native
+  stage2_native_threads: 0
+  kernel_backend_overrides:
+    stage2_grid_accumulate: native
+    stage2_histogram: native
+    stage2_topofit: native
+    stage2_topofit_row_invariant: native
+    stage2_topofit_coh_row_invariant: native
+    stage4_edge_stats: native
+    stage7_scla: native
+    stage8_edge_noise: native
+  io_workers: 8
+  cpu_workers: 0
+  stage7_chunk_ps: 100000
+  stage8_chunk_edges: 200000
+```
+
+Run it on a copy of the golden dataset:
+
+```bash
+cp -a inputs_and_outputs/InSAR_dataset_test_stage8diag /tmp/pystamps_native_demo
+uv run pystamps --config native-kernels.yaml run \
+  --dataset /tmp/pystamps_native_demo \
+  --start-step 2 --end-step 8
+```
+
+If the copied dataset already contains the expected stage outputs, the CLI reports `skipped_existing` for those stages. That is correct. To exercise the optimized kernels through the pipeline, use a dataset copy that still needs those stage outputs. To exercise a kernel directly on the repo golden data, use the direct API example in the next step.
+
+For debugging parity, switch any one kernel back to the reference implementation:
+
+```yaml
+runtime:
+  stage2_kernel_backend: python
+  kernel_backend_overrides:
+    stage8_edge_noise: python
+```
+
+## Step 6: call an optimized kernel directly on repo data
+
+Use the CLI for normal workflows. Use the direct kernel API when you are developing or benchmarking one numerical kernel in isolation.
+
+This example loads real arrays from the golden stage-8 diagnostic dataset, selects a small valid edge subset, and runs the native stage-8 edge-noise kernel:
+
+```bash
+uv run python - <<'PY'
+from pathlib import Path
+import numpy as np
+
+from pystamps.io.mat import read_mat
+from pystamps.kernels import run_stage8_edge_noise_kernel
+
+root = Path("inputs_and_outputs/InSAR_dataset_test_stage8diag")
+uw_grid = read_mat(root / "uw_grid.mat")
+uw_interp = read_mat(root / "uw_interp.mat")
+
+uw_ph = np.asarray(uw_grid["ph"][:1000, :8], dtype=np.complex64)
+edges = np.asarray(uw_interp["edgs"], dtype=np.int64)
+node_a = edges[:, 1] - 1
+node_b = edges[:, 2] - 1
+valid = (
+    (node_a >= 0)
+    & (node_b >= 0)
+    & (node_a < uw_ph.shape[0])
+    & (node_b < uw_ph.shape[0])
+)
+
+out = run_stage8_edge_noise_kernel(
+    uw_ph,
+    node_a[valid][:2000],
+    node_b[valid][:2000],
+    backend="native",
+)
+print(out["dph_noise"].shape)
+print(out["dph_space_uw"].shape)
+PY
+```
+
+Use `backend="python"` for reference behavior, `backend="native"` for Rust/CPU, and `backend="cuda"` when CuPy and that backend are available.
+
+## Step 7: measure speed
+
+To benchmark the maintained dataset:
+
+```bash
+make benchmark
+```
+
+Or customize the comparison:
+
+```bash
+uv run python scripts/benchmark_backends.py \
+  --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag \
+  --start-step 6 --end-step 8 \
+  --backends threads native \
+  --repeat 3 --warmup 1
+```
+
+The benchmark writes JSON and CSV results under `inputs_and_outputs/benchmarks/`. Use those files for speed claims rather than eyeballing notebook cell runtimes.
+
+## Step 8: understand what gets written
 
 pySTAMPS writes stage outputs into the dataset.
 
@@ -168,7 +303,7 @@ You do not need to open these files manually for a first pass. In practice, you 
 - confirm the expected files were written
 - compare the run against a reference dataset if one is available
 
-## Step 6: verify against a reference dataset
+## Step 9: verify against a reference dataset
 
 Use:
 
@@ -190,20 +325,15 @@ uv run pystamps verify \
 
 Use `verify` when you already know which run folder and which reference folder you want to compare.
 
-## Step 7: repo parity audit
+## Step 10: repo parity audit
 
 The repo has a stricter audit command for the maintained validation datasets:
 
 ```bash
-OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-uv run python scripts/validate_audit.py \
-  --datasets \
-    inputs_and_outputs/InSAR_dataset_test_stage8diag \
-    inputs_and_outputs/InSAR_dataset_test \
-  --output inputs_and_outputs/validation_runs/latest_audit.json
-# or
 make audit
 ```
+
+`make audit` reads the required dataset list from `pystamps/data/audited_workflow_manifest.json`. Do not replace it with a shorter hand-written list.
 
 Important:
 - this is slower than a normal run

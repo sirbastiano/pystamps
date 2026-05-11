@@ -17,6 +17,7 @@
         <h2>Guide</h2>
         <ul class="nav-list">
           <li><a href="index.html">Introduction</a></li>
+          <li><a href="pipeline-science-guide.html">Pipeline Guide</a></li>
           <li><a class="active" href="getting-started.html">Getting Started</a></li>
           <li><a href="installation.html">Installation</a></li>
           <li><a href="quickstart.html">Quick Start</a></li>
@@ -45,12 +46,28 @@
       <span class="badge">Beginner guide</span>
       <h1>Understand the workflow before you run it.</h1>
       <p>You do not need to be an interferometry specialist to start using pySTAMPS. You do need a working mental model of what the package reads, what it writes, and why the outputs are organized into stages.</p>
+      <div class="hero-actions">
+        <a class="button-link" href="pipeline-science-guide.html">Read the full pipeline guide</a>
+        <a class="button-link secondary" href="quickstart.html">Use quick start</a>
+      </div>
     </section>
 
     <section class="card">
       <h2>What is pySTAMPS?</h2>
       <p>pySTAMPS is a Python implementation and orchestration layer for StaMPS-style processing. In practical terms, it reads a dataset directory, checks which processing artifacts already exist, and runs the stages you select.</p>
       <div class="callout info"><strong>Think of it this way:</strong> pySTAMPS is a reproducible processing assistant for a folder full of scientific inputs and intermediate outputs.</div>
+    </section>
+
+    <section class="card">
+      <h2>Install and check the runtime</h2>
+      <p>From a local checkout, use <span class="code-inline">uv</span> and then inspect the registered kernel backends.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">git clone git@github.com:sirbastiano/pystamps.git
+cd pystamps
+uv sync
+uv run pystamps describe-backends</code></pre>
+      <p>Editable <span class="code-inline">pip</span> installs require Rust because the native Rust/CPU extension is compiled locally.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">python -m pip install -e .
+python -m pip install -e ".[dev]"</code></pre>
     </section>
 
     <section class="card">
@@ -103,16 +120,42 @@
       <ol>
         <li>Inspect the dataset layout:</li>
       </ol>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps status --dataset inputs_and_outputs/InSAR_dataset_test</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset inputs_and_outputs/InSAR_dataset_test</code></pre>
       <ol start="2">
         <li>Check what a full run would do without writing outputs:</li>
       </ol>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps run --dataset inputs_and_outputs/InSAR_dataset_test --start-step 1 --end-step 8 --dry-run</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset inputs_and_outputs/InSAR_dataset_test --start-step 1 --end-step 8 --dry-run</code></pre>
       <ol start="3">
         <li>Run a smaller stage range on a copy:</li>
       </ol>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">cp -a inputs_and_outputs/InSAR_dataset_test /tmp/InSAR_dataset_test_run
-pystamps run --dataset /tmp/InSAR_dataset_test_run --start-step 6 --end-step 8</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">cp -a inputs_and_outputs/InSAR_dataset_test_stage8diag /tmp/pystamps_first_run
+uv run pystamps run --dataset /tmp/pystamps_first_run --start-step 6 --end-step 8</code></pre>
+      <p>The checked-in reference datasets already contain many outputs, so completed stages can report <span class="code-inline">skipped_existing</span>.</p>
+    </section>
+
+    <section class="card">
+      <h2>Switch to optimized Rust/native kernels</h2>
+      <p>The CLI stays the same. You switch kernels through config.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-yaml">runtime:
+  backend: auto
+  stage2_kernel_backend: native
+  stage2_native_threads: 0
+  kernel_backend_overrides:
+    stage2_grid_accumulate: native
+    stage2_histogram: native
+    stage2_topofit: native
+    stage2_topofit_row_invariant: native
+    stage2_topofit_coh_row_invariant: native
+    stage4_edge_stats: native
+    stage7_scla: native
+    stage8_edge_noise: native
+  io_workers: 8
+  cpu_workers: 0</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps --config native-kernels.yaml run --dataset /tmp/pystamps_first_run --start-step 2 --end-step 8</code></pre>
+      <p>Use <span class="code-inline">python</span> to force reference kernels, <span class="code-inline">native</span> for compiled Rust/CPU kernels, and <span class="code-inline">cuda</span> where available.</p>
+      <p>If the copied dataset already has the expected outputs, the CLI skips those stages. Use a dataset copy that still needs the requested stage outputs, or use the benchmark/direct-kernel examples to exercise optimized kernels on repo golden data.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run /tmp/pystamps_first_run --golden inputs_and_outputs/InSAR_dataset_test_stage8diag
+make benchmark</code></pre>
     </section>
 
     <section class="diagram-card">

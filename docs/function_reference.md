@@ -310,6 +310,58 @@ Purpose: accelerated CPU and GPU kernels used by later numerical stages.
 - `run_stage8_edge_noise_kernel(uw_ph, node_a, node_b, backend='auto', chunk_edges=0) -> dict[str, np.ndarray]`: public stage-8 kernel wrapper
 - `describe_backend_matrix() -> dict[str, Any]`: report providers and per-kernel backend coverage
 
+### Practical kernel examples
+
+List registered providers and per-kernel coverage:
+
+```bash
+uv run pystamps describe-backends
+```
+
+Call the public Python API:
+
+```python
+from pystamps.kernels import describe_backend_matrix
+
+matrix = describe_backend_matrix()
+print(matrix["kernels"]["stage8_edge_noise"]["available_backends"])
+```
+
+Run the optimized stage-8 kernel on arrays loaded from the repo golden dataset:
+
+```python
+from pathlib import Path
+import numpy as np
+
+from pystamps.io.mat import read_mat
+from pystamps.kernels import run_stage8_edge_noise_kernel
+
+root = Path("inputs_and_outputs/InSAR_dataset_test_stage8diag")
+uw_grid = read_mat(root / "uw_grid.mat")
+uw_interp = read_mat(root / "uw_interp.mat")
+
+uw_ph = np.asarray(uw_grid["ph"][:1000, :8], dtype=np.complex64)
+edges = np.asarray(uw_interp["edgs"], dtype=np.int64)
+node_a = edges[:, 1] - 1
+node_b = edges[:, 2] - 1
+valid = (
+    (node_a >= 0)
+    & (node_b >= 0)
+    & (node_a < uw_ph.shape[0])
+    & (node_b < uw_ph.shape[0])
+)
+
+out = run_stage8_edge_noise_kernel(
+    uw_ph,
+    node_a[valid][:2000],
+    node_b[valid][:2000],
+    backend="native",
+)
+print(out["dph_noise"].shape)
+```
+
+Use `backend="python"` for the reference path, `backend="native"` for the Rust/CPU path, and `backend="cuda"` when CuPy and that specific kernel backend are available.
+
 ## `pystamps.kernels.registry`
 
 Purpose: register and resolve kernel implementations.

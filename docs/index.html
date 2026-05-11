@@ -17,6 +17,7 @@
         <h2>Guide</h2>
         <ul class="nav-list">
           <li><a class="active" href="index.html">Introduction</a></li>
+          <li><a href="pipeline-science-guide.html">Pipeline Guide</a></li>
           <li><a href="getting-started.html">Getting Started</a></li>
           <li><a href="installation.html">Installation</a></li>
           <li><a href="quickstart.html">Quick Start</a></li>
@@ -59,7 +60,7 @@
       <h1>Process and inspect pySTAMPS workflows without losing the engineering details.</h1>
       <p>pySTAMPS is a static-dataset processing toolkit for StaMPS-style workflows. It helps you inspect a dataset, run selected processing stages, and understand each stage-level output before moving to output comparison.</p>
       <div class="hero-actions">
-        <a class="button-link" href="getting-started.html">Start with the beginner guide</a>
+        <a class="button-link" href="pipeline-science-guide.html">Read the pipeline guide</a>
         <a class="button-link secondary" href="quickstart.html">See the command flow</a>
         <a class="button-link secondary" href="function-reference.html">Read the function reference</a>
       </div>
@@ -67,13 +68,18 @@
         <div class="stat-card">
           <h3>Inspect</h3>
           <p>Run this first and confirm that dataset layout and stage metadata are what you expect.</p>
-          <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps status --dataset /path/to/dataset</code></pre>
+          <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset /path/to/dataset</code></pre>
         </div>
         <div class="stat-card">
           <h3>Run</h3>
           <p>Process only what you need, and optionally dry-run before expensive execution.</p>
-          <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps run --dataset /path/to/dataset --start-step 1 --end-step 4 --dry-run</code></pre>
-          <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps run --dataset /path/to/dataset --start-step 6 --end-step 8</code></pre>
+          <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset /path/to/dataset --start-step 1 --end-step 4 --dry-run</code></pre>
+          <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset /path/to/dataset --start-step 6 --end-step 8</code></pre>
+        </div>
+        <div class="stat-card">
+          <h3>Optimize</h3>
+          <p>Inspect native Rust/CPU and optional CUDA kernel coverage before tuning a run config.</p>
+          <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps describe-backends</code></pre>
         </div>
       </div>
     </section>
@@ -81,7 +87,7 @@
     <section class="panel-grid">
       <article class="action-card">
         <h3>New to interferometry?</h3>
-        <p>Read <a href="getting-started.html">Getting Started</a> for plain-language explanations of phase, coherence, unwrapping, and why pySTAMPS writes many <span class="code-inline">.mat</span> files.</p>
+        <p>Read <a href="pipeline-science-guide.html">Pipeline Guide</a> for the combined science and program tutorial, or <a href="getting-started.html">Getting Started</a> for the shorter beginner path.</p>
       </article>
       <article class="action-card">
         <h3>Need the shortest path?</h3>
@@ -124,14 +130,14 @@
       <h2>Start here if you want to run the package</h2>
       <ol>
         <li>Install the Python environment and external tools from <a href="installation.html">Installation</a>.</li>
-        <li>Read <a href="getting-started.html">Getting Started</a> if you want the domain concepts explained simply.</li>
+        <li>Read <a href="pipeline-science-guide.html">Pipeline Guide</a> if you want the science, stage outputs, kernel switching, verification, and benchmarking explained together.</li>
         <li>Follow <a href="quickstart.html">Quick Start</a> on a copy of a dataset, not your only original dataset.</li>
         <li>Use <a href="usage.html">Usage</a> once you need stage selection and backend tuning.</li>
         <li>Use <a href="verification.html">Verification</a> when you need output comparison and parity gate checks.</li>
       </ol>
     </section>
 
-    <p class="footer">Last updated: 2026-03-15</p>
+    <p class="footer">Last updated: 2026-05-11</p>
   </main>
 </div>
 </body>

@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Formal module and function guide.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a class="active" href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/cli.html">cli</a></li><li><a href="api/configuration.html">config</a></li><li><a href="api/status.html">status</a></li><li><a href="api/verify.html">verify</a></li><li><a href="api/io_dataset.html">io.dataset</a></li><li><a href="api/io_mat.html">io.mat</a></li><li><a href="api/runtime.html">runtime</a></li><li><a href="api/kernels.html">kernels</a></li><li><a href="api/pipeline_types.html">pipeline.types</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li></ul></div>
     </nav>
   </aside>
@@ -129,12 +129,34 @@
           <thead><tr><th>Object</th><th>Role</th><th>Why it exists</th></tr></thead>
           <tbody>
             <tr><td><code>pystamps.runtime.executor.HybridExecutor</code></td><td>Concurrency abstraction</td><td>Provides a consistent interface for thread and process pools.</td></tr>
-            <tr><td><code>pystamps.kernels.run_stage7_scla_kernel()</code></td><td>Stage-7 kernel dispatch</td><td>Selects the CPU or GPU implementation for SCLA-related calculations.</td></tr>
-            <tr><td><code>pystamps.kernels.run_stage8_edge_noise_kernel()</code></td><td>Stage-8 kernel dispatch</td><td>Selects the CPU or GPU implementation for edge-noise calculations.</td></tr>
+            <tr><td><code>pystamps.kernels.describe_backend_matrix()</code></td><td>Kernel capability report</td><td>Lists registered providers and per-kernel <span class="code-inline">python</span>, <span class="code-inline">native</span>, and <span class="code-inline">cuda</span> coverage.</td></tr>
+            <tr><td><code>pystamps.kernels.run_stage7_scla_kernel()</code></td><td>Stage-7 kernel dispatch</td><td>Selects the reference Python, Rust/native, or CUDA implementation for SCLA-related calculations.</td></tr>
+            <tr><td><code>pystamps.kernels.run_stage8_edge_noise_kernel()</code></td><td>Stage-8 kernel dispatch</td><td>Selects the reference Python, Rust/native, or CUDA implementation for edge-noise calculations.</td></tr>
             <tr><td><code>pystamps.kernels.BackendUnavailableError</code></td><td>Backend capability error</td><td>Signals that a requested kernel backend is unavailable.</td></tr>
           </tbody>
         </table>
       </div>
+      <h3>Direct optimized-kernel example</h3>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run python - &lt;&lt;'PY'
+from pathlib import Path
+import numpy as np
+
+from pystamps.io.mat import read_mat
+from pystamps.kernels import describe_backend_matrix, run_stage8_edge_noise_kernel
+
+print(describe_backend_matrix()["kernels"]["stage8_edge_noise"]["available_backends"])
+
+root = Path("inputs_and_outputs/InSAR_dataset_test_stage8diag")
+uw_grid = read_mat(root / "uw_grid.mat")
+uw_interp = read_mat(root / "uw_interp.mat")
+uw_ph = np.asarray(uw_grid["ph"][:1000, :8], dtype=np.complex64)
+edges = np.asarray(uw_interp["edgs"], dtype=np.int64)
+node_a = edges[:, 1] - 1
+node_b = edges[:, 2] - 1
+valid = (node_a &gt;= 0) &amp; (node_b &gt;= 0) &amp; (node_a &lt; uw_ph.shape[0]) &amp; (node_b &lt; uw_ph.shape[0])
+out = run_stage8_edge_noise_kernel(uw_ph, node_a[valid][:2000], node_b[valid][:2000], backend="native")
+print(out["dph_noise"].shape)
+PY</code></pre>
     </section>
 
     <p class="footer">For command examples, continue with <a href="usage.html">Usage</a>. For the generated API pages, see the <a href="api/pystamps.html">Package API</a>.</p>

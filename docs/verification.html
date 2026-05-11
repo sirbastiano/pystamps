@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Output comparison and parity checks.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a class="active" href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a class="active" href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/cli.html">cli</a></li><li><a href="api/verify.html">verify</a></li><li><a href="api/parity_contract.html">parity_contract</a></li></ul></div>
     </nav>
   </aside>
@@ -28,8 +28,8 @@
 
     <section class="card">
       <h2>CLI verification</h2>
-      <p>Use `pystamps verify` once a run copy exists.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">pystamps verify --run /tmp/run-copy --golden /path/to/reference</code></pre>
+      <p>Use <span class="code-inline">pystamps verify</span> once a run copy exists.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run /tmp/run-copy --golden /path/to/reference</code></pre>
       <ul>
         <li>Returns <span class="code-inline">0</span> when all comparisons pass and non-zero when mismatches are found.</li>
         <li>Compares numeric MATLAB payloads with tolerance settings and classifies failure families by artifact.</li>
@@ -50,7 +50,7 @@
       <pre><button class="copy-btn">Copy</button><code class="language-bash">OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
   uv run python scripts/validate_audit.py \
     --output inputs_and_outputs/validation_runs/latest_audit.json</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">RUN_COPY="$(python - <<'PY'
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">RUN_COPY="$(uv run python - <<'PY'
 import json
 from pathlib import Path
 
@@ -59,7 +59,7 @@ print(next(audit['run_root'] for audit in payload['audits'] if audit['dataset'] 
 PY
 )"
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
-  pystamps verify --run "$RUN_COPY" --golden ./inputs_and_outputs/InSAR_dataset_test</code></pre>
+  uv run pystamps verify --run "$RUN_COPY" --golden ./inputs_and_outputs/InSAR_dataset_test</code></pre>
       <ul>
         <li>Fresh audit output should be treated as active input for subsequent checks.</li>
         <li>The required done-gate datasets are owned by <span class="code-inline">pystamps/data/audited_workflow_manifest.json</span>, including the small-baseline stage-7 audit targets.</li>
