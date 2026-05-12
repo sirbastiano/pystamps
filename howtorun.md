@@ -2,7 +2,7 @@
 
 This guide explains how to run pySTAMPS if you are new both to the package and to interferometry.
 
-If you want a slower, more tutorial-style introduction first, read [docs/pipeline_science_guide.md](docs/pipeline_science_guide.md), then [docs/getting_started.md](docs/getting_started.md), and then open `notebooks/00_pystamps_beginner_walkthrough.ipynb`.
+If you want a slower, more tutorial-style introduction first, read [docs/pipeline_science_guide.md](docs/pipeline_science_guide.md), then [docs/getting_started.md](docs/getting_started.md), and then open `notebooks/01_start_here_pipeline.ipynb`.
 
 ## What pySTAMPS is doing
 
@@ -349,7 +349,7 @@ If a run fails:
 2. Try a smaller stage range first, for example `--start-step 6 --end-step 8`
 3. Confirm `triangle` and `snaphu` are installed and on `PATH`
 4. Run on a fresh dataset copy if old outputs may be interfering
-5. Use the notebook `notebooks/00_pystamps_beginner_walkthrough.ipynb` to compare your local steps with the guided flow
+5. Use the notebook `notebooks/01_start_here_pipeline.ipynb` to compare your local steps with the guided flow
 
 ## Short version
 
