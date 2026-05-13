@@ -111,3 +111,33 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `make build` rewrites generated `_version.py` and creates `dist/` artifacts; these are validation side effects and were cleaned from the working tree.
   - Useful context: `.ralph/` is ignored, so required progress/activity logs need force-add when they must be committed.
 ---
+## [2026-05-13 14:28:02 UTC] - US-004: Add guard against unsupported parity claims
+Thread: 
+Run: 20260513-094222-768318 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 2e8ef55 test(docs): guard parity claims
+- Post-commit status: clean
+- Verification:
+  - Command: uv run pytest -q tests/test_standalone_validation_contract.py -> PASS
+  - Command: TMPDIR=$PWD/.tmp_pytest uv run pytest -q -> PASS
+  - Command: make build -> FAIL (setuptools-scm `git rev-list HEAD` timeout)
+  - Command: SETUPTOOLS_SCM_SUBPROCESS_TIMEOUT=120 make build -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - dist/pystamps-0.1.1.dev101+ga684338d0.d20260513-cp314-cp314-linux_x86_64.whl
+  - dist/pystamps-0.1.1.dev101+ga684338d0.d20260513.tar.gz
+  - pystamps/_version.py
+  - tests/test_standalone_validation_contract.py
+- What was implemented
+  - Added a docs/notebooks scanner test that runs when audit evidence is missing or not completed and passing.
+  - Added detection for unsupported full-parity wording, including `all stages match STAMPS`, with allow rules for `completed=true` and `ok=true` evidence or notebook `audit_ok` guards.
+  - Added negative and conservative-wording examples to prevent false positives for inconclusive parity guidance.
+- **Learnings for future iterations:**
+  - Patterns discovered: `tests/test_standalone_validation_contract.py` is the existing place for repo docs contract checks.
+  - Gotchas encountered: `make build` can exceed setuptools-scm's default 40s git subprocess timeout in this workspace; retry with `SETUPTOOLS_SCM_SUBPROCESS_TIMEOUT=120`.
+  - Useful context: `inputs_and_outputs/validation_runs/latest_audit.json` is ignored local state, so CI usually exercises the missing-artifact path.
+---
