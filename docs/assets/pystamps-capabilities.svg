@@ -59,8 +59,8 @@
   <text x="84" y="374" class="copy">for inputs, outputs and stage state.</text>
 
   <rect x="844" y="272" width="300" height="98" class="cardB" />
-  <text x="896" y="302" class="mini">ACCELERATION</text>
+  <text x="896" y="302" class="mini">BACKENDS</text>
   <text x="896" y="330" class="label">Runtime and kernels</text>
-  <text x="872" y="354" class="copy">Thread/process/GPU paths speed up</text>
-  <text x="872" y="374" class="copy">numerical stages where needed.</text>
+  <text x="872" y="354" class="copy">Thread/process/GPU paths provide</text>
+  <text x="872" y="374" class="copy">alternative numerical kernels.</text>
 </svg>

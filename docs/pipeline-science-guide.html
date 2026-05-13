@@ -23,7 +23,7 @@
     <section class="hero">
       <span class="badge">Program and science</span>
       <h1>Learn what the pipeline computes and how to run it safely.</h1>
-      <p>This guide joins the scientific concepts behind StaMPS-style persistent-scatterer processing with the pySTAMPS commands used to inspect, execute, accelerate, verify, and benchmark a dataset.</p>
+      <p>This guide joins the scientific concepts behind StaMPS-style persistent-scatterer processing with the pySTAMPS commands used to inspect, execute, configure kernels for, verify, and benchmark a dataset.</p>
       <div class="hero-actions">
         <a class="button-link" href="#first-run">Run the pipeline</a>
         <a class="button-link secondary" href="#stages">Understand stages</a>
@@ -153,7 +153,7 @@ uv run pystamps describe-backends</code></pre>
 
     <section id="kernels" class="card">
       <h2>Switch kernel modality</h2>
-      <p>The CLI command stays the same. Switch between reference Python, optimized native Rust/CPU, and optional CUDA providers through config.</p>
+      <p>The CLI command stays the same. Switch between reference Python, native Rust/CPU, and optional CUDA providers through config.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-yaml">runtime:
   backend: auto
   stage2_kernel_backend: native
@@ -174,7 +174,7 @@ uv run pystamps describe-backends</code></pre>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps --config native-kernels.yaml run \
   --dataset /tmp/pystamps_run \
   --start-step 2 --end-step 8</code></pre>
-      <p>Current optimized kernel names are <span class="code-inline">stage2_grid_accumulate</span>, <span class="code-inline">stage2_histogram</span>, <span class="code-inline">stage2_topofit</span>, <span class="code-inline">stage2_topofit_row_invariant</span>, <span class="code-inline">stage2_topofit_coh_row_invariant</span>, <span class="code-inline">stage4_edge_stats</span>, <span class="code-inline">stage7_scla</span>, and <span class="code-inline">stage8_edge_noise</span>.</p>
+      <p>Current backend-dispatched kernel names are <span class="code-inline">stage2_grid_accumulate</span>, <span class="code-inline">stage2_histogram</span>, <span class="code-inline">stage2_topofit</span>, <span class="code-inline">stage2_topofit_row_invariant</span>, <span class="code-inline">stage2_topofit_coh_row_invariant</span>, <span class="code-inline">stage4_edge_stats</span>, <span class="code-inline">stage7_scla</span>, and <span class="code-inline">stage8_edge_noise</span>.</p>
     </section>
 
     <section class="card">

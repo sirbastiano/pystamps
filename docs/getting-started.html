@@ -134,7 +134,7 @@ uv run pystamps run --dataset /tmp/pystamps_first_run --start-step 6 --end-step 
     </section>
 
     <section class="card">
-      <h2>Switch to optimized Rust/native kernels</h2>
+      <h2>Switch to Rust/native kernels</h2>
       <p>The CLI stays the same. You switch kernels through config.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-yaml">runtime:
   backend: auto
@@ -153,7 +153,7 @@ uv run pystamps run --dataset /tmp/pystamps_first_run --start-step 6 --end-step 
   cpu_workers: 0</code></pre>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps --config native-kernels.yaml run --dataset /tmp/pystamps_first_run --start-step 2 --end-step 8</code></pre>
       <p>Use <span class="code-inline">python</span> to force reference kernels, <span class="code-inline">native</span> for compiled Rust/CPU kernels, and <span class="code-inline">cuda</span> where available.</p>
-      <p>If the copied dataset already has the expected outputs, the CLI skips those stages. Use a dataset copy that still needs the requested stage outputs, or use the benchmark/direct-kernel examples to exercise optimized kernels on repo golden data.</p>
+      <p>If the copied dataset already has the expected outputs, the CLI skips those stages. Use a dataset copy that still needs the requested stage outputs, or use the benchmark/direct-kernel examples to exercise native kernels on repo golden data.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run /tmp/pystamps_first_run --golden inputs_and_outputs/InSAR_dataset_test_stage8diag
 make benchmark</code></pre>
     </section>

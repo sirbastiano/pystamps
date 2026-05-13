@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-13 10:08:02 | run=20260513-094222-768318 | iter=1 | mode=build | story=US-001 | duration=1533s | status=success
 
 ## Events
 
@@ -11,3 +12,13 @@
 [2026-05-13 10:01:32] Verification passed: focused parity contract tests, full pytest, and make build
 [2026-05-13 10:04:05] Pre-commit review complete: no security, performance, or regression blockers found
 [2026-05-13 10:05:56] Updated progress log for US-001 outcome
+[2026-05-13 10:07:56] ITERATION 1 end (duration=1533s)
+[2026-05-13 10:08:10] ITERATION 2 start (mode=build story=US-002)
+[2026-05-13 10:13:30] updated notebook audit verdict logic for US-002
+[2026-05-13 10:15:42] fixed notebook repo root resolution for execution
+[2026-05-13 10:20:31] notebook execution passed for US-002
+[2026-05-13 10:22:39] pytest passed for US-002
+[2026-05-13 10:31:04] make build passed for US-002
+[2026-05-13 10:36:08] final notebook execution passed for US-002
+[2026-05-13 10:37:45] final pytest passed for US-002
+[2026-05-13 10:46:08] final make build passed for US-002

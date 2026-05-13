@@ -23,7 +23,7 @@
     <section class="hero">
       <span class="badge">System map</span>
       <h1>pySTAMPS is organized around the dataset directory as the source of truth.</h1>
-      <p>The CLI, runtime scheduler, ported stages, optimized kernels, and verification tools all read from or write to the same StaMPS-style dataset tree.</p>
+      <p>The CLI, runtime scheduler, ported stages, backend kernels, and verification tools all read from or write to the same StaMPS-style dataset tree.</p>
       <div class="hero-actions">
         <a class="button-link" href="pipeline-science-guide.html">Read the pipeline guide</a>
         <a class="button-link secondary" href="function-reference.html">Open function reference</a>
@@ -96,7 +96,7 @@
     </section>
 
     <section class="card">
-      <h2>Optimized kernels</h2>
+      <h2>Backend kernels</h2>
       <ul>
         <li><span class="code-inline">stage2_grid_accumulate</span></li>
         <li><span class="code-inline">stage2_histogram</span></li>
@@ -158,7 +158,7 @@ make audit</code></pre>
       <h2>Practical boundaries</h2>
       <ul>
         <li>The package implements stages 1 through 8 in <span class="code-inline">pystamps.pipeline.ported</span>.</li>
-        <li>The optimized native extension accelerates selected hot kernels, not every line of the pipeline.</li>
+        <li>The native extension provides compiled implementations for selected hot kernels, not every line of the pipeline.</li>
         <li>External tools such as <span class="code-inline">triangle</span> and <span class="code-inline">snaphu</span> are still required for relevant unwrapping workflows.</li>
         <li>Parity should be claimed from <span class="code-inline">verify</span> or audit evidence, not from command completion alone.</li>
         <li>Speed should be claimed from <span class="code-inline">make benchmark</span> or <span class="code-inline">scripts/benchmark_backends.py</span>, not from a skipped pipeline run.</li>

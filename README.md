@@ -70,7 +70,7 @@ Use `--dry-run` first if you only want to see the selected stage range:
 uv run pystamps run --dataset /tmp/pystamps_stage8diag_run --start-step 1 --end-step 8 --dry-run
 ```
 
-## Optimized kernels
+## Native and CUDA kernel backends
 
 Built-in kernel backends are `python`, `native`, and `cuda`. `native` is the compiled Rust/CPU path. Inspect what is available on your machine:
 
@@ -78,7 +78,7 @@ Built-in kernel backends are `python`, `native`, and `cuda`. `native` is the com
 uv run pystamps describe-backends
 ```
 
-Force the optimized native kernels from a config file:
+Force native kernels from a config file:
 
 ```bash
 cat > native-kernels.yaml <<'YAML'
@@ -106,7 +106,7 @@ uv run pystamps --config native-kernels.yaml run \
   --start-step 2 --end-step 8
 ```
 
-Normal CLI execution skips a stage when that stage's expected output artifact is already present. To exercise optimized kernels through the pipeline, run this config on a dataset copy that still needs those stages. To exercise kernels on the checked-in golden data without changing stage artifacts, use the direct kernel API example in `howtorun.md` or the benchmark script below.
+Normal CLI execution skips a stage when that stage's expected output artifact is already present. To exercise native kernels through the pipeline, run this config on a dataset copy that still needs those stages. To exercise kernels on the checked-in golden data without changing stage artifacts, use the direct kernel API example in `howtorun.md` or the benchmark script below.
 
 Use `stage2_kernel_backend: python` or per-kernel overrides such as `stage8_edge_noise: python` when you need the reference path for debugging. Stage 2 accepts `auto`, `python`, or `native`; stage 4, 7, and 8 can use `python`, `native`, and `cuda` where registered. With `stage2_native_threads: 0`, pySTAMPS gives each stage-2 patch the detected CPU budget and runs stage-2 patches one at a time to avoid oversubscription. `cpu_workers: 0` uses all detected CPU workers.
 

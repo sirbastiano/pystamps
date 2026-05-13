@@ -3,7 +3,7 @@
 This guide teaches the two things a new user needs at the same time:
 
 - the scientific meaning of the StaMPS-style persistent-scatterer workflow
-- the practical pySTAMPS commands used to inspect, run, accelerate, and verify that workflow
+- the practical pySTAMPS commands used to inspect, run, configure kernels for, and verify that workflow
 
 If you only need commands, start with [../howtorun.md](../howtorun.md) or [quickstart.html](quickstart.html). If you need to understand why the commands exist and what each stage produces, read this guide first.
 
@@ -218,7 +218,7 @@ Stage 1 writes `ps1.mat`, `ph1.mat`, `bp1.mat`, and side products. If these file
 
 Stage 2 estimates phase-model and coherence-like terms per candidate. These terms are the bridge between raw candidate stacks and persistent-scatterer selection.
 
-The optimized native kernels are especially important here. Stage 2 has native implementations for:
+The native kernels are especially important here. Stage 2 has native implementations for:
 
 - `stage2_grid_accumulate`
 - `stage2_histogram`
@@ -236,7 +236,7 @@ Stage 3 uses stage-2 model and coherence outputs to choose candidate points wort
 
 Stage 4 removes poor or redundant selections. It uses candidate geometry and quality metrics to avoid carrying unstable points into the merged products.
 
-The `stage4_edge_stats` kernel supports Python and native backends. Where registered and available, the native backend is the optimized Rust/CPU path.
+The `stage4_edge_stats` kernel supports Python and native backends. Where registered and available, the native backend is the Rust/CPU path.
 
 ## Stage 5: promote and merge patches
 
@@ -300,7 +300,7 @@ runtime:
     stage8_edge_noise: python
 ```
 
-Optimized native Rust/CPU config:
+Native Rust/CPU config:
 
 ```yaml
 runtime:

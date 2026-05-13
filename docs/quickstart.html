@@ -51,8 +51,8 @@ uv run pystamps run --dataset /tmp/pystamps_stage8diag_run --start-step 6 --end-
     </section>
 
     <section class="card">
-      <h2>Step 4: run the optimized Rust/native kernels</h2>
-      <p>Inspect available providers, then pin the optimized native kernels with a config file.</p>
+      <h2>Step 4: run the Rust/native kernels</h2>
+      <p>Inspect available providers, then pin the native kernels with a config file.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps describe-backends</code></pre>
       <pre><button class="copy-btn">Copy</button><code class="language-yaml">runtime:
   backend: auto

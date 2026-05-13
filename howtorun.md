@@ -25,7 +25,7 @@ You need:
 - this repository checked out locally
 - `uv` installed
 - the Python environment synced with `uv sync` or `make setup`
-- Rust installed when building from source or editable mode, because the optimized native kernels are compiled locally
+- Rust installed when building from source or editable mode, because the native kernels are compiled locally
 
 External tools are also needed for some workflows:
 - `triangle`
@@ -164,9 +164,9 @@ Then run:
 uv run pystamps --config accel.yaml run --dataset /path/to/dataset --start-step 1 --end-step 8
 ```
 
-## Step 5: run the optimized Rust/native kernels
+## Step 5: run the Rust/native kernels
 
-The easiest way to see which optimized kernels are available is:
+The easiest way to see which native and CUDA kernels are available is:
 
 ```bash
 uv run pystamps describe-backends
@@ -208,7 +208,7 @@ uv run pystamps --config native-kernels.yaml run \
   --start-step 2 --end-step 8
 ```
 
-If the copied dataset already contains the expected stage outputs, the CLI reports `skipped_existing` for those stages. That is correct. To exercise the optimized kernels through the pipeline, use a dataset copy that still needs those stage outputs. To exercise a kernel directly on the repo golden data, use the direct API example in the next step.
+If the copied dataset already contains the expected stage outputs, the CLI reports `skipped_existing` for those stages. That is correct. To exercise native kernels through the pipeline, use a dataset copy that still needs those stage outputs. To exercise a kernel directly on the repo golden data, use the direct API example in the next step.
 
 For debugging parity, switch any one kernel back to the reference implementation:
 
@@ -219,7 +219,7 @@ runtime:
     stage8_edge_noise: python
 ```
 
-## Step 6: call an optimized kernel directly on repo data
+## Step 6: call a backend kernel directly on repo data
 
 Use the CLI for normal workflows. Use the direct kernel API when you are developing or benchmarking one numerical kernel in isolation.
 

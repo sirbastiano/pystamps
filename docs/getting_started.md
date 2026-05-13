@@ -15,7 +15,7 @@ It helps you:
 - run part or all of the processing chain
 - validate your outputs before trusting a new run
 - tune runtime settings through a config file
-- switch between reference Python kernels and optimized Rust/native kernels
+- switch between reference Python kernels and Rust/native kernels
 
 ## The minimum interferometry background you need
 
@@ -76,7 +76,7 @@ uv sync
 uv run pystamps describe-backends
 ```
 
-If you use editable `pip` installs, source builds require Rust because the optimized native extension is compiled locally:
+If you use editable `pip` installs, source builds require Rust because the native extension is compiled locally:
 
 ```bash
 python -m pip install -e .
@@ -118,7 +118,7 @@ Use a partial range when earlier products already exist. Always run on a copy be
 
 The checked-in reference datasets already contain many outputs, so some stages can report `skipped_existing`. That is expected for completed examples.
 
-### Use optimized Rust/native kernels
+### Use Rust/native kernels
 
 Create `native-kernels.yaml`:
 
@@ -150,7 +150,7 @@ uv run pystamps --config native-kernels.yaml run \
   --start-step 2 --end-step 8
 ```
 
-The CLI skips stages whose expected output artifacts already exist. Use a dataset copy that still needs those stages if you want the pipeline to execute the optimized kernels, or use the direct kernel/benchmark examples in [howtorun.md](../howtorun.md) on the repo golden data.
+The CLI skips stages whose expected output artifacts already exist. Use a dataset copy that still needs those stages if you want the pipeline to execute native kernels, or use the direct kernel/benchmark examples in [howtorun.md](../howtorun.md) on the repo golden data.
 
 Use `stage2_kernel_backend: python` or a per-kernel override such as `stage8_edge_noise: python` when you need the reference implementation for debugging.
 

@@ -1,6 +1,6 @@
 # Architecture Snapshot
 
-pySTAMPS is organized around one invariant: a StaMPS-style dataset directory is the source of truth. The CLI, runtime scheduler, ported stages, optimized kernels, and verification tools all read from or write to that directory.
+pySTAMPS is organized around one invariant: a StaMPS-style dataset directory is the source of truth. The CLI, runtime scheduler, ported stages, backend kernels, and verification tools all read from or write to that directory.
 
 For the full teaching guide, read [pipeline_science_guide.md](pipeline_science_guide.md).
 
@@ -65,9 +65,9 @@ Kernel backend values:
 - `python`: reference NumPy/Python implementation
 - `native`: compiled Rust/CPU implementation
 - `cuda`: CuPy/CUDA implementation where registered and available
-- `auto`: prefer optimized available providers with fallback rules
+- `auto`: prefer available providers with fallback rules
 
-Current optimized kernel names are:
+Current backend-dispatched kernel names are:
 
 - `stage2_grid_accumulate`
 - `stage2_histogram`
@@ -131,7 +131,7 @@ The audit dataset list is owned by `pystamps/data/audited_workflow_manifest.json
 ## Practical boundaries
 
 - The package implements stages 1 through 8 in `pystamps.pipeline.ported`.
-- The optimized native extension accelerates selected hot kernels, not every line of the pipeline.
+- The native extension provides compiled implementations for selected hot kernels, not every line of the pipeline.
 - External tools such as `triangle` and `snaphu` are still required for relevant unwrapping workflows.
 - Parity should be claimed from `verify` or audit evidence, not from command completion alone.
 - Speed should be claimed from `make benchmark` or `scripts/benchmark_backends.py`, not from a skipped pipeline run.

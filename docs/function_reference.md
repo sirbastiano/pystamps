@@ -16,7 +16,7 @@ Core areas:
 - `pystamps.pipeline.types`: runtime data structures
 - `pystamps.pipeline.stages`: orchestration across stages 1 through 8
 - `pystamps.pipeline.ported`: stage implementations and helpers
-- `pystamps.kernels.*`: accelerated kernels and registry
+- `pystamps.kernels.*`: backend kernels and registry
 - `pystamps.runtime.executor`: hybrid execution infrastructure
 - `pystamps.compat.legacy`: legacy StaMPS command discovery
 - `pystamps.parity_contract`: repo parity contract helpers
@@ -277,7 +277,7 @@ These helpers exist to keep the numbered stage functions manageable.
 
 ## `pystamps.kernels.accelerated`
 
-Purpose: accelerated CPU and GPU kernels used by later numerical stages.
+Purpose: CPU and GPU backend kernels used by later numerical stages.
 
 ### Types
 - `BackendUnavailableError`: raised when a requested backend cannot be used
@@ -327,7 +327,7 @@ matrix = describe_backend_matrix()
 print(matrix["kernels"]["stage8_edge_noise"]["available_backends"])
 ```
 
-Run the optimized stage-8 kernel on arrays loaded from the repo golden dataset:
+Run the backend-dispatched stage-8 kernel on arrays loaded from the repo golden dataset:
 
 ```python
 from pathlib import Path
