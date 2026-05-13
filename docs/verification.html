@@ -63,6 +63,7 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. \
       <ul>
         <li>Fresh audit output should be treated as active input for subsequent checks.</li>
         <li>The required done-gate datasets are owned by <span class="code-inline">pystamps/data/audited_workflow_manifest.json</span>, including the small-baseline stage-7 audit targets.</li>
+        <li>Use <span class="code-inline">make audit</span> before making broad parity claims; broad STAMPS/golden parity requires <span class="code-inline">latest_audit.json</span> to report <span class="code-inline">completed=true</span> and <span class="code-inline">ok=true</span>.</li>
         <li>Do not rerun against stale copies; interrupted audits or manual restart paths invalidate prior results.</li>
       </ul>
     </section>

@@ -94,7 +94,7 @@
 ## Release Requirements
 
 - `pytest` must pass.
-- `latest_audit.json` must report no failed parity workflows.
+- `latest_audit.json` must report `completed=true`, `ok=true`, and no failed parity workflows.
 - The explicit verification command must pass using the `run_root` recorded in `latest_audit.json` (documented in verification).
 - `python -m build --sdist` must emit the release sdist.
 - `cibuildwheel` must emit the expected platform wheels for Linux, macOS, and Windows.

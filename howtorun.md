@@ -340,6 +340,8 @@ Important:
 - it creates fresh run copies under `inputs_and_outputs/validation_runs/<timestamp>/`
 - in this workspace it can take around an hour
 - it is stricter than a simple `make verify` check because it records a fresh audit artifact first
+- broad STAMPS/golden parity claims require `latest_audit.json` to show `completed=true` and `ok=true`
+- an interrupted or failed audit is inconclusive and must not be cited as proof that every stage matches the golden baseline
 - the follow-up verify step must use the fresh `run_root` from `latest_audit.json`
 
 ## Troubleshooting

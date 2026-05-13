@@ -420,7 +420,7 @@ The oracle precedence is documented in:
 pystamps/data/oracle_contract.json
 ```
 
-In practical terms, pySTAMPS compares against trusted wrapper/MATLAB/manual reference outputs and records which oracle source was used. Use audit artifacts for parity claims, not notebook screenshots alone.
+In practical terms, pySTAMPS compares against trusted wrapper/MATLAB/manual reference outputs and records which oracle source was used. Use `make audit` before making broad parity claims, and cite the generated audit artifact only when it reports `completed=true` and `ok=true`. Interrupted or failed audits are inconclusive, not proof that every stage matches STAMPS/golden outputs.
 
 ## Benchmarking speed
 

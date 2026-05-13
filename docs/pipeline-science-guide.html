@@ -203,12 +203,12 @@ report = run_pipeline(context)</code></pre>
 
     <section class="card">
       <h2>Verify parity and benchmark speed</h2>
-      <p>Use verification or audit evidence for parity claims.</p>
+      <p>Use <span class="code-inline">make audit</span> before making broad parity claims. Broad STAMPS/golden parity requires <span class="code-inline">latest_audit.json</span> to report <span class="code-inline">completed=true</span> and <span class="code-inline">ok=true</span>; interrupted or failed audits are inconclusive.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify \
   --run /tmp/pystamps_run \
   --golden inputs_and_outputs/InSAR_dataset_test_stage8diag
 make audit</code></pre>
-      <p>Use repeatable benchmarks for speed claims.</p>
+      <p>Use repeatable benchmarks for speed claims. Benchmark evidence is separate from parity evidence.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">make benchmark
 uv run python scripts/benchmark_backends.py \
   --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag \

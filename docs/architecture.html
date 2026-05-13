@@ -151,7 +151,7 @@
       <p>Single-run verification compares one run tree to one golden tree. Full parity audit is handled by <span class="code-inline">make audit</span> and reads the maintained manifest.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run RUN_DIR --golden GOLDEN_DIR
 make audit</code></pre>
-      <p>The audit dataset list is owned by <span class="code-inline">pystamps/data/audited_workflow_manifest.json</span>. Oracle precedence is owned by <span class="code-inline">pystamps/data/oracle_contract.json</span>.</p>
+      <p>The audit dataset list is owned by <span class="code-inline">pystamps/data/audited_workflow_manifest.json</span>. Oracle precedence is owned by <span class="code-inline">pystamps/data/oracle_contract.json</span>. Broad parity claims require a completed successful <span class="code-inline">latest_audit.json</span> with <span class="code-inline">completed=true</span> and <span class="code-inline">ok=true</span>.</p>
     </section>
 
     <section class="card">
@@ -160,7 +160,7 @@ make audit</code></pre>
         <li>The package implements stages 1 through 8 in <span class="code-inline">pystamps.pipeline.ported</span>.</li>
         <li>The native extension provides compiled implementations for selected hot kernels, not every line of the pipeline.</li>
         <li>External tools such as <span class="code-inline">triangle</span> and <span class="code-inline">snaphu</span> are still required for relevant unwrapping workflows.</li>
-        <li>Parity should be claimed from <span class="code-inline">verify</span> or audit evidence, not from command completion alone.</li>
+        <li>Broad parity should be claimed from a completed successful audit artifact, not from command completion alone.</li>
         <li>Speed should be claimed from <span class="code-inline">make benchmark</span> or <span class="code-inline">scripts/benchmark_backends.py</span>, not from a skipped pipeline run.</li>
       </ul>
     </section>

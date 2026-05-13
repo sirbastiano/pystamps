@@ -162,7 +162,7 @@ uv run pystamps verify \
   --golden inputs_and_outputs/InSAR_dataset_test_stage8diag
 ```
 
-Use `make benchmark` to measure backend speed on the maintained benchmark dataset. Use `make audit` for the full repo parity audit; it reads the maintained dataset list from `pystamps/data/audited_workflow_manifest.json`.
+Use `make benchmark` to measure backend speed on the maintained benchmark dataset. Use `make audit` before making broad parity claims; the completed successful `latest_audit.json` is the repo-level parity evidence and reads the maintained dataset list from `pystamps/data/audited_workflow_manifest.json`.
 
 ### Verification workflow
 

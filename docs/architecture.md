@@ -126,12 +126,12 @@ Full parity audit is handled by:
 make audit
 ```
 
-The audit dataset list is owned by `pystamps/data/audited_workflow_manifest.json`. Oracle precedence is owned by `pystamps/data/oracle_contract.json`. These files are the compatibility contract for broad parity claims.
+The audit dataset list is owned by `pystamps/data/audited_workflow_manifest.json`. Oracle precedence is owned by `pystamps/data/oracle_contract.json`. These files are the compatibility contract for broad parity claims, but only a completed successful `latest_audit.json` (`completed=true` and `ok=true`) proves repo-level STAMPS/golden parity.
 
 ## Practical boundaries
 
 - The package implements stages 1 through 8 in `pystamps.pipeline.ported`.
 - The native extension provides compiled implementations for selected hot kernels, not every line of the pipeline.
 - External tools such as `triangle` and `snaphu` are still required for relevant unwrapping workflows.
-- Parity should be claimed from `verify` or audit evidence, not from command completion alone.
+- Broad parity should be claimed from a completed successful audit artifact, not from command completion alone.
 - Speed should be claimed from `make benchmark` or `scripts/benchmark_backends.py`, not from a skipped pipeline run.

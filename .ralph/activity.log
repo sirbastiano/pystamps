@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-13 10:51:16 | run=20260513-094222-768318 | iter=2 | mode=build | story=US-002 | duration=2587s | status=success
 - 2026-05-13 10:08:02 | run=20260513-094222-768318 | iter=1 | mode=build | story=US-001 | duration=1533s | status=success
 
 ## Events
@@ -24,3 +25,8 @@
 [2026-05-13 10:46:08] final make build passed for US-002
 [2026-05-13 10:48:12] pre-commit review complete for US-002
 [2026-05-13 10:50:21] updated progress log for US-002 outcome
+[2026-05-13 10:51:14] ITERATION 2 end (duration=2587s)
+[2026-05-13 10:51:20] ITERATION 3 start (mode=build story=US-003)
+[2026-05-13 10:55:03] Updated US-003 docs to require completed successful audit evidence for broad parity claims
+[2026-05-13 11:07:21] Verification passed for US-003: uv run pytest -q and make build
+[2026-05-13 11:08:36] Pre-commit review complete for US-003: docs-only change, no security/performance/regression blockers found
