@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-13 14:31:02 | run=20260513-094222-768318 | iter=4 | mode=build | story=US-004 | duration=12055s | status=success
 - 2026-05-13 11:10:02 | run=20260513-094222-768318 | iter=3 | mode=build | story=US-003 | duration=1121s | status=success
 - 2026-05-13 10:51:16 | run=20260513-094222-768318 | iter=2 | mode=build | story=US-002 | duration=2587s | status=success
 - 2026-05-13 10:08:02 | run=20260513-094222-768318 | iter=1 | mode=build | story=US-001 | duration=1533s | status=success
@@ -40,3 +41,9 @@
 [2026-05-13 14:21:52] Verification passed for US-004: SETUPTOOLS_SCM_SUBPROCESS_TIMEOUT=120 make build
 [2026-05-13 14:26:42] Pre-commit review complete for US-004: test-only scanner, no security/performance/regression blockers found
 [2026-05-13 14:29:10] Updated progress log for US-004 outcome
+[2026-05-13 14:31:00] ITERATION 4 end (duration=12055s)
+[2026-05-13 14:31:06] ITERATION 5 start (mode=build story=US-005)
+[2026-05-13 14:33:06] Start US-005 validation work
+[2026-05-13 14:36:10] Completed uv run pytest -q for US-005: PASS
+[2026-05-13 14:41:57] Completed make build for US-005: PASS
+[2026-05-13 14:43:34] Pre-commit review complete for US-005: validation-only changes; no security, performance, or regression blockers found
