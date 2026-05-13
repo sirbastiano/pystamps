@@ -141,3 +141,31 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `make build` can exceed setuptools-scm's default 40s git subprocess timeout in this workspace; retry with `SETUPTOOLS_SCM_SUBPROCESS_TIMEOUT=120`.
   - Useful context: `inputs_and_outputs/validation_runs/latest_audit.json` is ignored local state, so CI usually exercises the missing-artifact path.
 ---
+## [2026-05-13 14:44:54 UTC] - US-005: Validate full repo after audit-proof updates
+Thread:
+Run: 20260513-094222-768318 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e9d1102 chore(validation): record us-005 checks
+- Post-commit status: clean
+- Verification:
+  - Command: uv run pytest -q -> PASS
+  - Command: make build -> PASS
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - dist/pystamps-0.1.1.dev103+g94d016a85.d20260513-cp314-cp314-linux_x86_64.whl
+  - dist/pystamps-0.1.1.dev103+g94d016a85.d20260513.tar.gz
+  - pystamps/_version.py
+- What was implemented
+  - Ran the full repository pytest gate after the audit-proof documentation changes; all tests passed.
+  - Ran the defined build workflow; package build completed successfully and refreshed generated distribution/version artifacts.
+  - Completed security, performance, and regression review with no blockers because no runtime logic was changed.
+- **Learnings for future iterations:**
+  - Patterns discovered: `make test` maps to the required `uv run pytest -q` gate.
+  - Gotchas encountered: the prompt's absolute `ralph log` path is not executable; use `ralph log` from PATH.
+  - Useful context: `make build` may update `pystamps/_version.py` and add versioned files under `dist/`.
+---
