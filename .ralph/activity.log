@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-13 11:10:02 | run=20260513-094222-768318 | iter=3 | mode=build | story=US-003 | duration=1121s | status=success
 - 2026-05-13 10:51:16 | run=20260513-094222-768318 | iter=2 | mode=build | story=US-002 | duration=2587s | status=success
 - 2026-05-13 10:08:02 | run=20260513-094222-768318 | iter=1 | mode=build | story=US-001 | duration=1533s | status=success
 
@@ -31,3 +32,10 @@
 [2026-05-13 11:07:21] Verification passed for US-003: uv run pytest -q and make build
 [2026-05-13 11:08:36] Pre-commit review complete for US-003: docs-only change, no security/performance/regression blockers found
 [2026-05-13 11:09:29] Updated progress log for US-003 outcome
+[2026-05-13 11:10:00] ITERATION 3 end (duration=1121s)
+[2026-05-13 11:10:06] ITERATION 4 start (mode=build story=US-004)
+[2026-05-13 12:19:51] Added US-004 unsupported parity claim guard test
+[2026-05-13 13:00:21] Verification passed for US-004: uv run pytest -q
+[2026-05-13 13:32:02] Build attempt for US-004 failed: setuptools-scm git rev-list timeout during make build
+[2026-05-13 14:21:52] Verification passed for US-004: SETUPTOOLS_SCM_SUBPROCESS_TIMEOUT=120 make build
+[2026-05-13 14:26:42] Pre-commit review complete for US-004: test-only scanner, no security/performance/regression blockers found

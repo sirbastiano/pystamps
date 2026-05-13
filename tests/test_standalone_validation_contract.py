@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
+
+import pytest
+
+from pystamps.parity_contract import collect_audit_evidence
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -12,6 +18,60 @@ PARITY_DOC = (REPO_ROOT / "parity.md").read_text(encoding="utf-8")
 MANIFEST = (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
 MAKEFILE = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
 PYPROJECT = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+USER_FACING_DOC_GLOBS = (
+    "*.md",
+    "docs/*.md",
+    "docs/*.html",
+    "notebooks/*.ipynb",
+)
+UNSUPPORTED_FULL_PARITY_PATTERNS = (
+    re.compile(r"\bfull audit passed\b", re.IGNORECASE),
+    re.compile(r"\bfull parity (?:is )?(?:proven|passed|supported)\b", re.IGNORECASE),
+    re.compile(r"\bproject-level parity\b.*\bsupported\b", re.IGNORECASE),
+    re.compile(r"\ball stages match(?:es)? (?:STAMPS|StaMPS|the golden|golden)\b", re.IGNORECASE),
+    re.compile(r"\bevery stage matches (?:STAMPS|StaMPS|the golden|golden)\b", re.IGNORECASE),
+)
+
+
+def _extract_user_facing_blocks(path: Path) -> list[str]:
+    if path.suffix == ".ipynb":
+        notebook = json.loads(path.read_text(encoding="utf-8"))
+        blocks = []
+        for cell in notebook.get("cells", []):
+            source = "".join(cell.get("source", []))
+            outputs = []
+            for output in cell.get("outputs", []):
+                outputs.extend(output.get("text", []))
+            blocks.append(source + "\n" + "".join(outputs))
+        return blocks
+    text = path.read_text(encoding="utf-8")
+    return re.split(r"(?:\n\s*\n|</(?:p|li|section|div|pre|h[1-6])>)", text)
+
+
+def _user_facing_doc_blocks() -> dict[str, list[str]]:
+    paths = sorted({path for pattern in USER_FACING_DOC_GLOBS for path in REPO_ROOT.glob(pattern)})
+    return {str(path.relative_to(REPO_ROOT)): _extract_user_facing_blocks(path) for path in paths}
+
+
+def _claim_is_tied_to_completed_audit(block: str) -> bool:
+    normalized = re.sub(r"\s+", " ", block).lower()
+    if "completed=true" in normalized and "ok=true" in normalized:
+        return True
+    if '"completed"] is true' in normalized and '"ok"] is true' in normalized:
+        return True
+    return "audit_ok" in normalized and ("if audit_ok" in normalized or "supported: {audit_ok}" in normalized)
+
+
+def _unsupported_parity_claims(blocks_by_path: dict[str, list[str]]) -> list[str]:
+    findings = []
+    for path, blocks in blocks_by_path.items():
+        for index, block in enumerate(blocks, start=1):
+            if _claim_is_tied_to_completed_audit(block):
+                continue
+            for pattern in UNSUPPORTED_FULL_PARITY_PATTERNS:
+                if pattern.search(block):
+                    findings.append(f"{path} block {index}: {pattern.pattern}")
+    return findings
 
 
 def test_readme_documents_fresh_clone_validation_separately() -> None:
@@ -114,6 +174,32 @@ def test_verification_and_parity_docs_define_the_final_oracle_backed_contract() 
     assert "Status: blocked by environment prerequisites." not in PARITY_DOC
     assert "triangle:missing" not in PARITY_DOC
     assert "snaphu:missing" not in PARITY_DOC
+
+
+def test_user_facing_docs_do_not_claim_full_parity_without_completed_audit() -> None:
+    audit_evidence = collect_audit_evidence(REPO_ROOT)
+    if audit_evidence["completed"] is True and audit_evidence["ok"] is True:
+        pytest.skip("local audit artifact already supports broad parity claims")
+
+    assert _unsupported_parity_claims(_user_facing_doc_blocks()) == []
+
+
+def test_unsupported_full_parity_claim_examples_are_detected() -> None:
+    assert _unsupported_parity_claims({"example.md": ["all stages match STAMPS."]}) == [
+        r"example.md block 1: \ball stages match(?:es)? (?:STAMPS|StaMPS|the golden|golden)\b"
+    ]
+
+
+def test_guard_allows_conservative_or_evidence_tied_parity_wording() -> None:
+    blocks = {
+        "safe.md": [
+            "parity is inconclusive",
+            "use make audit before making broad parity claims",
+            "full audit passed only when latest_audit.json reports completed=true and ok=true",
+        ]
+    }
+
+    assert _unsupported_parity_claims(blocks) == []
 
 
 def test_manifest_excludes_generated_release_artifacts() -> None:
