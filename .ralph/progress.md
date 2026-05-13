@@ -5,6 +5,42 @@ Started: Wed May 13 09:42:22 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-05-13 11:09:00 UTC] - US-003: Align docs with audit evidence
+Thread: 
+Run: 20260513-094222-768318 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 39aabe6 docs(audit): align parity evidence docs
+- Post-commit status: clean
+- Verification:
+  - Command: TMPDIR="$PWD/.tmp" uv run pytest -q -> PASS
+  - Command: make build -> PASS
+  - Command: git diff --check -> PASS
+  - Command: rg -n -i "all stages .*match|every stage .*match|full audit passed|audit passed|benchmark.*parity|parity.*benchmark" README.md howtorun.md docs -g '*.md' -g '*.html' -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - README.md
+  - howtorun.md
+  - docs/architecture.html
+  - docs/architecture.md
+  - docs/getting-started.html
+  - docs/getting_started.md
+  - docs/pipeline-science-guide.html
+  - docs/pipeline_science_guide.md
+  - docs/release.md
+  - docs/verification.html
+- What was implemented
+  - Reviewed README, `howtorun.md`, and docs pages for broad parity, benchmark, speed, STAMPS, and golden wording.
+  - Updated docs to require `make audit` plus a completed successful `latest_audit.json` (`completed=true`, `ok=true`) before broad STAMPS/golden parity claims.
+  - Kept benchmark and speed evidence separate from parity evidence.
+- **Learnings for future iterations:**
+  - Patterns discovered: broad parity evidence is documented around `make audit`, `latest_audit.json`, and `pystamps/data/audited_workflow_manifest.json`.
+  - Gotchas encountered: `make build` rewrites generated `_version.py` and creates `dist/` artifacts; these validation side effects were cleaned before commit.
+  - Useful context: use `ralph log` from PATH; the absolute `ralph log` path in the prompt is not an executable file.
+---
 ## [2026-05-13 10:49:37 UTC] - US-002: Show inconclusive audit in notebook
 Thread: 
 Run: 20260513-094222-768318 (iteration 2)
