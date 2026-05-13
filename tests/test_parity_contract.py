@@ -4,7 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pystamps.parity_contract as parity_contract
-from pystamps.parity_contract import build_parity_contract
+from pystamps.parity_contract import build_parity_contract, collect_audit_evidence
 
 
 def test_build_parity_contract_without_datasets(tmp_path: Path) -> None:
@@ -85,6 +85,49 @@ def test_packaged_parity_manifests_are_valid_json() -> None:
     ]
     assert all(target["required_for_done"] for target in workflow_manifest["workflow_targets"])
     assert all(target["status"] == "present" for target in workflow_manifest["workflow_targets"])
+
+
+def test_collect_audit_evidence_summarizes_interrupted_artifact(tmp_path: Path) -> None:
+    audit_path = tmp_path / "inputs_and_outputs" / "validation_runs" / "latest_audit.json"
+    audit_path.parent.mkdir(parents=True)
+    audit_path.write_text(
+        json.dumps(
+            {
+                "completed": False,
+                "ok": False,
+                "interrupted": True,
+                "failed_workflows": ["full_validation"],
+                "missing_datasets": [],
+                "audits": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    evidence = collect_audit_evidence(tmp_path)
+
+    assert evidence == {
+        "command": "make audit",
+        "artifact_path": "inputs_and_outputs/validation_runs/latest_audit.json",
+        "artifact_exists": True,
+        "completed": False,
+        "ok": False,
+        "interrupted": True,
+        "failed_workflows": ["full_validation"],
+        "missing_datasets": [],
+        "audit_count": 0,
+        "verdict": "full audit did not pass here",
+    }
+
+
+def test_collect_audit_evidence_missing_artifact_does_not_claim_parity(tmp_path: Path) -> None:
+    evidence = collect_audit_evidence(tmp_path)
+
+    assert evidence["command"] == "make audit"
+    assert evidence["artifact_path"] == "inputs_and_outputs/validation_runs/latest_audit.json"
+    assert evidence["artifact_exists"] is False
+    assert evidence["verdict"] == "audit artifact is missing; full parity is not proven"
+    assert "passed" not in evidence["verdict"]
 
 
 def test_capture_code_state_ignores_generated_validation_outputs(monkeypatch, tmp_path: Path) -> None:

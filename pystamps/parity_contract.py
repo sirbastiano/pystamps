@@ -29,6 +29,7 @@ DEFAULT_REQUIRED_DATASETS: tuple[str, ...] = tuple(
 
 SUPPORTED_AUDIT_ENTRYPOINT = "scripts/validate_audit.py"
 SUPPORTED_AUDIT_OUTPUT = "inputs_and_outputs/validation_runs/latest_audit.json"
+CANONICAL_AUDIT_COMMAND = "make audit"
 SUPPORTED_AUDIT_RESULT_FIELDS: tuple[str, ...] = (
     "generated_at_utc",
     "code_state",
@@ -40,6 +41,53 @@ SUPPORTED_AUDIT_RESULT_FIELDS: tuple[str, ...] = (
     "interrupted",
     "ok",
 )
+
+
+def collect_audit_evidence(
+    repo_root: str | Path,
+    artifact_path: str | Path = SUPPORTED_AUDIT_OUTPUT,
+) -> dict[str, Any]:
+    root = Path(repo_root).expanduser().resolve()
+    artifact = Path(artifact_path)
+    audit_path = artifact if artifact.is_absolute() else root / artifact
+    artifact_label = str(artifact).replace("\\", "/")
+    evidence: dict[str, Any] = {
+        "command": CANONICAL_AUDIT_COMMAND,
+        "artifact_path": artifact_label,
+        "artifact_exists": audit_path.exists(),
+        "completed": None,
+        "ok": None,
+        "interrupted": None,
+        "failed_workflows": [],
+        "missing_datasets": [],
+        "audit_count": 0,
+        "verdict": "audit artifact is missing; full parity is not proven",
+    }
+    if not audit_path.exists():
+        return evidence
+
+    payload = json.loads(audit_path.read_text(encoding="utf-8"))
+    failed_workflows = payload.get("failed_workflows") or []
+    missing_datasets = payload.get("missing_datasets") or []
+    audits = payload.get("audits") or []
+    completed = payload.get("completed")
+    ok = payload.get("ok")
+    interrupted = payload.get("interrupted")
+
+    full_audit_passed = bool(completed is True and ok is True and interrupted is not True and not failed_workflows)
+    evidence.update(
+        {
+            "completed": completed,
+            "ok": ok,
+            "interrupted": interrupted,
+            "failed_workflows": failed_workflows,
+            "missing_datasets": missing_datasets,
+            "audit_count": len(audits) if isinstance(audits, list) else 0,
+            "verdict": "full audit passed here" if full_audit_passed else "full audit did not pass here",
+        }
+    )
+    return evidence
+
 
 STAGE1_VERIFY_PATTERNS: tuple[str, ...] = (
     "PATCH_*/ps1.mat",
