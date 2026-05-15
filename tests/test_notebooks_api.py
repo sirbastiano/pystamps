@@ -8,11 +8,14 @@ import numpy as np
 from pystamps.input_contracts import describe_stage1_snap2stamps_flow
 from pystamps.io.mat import write_mat
 from pystamps.notebooks import (
+    build_stage_notebook_context,
     compare_fields,
     compute_field_statistics,
     inspect_stage1_inputs,
     load_velocity_diagnostics,
     match_diagnostic_points,
+    native_stage_notebook_config,
+    oracle_stamps_replay_config,
     plot_mode_from_step8,
 )
 from pystamps.notebooks import diagnostics as diagnostics_module
@@ -144,6 +147,35 @@ def test_non_stage2_execution_env_limits_threads() -> None:
     assert env['OMP_NUM_THREADS'] == '1'
     assert env['OPENBLAS_NUM_THREADS'] == '1'
     assert env['MKL_NUM_THREADS'] == '1'
+
+
+def test_notebook_config_factories_return_run_configs() -> None:
+    run_config = native_stage_notebook_config(stage2_native_threads=4)
+    replay_config = oracle_stamps_replay_config('/tmp/oracle')
+
+    assert run_config.runtime.stage2_kernel_backend == 'native'
+    assert run_config.runtime.stage2_native_threads == 4
+    assert replay_config.compat.strict_reference is True
+    assert replay_config.compat.reference_root == '/tmp/oracle'
+
+
+def test_build_stage_context_accepts_function_configs() -> None:
+    run_config = native_stage_notebook_config(stage2_native_threads=2)
+    replay_config = oracle_stamps_replay_config('/tmp/oracle')
+
+    context = build_stage_notebook_context(
+        stamps_root='inputs_and_outputs/InSAR_dataset_test_stage8diag_hl',
+        scratch_root='/tmp/pystamps-test-scratch',
+        run_config=run_config,
+        replay_run_config=replay_config,
+        replay_stages=(6, 7, 8),
+    )
+
+    assert context.config is run_config
+    assert context.replay_config is replay_config
+    assert context.config_path is None
+    assert context.replay_config_path is None
+    assert context.replay_stages == frozenset({6, 7, 8})
 
 
 def test_describe_stage1_snap2stamps_flow_mentions_export_step() -> None:

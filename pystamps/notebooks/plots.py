@@ -49,6 +49,7 @@ def stride_indices(length: int, limit: int) -> np.ndarray:
 
 def sample_vector(values, limit: int = MAX_VECTOR_POINTS) -> np.ndarray:
     array = np.asarray(values, dtype=float).reshape(-1)
+    array = array[np.isfinite(array)]
     if array.size == 0:
         return array
     return array[stride_indices(array.size, limit)]

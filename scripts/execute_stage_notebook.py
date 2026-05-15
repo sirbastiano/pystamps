@@ -16,11 +16,7 @@ def _repo_root() -> Path:
 
 
 def _default_notebook() -> Path:
-    return _repo_root() / "notebooks" / "02_pystamps_stage_execution.ipynb"
-
-
-def _default_config() -> Path:
-    return _repo_root() / "notebooks" / "02_pystamps_stage_execution.validation.yaml"
+    return _repo_root() / "notebooks" / "03_stage_by_stage_oracle.ipynb"
 
 
 def _mask_scratch_paths(text: str, scratch_parent: Path) -> str:
@@ -104,7 +100,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--notebook", default=str(_default_notebook()))
     parser.add_argument("--output", required=True)
     parser.add_argument("--cwd", default=str(_repo_root()))
-    parser.add_argument("--config", default=str(_default_config()))
+    parser.add_argument("--config")
     parser.add_argument("--existing-scratch")
     parser.add_argument("--replay-config")
     parser.add_argument("--replay-stages", default="2,3,4,5,6,7,8")

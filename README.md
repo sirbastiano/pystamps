@@ -12,8 +12,7 @@ Run pipeline stages, inspect dataset state, and verify outputs against reference
   <a href="https://sirbastiano.github.io/pystamps/"><img src="https://img.shields.io/badge/-Documentation-0f172a?style=for-the-badge&logo=readme&logoColor=white&labelColor=0f172a" alt="Documentation" style="height: 34px;" /></a>
   <a href="https://sirbastiano.github.io/pystamps/quickstart.html"><img src="https://img.shields.io/badge/-Quick%20Start-0f172a?style=for-the-badge&logo=firefoxbrowser&logoColor=white&labelColor=0f172a" alt="Quick Start" style="height: 34px;" /></a>
   <a href="https://sirbastiano.github.io/pystamps/api/pystamps.html"><img src="https://img.shields.io/badge/-API%20Reference-0f172a?style=for-the-badge&logo=python&logoColor=white&labelColor=0f172a" alt="API Reference" style="height: 34px;" /></a>
-  <a href="notebooks/01_start_here_pipeline.ipynb"><img src="https://img.shields.io/badge/-Pipeline%20Notebook-0f172a?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=0f172a" alt="Pipeline Notebook" style="height: 34px;" /></a>
-  <a href="notebooks/02_backends_parity_speed.ipynb"><img src="https://img.shields.io/badge/-Backends%20Notebook-0f172a?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=0f172a" alt="Backends Notebook" style="height: 34px;" /></a>
+  <a href="notebooks/03_stage_by_stage_oracle.ipynb"><img src="https://img.shields.io/badge/-Stage%20Notebook-0f172a?style=for-the-badge&logo=jupyter&logoColor=white&labelColor=0f172a" alt="Stage Notebook" style="height: 34px;" /></a>
 </p>
 
 </div>
@@ -183,10 +182,9 @@ The internal parity-audit regeneration path for `RUN_FULL_GATE_1e10` also mirror
 - [API Reference](https://sirbastiano.github.io/pystamps/api/pystamps.html)
 - [Release workflow](https://sirbastiano.github.io/pystamps/release.md)
 
-## Notebooks
+## Notebook
 
-- `notebooks/01_start_here_pipeline.ipynb`
-- `notebooks/02_backends_parity_speed.ipynb`
+- `notebooks/03_stage_by_stage_oracle.ipynb`
 - `howtorun.md`
 
 ## Governance

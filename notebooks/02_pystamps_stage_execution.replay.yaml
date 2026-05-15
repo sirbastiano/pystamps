@@ -1,3 +1,0 @@
-compat:
-  strict_reference: true
-  reference_root: inputs_and_outputs/InSAR_dataset_test_stage8diag_hl

@@ -1,20 +1,18 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-import json
 import os
 from pathlib import Path
 import shutil
-import subprocess
-import sys
 import time
 from uuid import uuid4
 
 import numpy as np
 
-from pystamps.config import RunConfig, load_config
+from pystamps.config import CompatibilityConfig, ExternalToolsConfig, RunConfig, RuntimeConfig, load_config
 from pystamps.io.dataset import discover_dataset
 from pystamps.io.mat import read_mat
 from pystamps.parity_contract import (
@@ -25,6 +23,8 @@ from pystamps.parity_contract import (
     STAGE4_VERIFY_PATTERNS,
     STAGE6_VERIFY_PATTERNS,
 )
+from pystamps.pipeline.stages import run_pipeline
+from pystamps.pipeline.types import PipelineContext, StageResult
 from pystamps.verify import classify_failures, verify_run_against_golden
 
 
@@ -80,6 +80,7 @@ class StageNotebookContext:
     replay_config_path: Path | None
     replay_stages: frozenset[int]
     config: RunConfig
+    replay_config: RunConfig | None = None
     reused_scratch: bool = False
 
     @property
@@ -110,6 +111,37 @@ def _parse_stage_list(raw: str | None, *, default: tuple[int, ...]) -> frozenset
     return frozenset(int(part.strip()) for part in raw.split(",") if part.strip())
 
 
+def native_stage_notebook_config(
+    *,
+    stage2_native_threads: int = 8,
+    io_workers: int = 8,
+    cpu_workers: int = 0,
+    triangle_path: str | Path | None = None,
+    snaphu_path: str | Path | None = None,
+) -> RunConfig:
+    return RunConfig(
+        runtime=RuntimeConfig(
+            io_workers=io_workers,
+            cpu_workers=cpu_workers,
+            stage2_kernel_backend="native",
+            stage2_native_threads=stage2_native_threads,
+        ),
+        tools=ExternalToolsConfig(
+            triangle=str(Path(triangle_path).expanduser().resolve()) if triangle_path is not None else "triangle",
+            snaphu=str(Path(snaphu_path).expanduser().resolve()) if snaphu_path is not None else "snaphu",
+        ),
+    )
+
+
+def oracle_stamps_replay_config(reference_root: str | Path) -> RunConfig:
+    return RunConfig(
+        compat=CompatibilityConfig(
+            strict_reference=True,
+            reference_root=str(Path(reference_root).expanduser().resolve()),
+        )
+    )
+
+
 def build_stage_notebook_context(
     *,
     stamps_root: str | Path | None = None,
@@ -120,9 +152,15 @@ def build_stage_notebook_context(
     config_path: str | Path | None = None,
     replay_config_path: str | Path | None = None,
     replay_stages: tuple[int, ...] | frozenset[int] = (3, 4, 5, 6, 7, 8),
+    run_config: RunConfig | None = None,
+    replay_run_config: RunConfig | None = None,
     run_tag: str | None = None,
 ) -> StageNotebookContext:
     repo_root = find_repo_root()
+    if run_config is not None and config_path is not None:
+        raise ValueError("Pass run_config or config_path, not both")
+    if replay_run_config is not None and replay_config_path is not None:
+        raise ValueError("Pass replay_run_config or replay_config_path, not both")
     if stamps_root is not None and reference_root is not None:
         stamps_path = Path(stamps_root).expanduser().resolve()
         reference_path = Path(reference_root).expanduser().resolve()
@@ -148,7 +186,10 @@ def build_stage_notebook_context(
 
     config_path_resolved = Path(config_path).expanduser().resolve() if config_path is not None else None
     replay_config_path_resolved = Path(replay_config_path).expanduser().resolve() if replay_config_path is not None else None
-    config = load_config(config_path_resolved)
+    config = run_config or load_config(config_path_resolved)
+    replay_config = replay_run_config or (
+        load_config(replay_config_path_resolved) if replay_config_path_resolved is not None else None
+    )
     return StageNotebookContext(
         repo_root=repo_root,
         stamps_root=stamps_root,
@@ -159,6 +200,7 @@ def build_stage_notebook_context(
         replay_config_path=replay_config_path_resolved,
         replay_stages=frozenset(replay_stages),
         config=config,
+        replay_config=replay_config,
     )
 
 
@@ -330,62 +372,83 @@ def _execution_env(context: StageNotebookContext, stage_id: int) -> dict[str, st
     return env
 
 
+_THREAD_ENV_KEYS = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+    "GOTO_NUM_THREADS",
+)
+
+
+@contextmanager
+def _temporary_environ(overrides: dict[str, str]):
+    previous = {key: os.environ.get(key) for key in overrides}
+    try:
+        os.environ.update(overrides)
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
+def _stage_env_overrides(context: StageNotebookContext, stage_id: int) -> dict[str, str]:
+    env = _execution_env(context, stage_id)
+    return {
+        key: env[key]
+        for key in _THREAD_ENV_KEYS
+        if key in env and os.environ.get(key) != env[key]
+    }
+
+
+def _stage_result_payload(result: StageResult) -> dict:
+    return {
+        "stage_id": result.stage_id,
+        "scope": result.scope,
+        "target": result.target,
+        "status": result.status,
+        "details": result.details,
+        "duration_sec": result.duration_sec,
+    }
+
+
 def run_stage(context: StageNotebookContext, stage_id: int) -> dict:
-    active_config_path = context.config_path
-    active_config_args = context.run_config_args
-    if stage_id in context.replay_stages and context.replay_config_path is not None:
-        active_config_path = context.replay_config_path
-        active_config_args = ["--config", str(context.replay_config_path)]
-        execution_mode = "STAMPS replay"
+    active_config = context.config
+    if stage_id in context.replay_stages and context.replay_config is not None:
+        active_config = context.replay_config
+        execution_mode = "STAMPS oracle replay"
     elif context.reused_scratch:
         execution_mode = "latest pySTAMPS outputs (reused scratch artifacts)"
     else:
         execution_mode = "latest pySTAMPS outputs"
 
-    display_parts = ["uv run pystamps"]
-    if active_config_path is not None:
-        display_parts.append(f"--config {active_config_path}")
-    display_parts.append("run")
-    display_parts.extend(
-        [
-            f"--dataset {context.scratch_root}",
-            f"--start-step {stage_id}",
-            f"--end-step {stage_id}",
-        ]
+    display_call = (
+        "run_pipeline(PipelineContext("
+        f"dataset_root={context.scratch_root!s}, "
+        f"start_step={stage_id}, end_step={stage_id}, run_config=<RunConfig>))"
     )
-    display_command = " ".join(display_parts)
-    exec_command = [
-        sys.executable,
-        "-m",
-        "pystamps.cli",
-        *active_config_args,
-        "run",
-        "--dataset",
-        str(context.scratch_root),
-        "--start-step",
-        str(stage_id),
-        "--end-step",
-        str(stage_id),
-    ]
-    exec_env = _execution_env(context, stage_id)
+    pipeline_context = PipelineContext(
+        dataset_root=context.scratch_root,
+        run_config=active_config,
+        start_step=stage_id,
+        end_step=stage_id,
+        dry_run=False,
+    )
     started = time.perf_counter()
-    completed = subprocess.run(
-        exec_command,
-        cwd=context.repo_root,
-        capture_output=True,
-        text=True,
-        env=exec_env,
-    )
+    with _temporary_environ(_stage_env_overrides(context, stage_id)):
+        report = run_pipeline(pipeline_context)
     elapsed_sec = time.perf_counter() - started
-    payload = json.loads(completed.stdout) if completed.stdout.strip() else []
-    if completed.returncode not in {0, 1}:
-        raise RuntimeError(completed.stderr or f"stage {stage_id} returned {completed.returncode}")
+    payload = [_stage_result_payload(result) for result in report.results]
     return {
         "stage_id": stage_id,
-        "command": display_command,
-        "returncode": completed.returncode,
+        "command": display_call,
+        "returncode": 1 if report.failures else 0,
         "payload": payload,
-        "stderr": completed.stderr.strip(),
+        "stderr": "",
         "elapsed_sec": elapsed_sec,
         "execution_mode": execution_mode,
     }
@@ -415,7 +478,7 @@ def verify_stage(context: StageNotebookContext, stage_id: int) -> dict:
 def show_stage_report(stage_id: int, run_result: dict, verify_result: dict) -> None:
     _display_markdown("**Execution mode**  \n" + run_result.get("execution_mode", "latest pySTAMPS outputs"))
     _display_markdown(f"**Legacy context**  \n{LEGACY_CONTEXT[stage_id]}")
-    _display_markdown("**pySTAMPS command**\n```bash\n" + run_result["command"] + "\n```")
+    _display_markdown("**Python stage call**\n```python\n" + run_result["command"] + "\n```")
 
     run_rows: list[list[str]] = []
     for item in run_result["payload"]:
@@ -497,3 +560,129 @@ def execute_stage(context: StageNotebookContext, stage_id: int) -> dict:
                 )
     show_stage_report(stage_id, run_result, verify_result)
     return {"run": run_result, "verify": verify_result}
+
+
+def _stage_payload_pair(context: StageNotebookContext, relpath: str | Path):
+    rel = Path(relpath)
+    return (
+        load_payload(str(context.scratch_root / rel)),
+        load_payload(str(context.stamps_root / rel)),
+    )
+
+
+def _plot_selection(ax_run, ax_stamps, context: StageNotebookContext, stage_id: int) -> None:
+    from .plots import normalize_points, sample_points
+
+    patch = context.representative_patch
+    ps_run, ps_stamps = _stage_payload_pair(context, Path(patch) / "ps1.mat")
+    select_run, select_stamps = _stage_payload_pair(context, Path(patch) / "select1.mat")
+    if stage_id == 3:
+        kept_run = set(stage3_indices(select_run)[1].tolist())
+        kept_stamps = set(stage3_indices(select_stamps)[1].tolist())
+    else:
+        weed_run, weed_stamps = _stage_payload_pair(context, Path(patch) / "weed1.mat")
+        kept_run = set(stage4_indices(select_run, weed_run)[1].tolist())
+        kept_stamps = set(stage4_indices(select_stamps, weed_stamps)[1].tolist())
+
+    for ax, ps, kept, label in (
+        (ax_run, ps_run, kept_run, "pySTAMPS"),
+        (ax_stamps, ps_stamps, kept_stamps, "STAMPS"),
+    ):
+        points = normalize_points(ps["lonlat"])
+        if points.ndim != 2 or points.shape[0] == 0:
+            ax.text(0.5, 0.5, f"No {label} points", ha="center", va="center", transform=ax.transAxes)
+            continue
+        values = np.zeros(points.shape[0], dtype=float)
+        keep_ix = np.fromiter((ix for ix in kept if 0 <= ix < points.shape[0]), dtype=int)
+        if keep_ix.size:
+            values[keep_ix] = 1.0
+        pts, vals = sample_points(points, values)
+        scatter = ax.scatter(pts[:, 1], pts[:, 0], c=vals, s=3, cmap="viridis", vmin=0.0, vmax=1.0)
+        ax.figure.colorbar(scatter, ax=ax, fraction=0.046, pad=0.04)
+        ax.set_title(f"{label} stage {stage_id} kept mask")
+        ax.set_xlabel("lon")
+        ax.set_ylabel("lat")
+
+
+def plot_stage_comparison(context: StageNotebookContext, stage_id: int):
+    import matplotlib.pyplot as plt
+
+    from .plots import footprint_compare, heatmap_compare, hist_compare, scatter_compare
+
+    if stage_id == 1:
+        run, stamps = _stage_payload_pair(context, Path(context.representative_patch) / "ps1.mat")
+        ph_run, ph_stamps = _stage_payload_pair(context, Path(context.representative_patch) / "ph1.mat")
+        fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+        axes = axes.reshape(-1)
+        footprint_compare(axes[0], axes[1], run["lonlat"], stamps["lonlat"], "stage 1 footprint")
+        heatmap_compare(axes[2], axes[3], np.abs(ph_run["ph"]), np.abs(ph_stamps["ph"]), "stage 1 phase magnitude")
+    elif stage_id == 2:
+        run, stamps = _stage_payload_pair(context, Path(context.representative_patch) / "pm1.mat")
+        fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+        axes = axes.reshape(-1)
+        hist_compare(axes[0], run["coh_ps"], stamps["coh_ps"], "Stage 2 coherence")
+        hist_compare(axes[1], run["K_ps"], stamps["K_ps"], "Stage 2 topographic phase K")
+        hist_compare(axes[2], run["C_ps"], stamps["C_ps"], "Stage 2 static phase C")
+        heatmap_compare(axes[3], axes[4], run["ph_res"], stamps["ph_res"], "stage 2 residual phase")
+        axes[5].axis("off")
+    elif stage_id in {3, 4}:
+        fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+        axes = axes.reshape(-1)
+        _plot_selection(axes[0], axes[1], context, stage_id)
+        if stage_id == 3:
+            run, stamps = _stage_payload_pair(context, Path(context.representative_patch) / "select1.mat")
+            hist_compare(axes[2], run["coh_ps2"], stamps["coh_ps2"], "Stage 3 selected coherence")
+            hist_compare(axes[3], run["coh_thresh"], stamps["coh_thresh"], "Stage 3 coherence threshold")
+        else:
+            run, stamps = _stage_payload_pair(context, Path(context.representative_patch) / "weed1.mat")
+            hist_compare(axes[2], run["ps_std"], stamps["ps_std"], "Stage 4 phase std")
+            hist_compare(axes[3], run["ps_max"], stamps["ps_max"], "Stage 4 max noise")
+    elif stage_id == 5:
+        ps_run, ps_stamps = _stage_payload_pair(context, "ps2.mat")
+        ifg_run, ifg_stamps = _stage_payload_pair(context, "ifgstd2.mat")
+        ph_run, ph_stamps = _stage_payload_pair(context, "ph2.mat")
+        fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+        axes = axes.reshape(-1)
+        footprint_compare(axes[0], axes[1], ps_run["lonlat"], ps_stamps["lonlat"], "stage 5 merged footprint")
+        hist_compare(axes[2], ifg_run["ifg_std"], ifg_stamps["ifg_std"], "Stage 5 IFG std")
+        heatmap_compare(axes[3], axes[4], np.angle(ph_run["ph"]), np.angle(ph_stamps["ph"]), "stage 5 merged phase angle")
+        axes[5].axis("off")
+    elif stage_id == 6:
+        run, stamps = _stage_payload_pair(context, "phuw2.mat")
+        fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+        heatmap_compare(axes[0], axes[1], run["ph_uw"], stamps["ph_uw"], "stage 6 unwrapped phase")
+        hist_compare(axes[2], run["msd"], stamps["msd"], "Stage 6 MSD")
+    elif stage_id == 7:
+        run, stamps = _stage_payload_pair(context, "scla2.mat")
+        fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+        axes = axes.reshape(-1)
+        hist_compare(axes[0], run["C_ps_uw"], stamps["C_ps_uw"], "Stage 7 SCLA coefficient")
+        hist_compare(axes[1], run["K_ps_uw"], stamps["K_ps_uw"], "Stage 7 topographic residual K")
+        heatmap_compare(axes[2], axes[3], run["ph_scla"], stamps["ph_scla"], "stage 7 SCLA phase")
+    elif stage_id == 8:
+        ps_run, ps_stamps = _stage_payload_pair(context, "ps2.mat")
+        mean_run, mean_stamps = _stage_payload_pair(context, "mean_v.mat")
+        space_run, space_stamps = _stage_payload_pair(context, "uw_space_time.mat")
+        run_velocity = np.asarray(mean_run["m"])[1]
+        stamps_velocity = np.asarray(mean_stamps["m"])[1]
+        fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+        axes = axes.reshape(-1)
+        scatter_compare(
+            axes[0],
+            axes[1],
+            ps_run["lonlat"],
+            run_velocity,
+            ps_stamps["lonlat"],
+            stamps_velocity,
+            "stage 8 mean velocity",
+            cmap="coolwarm",
+        )
+        hist_compare(axes[2], run_velocity, stamps_velocity, "Stage 8 velocity distribution")
+        heatmap_compare(axes[3], axes[4], space_run["dph_noise"], space_stamps["dph_noise"], "stage 8 noise phase")
+        axes[5].axis("off")
+    else:
+        raise ValueError(f"Unsupported stage id: {stage_id}")
+
+    fig.suptitle(f"Stage {stage_id}: pySTAMPS vs original STAMPS oracle")
+    fig.tight_layout()
+    return fig

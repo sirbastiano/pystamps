@@ -186,7 +186,7 @@ You do not need to master the mathematics of each stage to operate the pipeline 
 ## Recommended learning path
 
 1. Read [howtorun.md](../howtorun.md)
-2. Open `notebooks/01_start_here_pipeline.ipynb`
+2. Open `notebooks/03_stage_by_stage_oracle.ipynb`
 3. Use `status` on `inputs_and_outputs/InSAR_dataset_test`
 4. Try a `--dry-run`
 5. Run a small stage range on a copy of a dataset
