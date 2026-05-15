@@ -169,3 +169,44 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the prompt's absolute `ralph log` path is not executable; use `ralph log` from PATH.
   - Useful context: `make build` may update `pystamps/_version.py` and add versioned files under `dist/`.
 ---
+## [2026-05-15 19:56:44 UTC] - US-001: Add exact notebook parity gate
+Thread: 
+Run: 20260515-151412-1547726 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 334a14b feat(notebook): add parity output gate
+- Post-commit status: clean
+- Verification:
+  - Command: uv run pytest -q tests/test_assert_notebook_parity.py -> PASS
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (expected current negative path; reports Stage 4 failing)
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS (kernel termination warning after save)
+  - Command: make audit -> FAIL (audit run could not resolve snaphu for Stage 6-8 regeneration)
+  - Command: uv run python - <<'PY' ... audit latest_audit.json assertions ... PY -> FAIL (latest_audit.json completed=false, ok=false, interrupted=true)
+  - Command: git diff --check -> PASS
+  - Command: uv run ruff check scripts/assert_notebook_parity.py tests/test_assert_notebook_parity.py -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - notebooks/03_stage_by_stage_oracle.ipynb
+  - pystamps/notebooks/stage_execution.py
+  - pystamps/pipeline/ported.py
+  - pystamps/pipeline/stages.py
+  - scripts/assert_notebook_parity.py
+  - tests/test_assert_notebook_parity.py
+  - tests/test_notebooks_api.py
+  - tests/test_stage4_ported.py
+- What was implemented
+  - Added `scripts/assert_notebook_parity.py` to read executed notebook outputs, require `resuming existing fresh scratch: no`, reject `skipped_existing`, require completed execution summaries, and fail on non-matching stage summaries.
+  - Added synthetic notebook tests for the clean success path, Stage 4 failure reporting, missing fresh-scratch setup marker, and stale skipped-stage detection.
+  - Re-executed the stage-by-stage notebook from fresh scratch; the new helper reports the current parity failures, including Stage 4.
+  - Included pre-existing Stage 4/tooling carryover changes already present in the worktree when staging everything per run instructions.
+- **Learnings for future iterations:**
+  - Patterns discovered: notebook stage cells expose execution summaries as `text/markdown`, while the final stage parity table is stream text.
+  - Gotchas encountered: `uv run` repeatedly warns about a stale editable install `RECORD`, but tests and scripts still ran; `make audit` currently fails because the audit config does not resolve `snaphu`.
+  - Useful context: the parity helper is expected to fail until upstream stage parity work is complete; success output is `OK: stages 1 through 8 all matched`.
+---
