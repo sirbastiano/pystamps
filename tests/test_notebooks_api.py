@@ -8,6 +8,7 @@ import numpy as np
 from pystamps.input_contracts import describe_stage1_snap2stamps_flow
 from pystamps.io.mat import write_mat
 from pystamps.notebooks import (
+    build_scratch_tree,
     build_stage_notebook_context,
     compare_fields,
     compute_field_statistics,
@@ -176,6 +177,34 @@ def test_build_stage_context_accepts_function_configs() -> None:
     assert context.config_path is None
     assert context.replay_config_path is None
     assert context.replay_stages == frozenset({6, 7, 8})
+
+
+def test_build_scratch_tree_drops_stage4_triangle_intermediates(tmp_path: Path) -> None:
+    dataset = tmp_path / "dataset"
+    scratch = tmp_path / "scratch"
+    for patch_name in ("PATCH_1", "PATCH_2"):
+        patch = dataset / patch_name
+        patch.mkdir(parents=True)
+        (patch / "pscands.1.ij").write_text("1 1 1\n", encoding="utf-8")
+        (patch / "psweed.1.node").write_text("1 2 0 0\n1 0 0\n", encoding="utf-8")
+        (patch / "psweed.2.edge").write_text("0 1\n", encoding="utf-8")
+        (patch / "triangle_weed.log").write_text("stale\n", encoding="utf-8")
+    (dataset / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+
+    context = build_stage_notebook_context(
+        stamps_root=dataset,
+        scratch_root=scratch,
+        run_config=RunConfig(),
+        replay_stages=(),
+    )
+
+    build_scratch_tree(context)
+
+    assert (scratch / "PATCH_1" / "pscands.1.ij").exists()
+    assert (scratch / "PATCH_2" / "pscands.1.ij").exists()
+    assert not (scratch / "PATCH_1" / "psweed.1.node").exists()
+    assert not (scratch / "PATCH_2" / "psweed.2.edge").exists()
+    assert not (scratch / "PATCH_1" / "triangle_weed.log").exists()
 
 
 def test_describe_stage1_snap2stamps_flow_mentions_export_step() -> None:

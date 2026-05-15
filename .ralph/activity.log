@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-13 14:48:06 | run=20260513-094222-768318 | iter=5 | mode=build | story=US-005 | duration=1020s | status=success
 - 2026-05-13 14:31:02 | run=20260513-094222-768318 | iter=4 | mode=build | story=US-004 | duration=12055s | status=success
 - 2026-05-13 11:10:02 | run=20260513-094222-768318 | iter=3 | mode=build | story=US-003 | duration=1121s | status=success
 - 2026-05-13 10:51:16 | run=20260513-094222-768318 | iter=2 | mode=build | story=US-002 | duration=2587s | status=success
@@ -48,3 +49,8 @@
 [2026-05-13 14:41:57] Completed make build for US-005: PASS
 [2026-05-13 14:43:34] Pre-commit review complete for US-005: validation-only changes; no security, performance, or regression blockers found
 [2026-05-13 14:45:33] Updated progress log for US-005 outcome
+[2026-05-13 14:48:05] ITERATION 5 end (duration=1020s)
+[2026-05-15 15:14:16] ITERATION 1 start (mode=build story=US-001)
+[2026-05-15 15:19:17] Start US-001 exact notebook parity gate
+[2026-05-15 15:25:18] Added exact notebook parity assertion script and unit tests
+[2026-05-15 19:54:42] Ran US-001 verification: focused tests/full pytest passed; notebook executed; parity helper negative path passed; make audit failed on missing snaphu

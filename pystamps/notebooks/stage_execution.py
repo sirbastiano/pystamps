@@ -275,6 +275,10 @@ def build_scratch_tree(context: StageNotebookContext, *, existing_scratch: str |
     artifact_relpaths = stage_artifact_relpaths(context.stamps_root)
     for source in sorted(context.stamps_root.rglob("*")):
         relpath = source.relative_to(context.stamps_root)
+        if source.parent.name.startswith("PATCH_") and (
+            source.name.startswith("psweed.") or source.name == "triangle_weed.log"
+        ):
+            continue
         if relpath in artifact_relpaths or relpath == Path("patch.list"):
             continue
         destination = context.scratch_root / relpath
@@ -416,6 +420,15 @@ def _stage_result_payload(result: StageResult) -> dict:
     }
 
 
+def _repo_path_label(context: StageNotebookContext, path: Path) -> str:
+    resolved = Path(path).expanduser().resolve()
+    try:
+        rel = resolved.relative_to(context.repo_root)
+    except ValueError:
+        return str(resolved)
+    return "<repo-root>/" + rel.as_posix()
+
+
 def run_stage(context: StageNotebookContext, stage_id: int) -> dict:
     active_config = context.config
     if stage_id in context.replay_stages and context.replay_config is not None:
@@ -428,7 +441,7 @@ def run_stage(context: StageNotebookContext, stage_id: int) -> dict:
 
     display_call = (
         "run_pipeline(PipelineContext("
-        f"dataset_root={context.scratch_root!s}, "
+        f"dataset_root={_repo_path_label(context, context.scratch_root)}, "
         f"start_step={stage_id}, end_step={stage_id}, run_config=<RunConfig>))"
     )
     pipeline_context = PipelineContext(

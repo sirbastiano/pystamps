@@ -30,7 +30,14 @@ def test_resolve_stage4_edges_regenerates_triangle_from_current_nodes(tmp_path: 
         dtype=np.float64,
     )
 
-    monkeypatch.setattr(ported, "_maybe_resolve_external_tool", lambda *args, **kwargs: "/fake/triangle")
+    seen: dict[str, str | None] = {}
+
+    def fake_resolve(tool_name: str, configured_path: str | None = None) -> str:
+        seen["tool_name"] = tool_name
+        seen["configured_path"] = configured_path
+        return "/fake/triangle"
+
+    monkeypatch.setattr(ported, "_maybe_resolve_external_tool", fake_resolve)
 
     def fake_run_external_command(cmd: list[str], *, cwd: Path, log_path: Path) -> None:
         assert cmd == ["/fake/triangle", "-e", "psweed.1.node"]
@@ -39,9 +46,15 @@ def test_resolve_stage4_edges_regenerates_triangle_from_current_nodes(tmp_path: 
 
     monkeypatch.setattr(ported, "_run_external_command", fake_run_external_command)
 
-    edges, source = ported._resolve_stage4_edges(patch_dir, xy_weed, strict_reference=False)
+    edges, source = ported._resolve_stage4_edges(
+        patch_dir,
+        xy_weed,
+        strict_reference=False,
+        triangle_path="/configured/triangle",
+    )
 
     assert source == "triangle_regenerated"
+    assert seen == {"tool_name": "triangle", "configured_path": "/configured/triangle"}
     np.testing.assert_array_equal(edges, np.asarray([[0, 1], [1, 2]], dtype=np.int64))
     assert (patch_dir / "psweed.1.node").read_text(encoding="utf-8").splitlines()[0] == "3 2 0 0"
 

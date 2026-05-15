@@ -185,6 +185,7 @@ def _run_ported_patch_stage(
     stage_id: int,
     patch_dir: Path,
     backend: str = "auto",
+    triangle_path: str | None = None,
     stage2_kernel_backend: str = "auto",
     kernel_backend_overrides: dict[str, str] | None = None,
     stage2_native_threads: int = 0,
@@ -215,6 +216,7 @@ def _run_ported_patch_stage(
             backend=backend,
             debug=stage4_debug,
             strict_reference=strict_reference,
+            triangle_path=triangle_path,
         )
     if stage_id == 5:
         return stage5_correct_and_promote(patch_dir, backend=backend)
@@ -257,6 +259,7 @@ def _run_patch_stage(stage: StageDef, patch_dir: Path, context: PipelineContext,
             stage.stage_id,
             patch_dir,
             backend=context.run_config.runtime.backend,
+            triangle_path=context.run_config.tools.triangle,
             stage2_kernel_backend=stage2_kernel_backend,
             kernel_backend_overrides=context.run_config.runtime.kernel_backend_overrides,
             stage2_native_threads=_effective_stage2_native_threads(

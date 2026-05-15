@@ -1849,6 +1849,7 @@ def _resolve_stage4_edges(
     xy_weed: np.ndarray,
     *,
     strict_reference: bool,
+    triangle_path: str | None = None,
 ) -> tuple[np.ndarray, str]:
     coords = np.asarray(xy_weed, dtype=np.float64)
     n_ps = int(coords.shape[0])
@@ -1856,7 +1857,7 @@ def _resolve_stage4_edges(
         return np.empty((0, 2), dtype=np.int64), "none"
 
     pts = coords[:, 1:3]
-    triangle_exe = _maybe_resolve_external_tool("triangle")
+    triangle_exe = _maybe_resolve_external_tool("triangle", triangle_path)
     if triangle_exe is not None:
         node_path = patch_dir / "psweed.1.node"
         with node_path.open("w", encoding="utf-8") as fid:
@@ -4648,6 +4649,7 @@ def stage4_weed_ps(
     backend: str = "auto",
     debug: bool = False,
     strict_reference: bool = False,
+    triangle_path: str | None = None,
 ) -> str:
     stage4_t0 = time.perf_counter()
     sel = read_mat(patch_dir / "select1.mat")
@@ -4827,6 +4829,7 @@ def stage4_weed_ps(
                 patch_dir,
                 xy_weed,
                 strict_reference=strict_reference,
+                triangle_path=triangle_path,
             )
         except PortedStageError:
             if debug_payload is not None:
