@@ -82,3 +82,4 @@
 [2026-05-16 08:56:49] Start US-004 Stage 3 selection parity work
 [2026-05-16 09:07:45] Added US-004 Stage 3 boundary keep_ix regression and per-candidate reestimate helper
 [2026-05-16 09:10:32] Ran US-004 pytest gates; select1 parity and latest audit assertions remain blocked by upstream Stage 2 drift
+[2026-05-16 09:12:59] Updated US-004 progress log with boundary regression result and upstream Stage 2 blocker

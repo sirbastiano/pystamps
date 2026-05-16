@@ -5,6 +5,40 @@ Started: Wed May 13 09:42:22 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-05-16 09:12:25 UTC] - US-004: Restore Stage 3 selection parity
+Thread: 
+Run: 20260515-151412-1547726 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 90ab4eb test(stage3): cover boundary keep selection
+- Post-commit status: `clean`
+- Verification:
+  - Command: uv run pytest -q tests/test_stage3_ported.py -> PASS
+  - Command: uv run pytest -q tests/test_stage3_ported.py::test_stage3_boundary_keep_ix_candidates_match_oracle -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run python - <<'PY' ... verify_run_against_golden(..., patterns=('PATCH_*/select1.mat',)) ... PY -> FAIL (existing notebook scratch `PATCH_1/select1.mat` C_ps2 max_abs=6.14221)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (`latest_audit.json` ok assertion failed)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by known upstream Stage 2 drift; full Stage 3 replay is long and would not satisfy parity)
+  - Command: make audit -> SKIPPED (blocked by known upstream Stage 2 drift and failing latest audit state)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - pystamps/pipeline/ported.py
+  - tests/test_stage3_ported.py
+- What was implemented
+  - Extracted the Stage 3 per-candidate reestimate path into `_stage3_reestimate_candidate` so boundary candidates can be checked without replaying all selected PS.
+  - Added an oracle regression for source indices `19289`, `52810`, and `81017`; it recomputes `ph_patch2`, `K_ps2`, `C_ps2`, `coh_ps2`, the threshold, and exact `keep_ix` decisions.
+  - US-004 remains open: with oracle Stage 2 inputs, the boundary candidates match the oracle; the current notebook scratch `select1.mat` still fails because upstream Stage 2 artifacts are not parity-clean.
+- **Learnings for future iterations:**
+  - Patterns discovered: Stage 3 selection logic matches oracle on the boundary candidates when fed oracle `pm1.mat`/`ph_grid`; the three expected oracle `keep_ix` values are `[True, False, False]`.
+  - Gotchas encountered: the prompt's absolute `ralph log` helper path is not executable in this checkout; `.agents/ralph/log-activity.sh` is the working logger.
+  - Useful context: previous US-003 evidence still reports `PATCH_1/pm1.mat` `C_ps` drift (`max_abs=0.0295872`), which prevents a valid notebook Stage 3 parity claim.
+---
 ## [2026-05-16 01:49:54Z] - US-002: Capture current first-drift evidence
 Thread:
 Run: 20260515-151412-1547726 (iteration 2)
