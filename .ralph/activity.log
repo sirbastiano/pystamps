@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-16 09:13:30 | run=20260515-151412-1547726 | iter=4 | mode=build | story=US-004 | duration=1114s | status=success
 - 2026-05-16 08:54:53 | run=20260515-151412-1547726 | iter=3 | mode=build | story=US-003 | duration=25407s | status=success
 - 2026-05-16 01:51:24 | run=20260515-151412-1547726 | iter=2 | mode=build | story=US-002 | duration=21105s | status=success
 - 2026-05-15 19:59:36 | run=20260515-151412-1547726 | iter=1 | mode=build | story=US-001 | duration=17123s | status=success
@@ -83,3 +84,8 @@
 [2026-05-16 09:07:45] Added US-004 Stage 3 boundary keep_ix regression and per-candidate reestimate helper
 [2026-05-16 09:10:32] Ran US-004 pytest gates; select1 parity and latest audit assertions remain blocked by upstream Stage 2 drift
 [2026-05-16 09:12:59] Updated US-004 progress log with boundary regression result and upstream Stage 2 blocker
+[2026-05-16 09:13:30] ITERATION 4 end (duration=1114s)
+[2026-05-16 09:13:33] ITERATION 5 start (mode=build story=US-005)
+[2026-05-16 09:15:08] Start US-005 Stage 4 weed parity work
+[2026-05-16 09:40:22] Implemented US-005 Stage 4 Triangle orientation and mask-shape regressions
+[2026-05-16 13:26:34] Ran US-005 verification: focused/full pytest and build passed; notebook executed but parity helper failed upstream Stage 2/3/4; make audit failed on missing snaphu in audit path

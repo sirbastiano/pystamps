@@ -1815,7 +1815,7 @@ def _delaunay_edges(points: np.ndarray) -> np.ndarray:
     return np.unique(edges, axis=0).astype(np.int64)
 
 
-def _load_triangle_edges(edge_path: Path, n_nodes: int) -> np.ndarray:
+def _load_triangle_edges(edge_path: Path, n_nodes: int, *, sort_endpoints: bool = True) -> np.ndarray:
     if n_nodes < 2 or not edge_path.exists():
         return np.empty((0, 2), dtype=np.int64)
     raw = np.loadtxt(edge_path, skiprows=1, dtype=np.float64)
@@ -1827,7 +1827,8 @@ def _load_triangle_edges(edge_path: Path, n_nodes: int) -> np.ndarray:
         return np.empty((0, 2), dtype=np.int64)
 
     edges = raw[:, 1:3].astype(np.int64) - 1
-    edges = np.sort(edges, axis=1)
+    if sort_endpoints:
+        edges = np.sort(edges, axis=1)
     valid = (
         (edges[:, 0] >= 0)
         & (edges[:, 0] < n_nodes)
@@ -1839,7 +1840,8 @@ def _load_triangle_edges(edge_path: Path, n_nodes: int) -> np.ndarray:
     if edges.size == 0:
         return np.empty((0, 2), dtype=np.int64)
     if edges.shape[0] > 1:
-        _, keep = np.unique(edges, axis=0, return_index=True)
+        unique_source = np.sort(edges, axis=1) if not sort_endpoints else edges
+        _, keep = np.unique(unique_source, axis=0, return_index=True)
         edges = edges[np.sort(keep)]
     return edges.astype(np.int64)
 
@@ -1863,7 +1865,7 @@ def _resolve_stage4_edges(
         with node_path.open("w", encoding="utf-8") as fid:
             fid.write(f"{n_ps} 2 0 0\n")
             for idx, (x_val, y_val) in enumerate(pts, start=1):
-                fid.write(f"{idx} {x_val:.12g} {y_val:.12g}\n")
+                fid.write(f"{idx} {x_val:f} {y_val:f}\n")
 
         try:
             _run_external_command(
@@ -1875,7 +1877,7 @@ def _resolve_stage4_edges(
             if strict_reference:
                 raise
         else:
-            raw_edges = _load_triangle_edges(patch_dir / "psweed.2.edge", n_ps)
+            raw_edges = _load_triangle_edges(patch_dir / "psweed.2.edge", n_ps, sort_endpoints=False)
             if raw_edges.size > 0:
                 return raw_edges, "triangle_regenerated"
             if strict_reference:
@@ -1885,7 +1887,7 @@ def _resolve_stage4_edges(
 
         return _delaunay_edges(pts), "delaunay_fallback"
 
-    raw_edges = _load_triangle_edges(patch_dir / "psweed.2.edge", n_ps)
+    raw_edges = _load_triangle_edges(patch_dir / "psweed.2.edge", n_ps, sort_endpoints=False)
     if raw_edges.size > 0:
         return raw_edges, "triangle_file"
     if strict_reference:
