@@ -5,6 +5,44 @@ Started: Wed May 13 09:42:22 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-05-16 20:50:23 UTC] - US-008: Restore Stage 7 and Stage 8 post-processing parity
+Thread:
+Run: 20260515-151412-1547726 (iteration 8)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-8.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-8.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: d9708cb test(stage8): add post-processing parity regressions
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run pytest -q tests/test_stage8_ported.py tests/test_stage6_ported.py -> PASS
+  - Command: uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag inputs_and_outputs/InSAR_dataset_small_baseline_stage7 --allow-subset --output inputs_and_outputs/validation_runs/us008_small_stage7_probe.json -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (terminated after ~89 minutes; only `PATCH_1/pm1.mat` existed, no later stage artifacts)
+  - Command: make audit -> FAIL (terminated after ~30 minutes; diagnostic Stage 2-8 run had no `PATCH_1/pm1.mat` and `latest_audit.json` was not updated)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (stale audit payload assertion failed)
+  - Command: make build -> PASS
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - pystamps/pipeline/ported.py
+  - tests/test_stage6_ported.py
+  - tests/test_stage8_ported.py
+- What was implemented
+  - Added Stage 8 regressions for single-master daisy-chain look-angle trial-window scaling and MATLAB-routed noise rejection cutoff behavior.
+  - Extracted `_single_master_scaled_trial_wraps` without changing the existing Stage 8 arithmetic.
+  - Updated the existing Stage 6 noise-cutoff test name/value to match the routed MATLAB `3D_FULL` behavior.
+  - Recorded the repeated notebook/audit no-progress blockers; US-008 remains open because the notebook and full audit gates did not complete.
+- **Learnings for future iterations:**
+  - Patterns discovered: modern StaMPS routes this single-master notebook/audit path through `uw_sb_unwrap_space_time` / `3D_FULL`, so its Stage 8 trial-window scaling is `bperp_range_sub / bperp_range` and its direct noise cutoff is 1.2.
+  - Gotchas encountered: `notebooks/03_stage_by_stage_oracle.ipynb` can progress through Stage 2 output creation and then stall before `select1.mat`; `make audit` can enter the same diagnostic Stage 2 no-artifact pattern.
+  - Useful context: positive routing check: a repeated notebook/audit no-progress failure should trigger the guardrail update path. Negative routing check: a docs-only routing path would be wrong here because tests and pipeline helper code changed.
+---
 ## [2026-05-16 17:55:40 UTC] - US-007: Restore Stage 6 unwrap parity
 Thread: 
 Run: 20260515-151412-1547726 (iteration 7)
