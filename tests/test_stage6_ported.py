@@ -73,6 +73,19 @@ def test_maybe_resolve_external_tool_prefers_local_build_deps_bin(tmp_path: Path
     assert resolved == str(tool.resolve())
 
 
+def test_maybe_resolve_external_tool_finds_bundled_cache_bin(tmp_path: Path, monkeypatch) -> None:
+    tool = tmp_path / ".cache" / "pystamps-tools" / "bin" / "snaphu"
+    tool.parent.mkdir(parents=True)
+    tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    tool.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PATH", "")
+
+    resolved = _maybe_resolve_external_tool("snaphu")
+
+    assert resolved == str(tool.resolve())
+
+
 def test_compute_active_single_master_uses_smoother_noise(monkeypatch) -> None:
     expected_smooth = np.asarray([[1.0, 1.5]], dtype=np.float32)
     expected_noise = np.asarray([[0.25, -0.25]], dtype=np.float32)

@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-16 15:52:33 | run=20260515-151412-1547726 | iter=6 | mode=build | story=US-006 | duration=8430s | status=success
 - 2026-05-16 13:31:59 | run=20260515-151412-1547726 | iter=5 | mode=build | story=US-005 | duration=15507s | status=success
 - 2026-05-16 09:13:30 | run=20260515-151412-1547726 | iter=4 | mode=build | story=US-004 | duration=1114s | status=success
 - 2026-05-16 08:54:53 | run=20260515-151412-1547726 | iter=3 | mode=build | story=US-003 | duration=25407s | status=success
@@ -96,3 +97,11 @@
 [2026-05-16 14:18:00] Implemented US-006 Stage 5 mask handling, merged MAT orientation, rc2 preservation, and patch-list-old merge discovery
 [2026-05-16 15:45:39] Ran US-006 verification: focused/full pytest and build passed; direct Stage 5 merge from oracle patch artifacts matched; notebook/audit/latest-audit gates remain failing from earlier run attempts
 [2026-05-16 15:50:23] Updated progress log for US-006 outcome
+[2026-05-16 15:52:32] ITERATION 6 end (duration=8430s)
+[2026-05-16 15:52:35] ITERATION 7 start (mode=build story=US-007)
+[2026-05-16 15:53:53] Start US-007 Stage 6 unwrap parity work
+[2026-05-16 16:01:53] Implemented US-007 bundled snaphu/triangle tool resolution for Stage 6 audit runs
+[2026-05-16 17:31:36] US-007 verification: pytest/build passed; notebook gate killed after extended Stage 2 hang and failed with DeadKernelError
+[2026-05-16 17:32:15] Recorded repeated notebook Stage 2 execution failure in errors log and guardrails
+[2026-05-16 17:54:14] US-007 verification: make audit terminated after Stage 2 made no artifact progress for current audit stamp
+[2026-05-16 17:54:35] US-007 verification completed: Stage 6/full pytest/build passed; notebook, make audit, latest audit assertion, and notebook parity helper failed

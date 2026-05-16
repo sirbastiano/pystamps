@@ -3089,6 +3089,7 @@ def _load_complex_columns(path: Path, n_rows: int) -> np.ndarray:
 
 def _maybe_resolve_external_tool(tool_name: str, configured_path: str | None = None) -> str | None:
     bundled_dirs = (
+        Path(".cache/pystamps-tools/bin"),
         Path(".build-deps/bin"),
         Path(".build-deps/root/usr/bin"),
     )
