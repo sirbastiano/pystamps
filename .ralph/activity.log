@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-16 20:51:23 | run=20260515-151412-1547726 | iter=8 | mode=build | story=US-008 | duration=10469s | status=success
 - 2026-05-16 17:56:51 | run=20260515-151412-1547726 | iter=7 | mode=build | story=US-007 | duration=7456s | status=success
 - 2026-05-16 15:52:33 | run=20260515-151412-1547726 | iter=6 | mode=build | story=US-006 | duration=8430s | status=success
 - 2026-05-16 13:31:59 | run=20260515-151412-1547726 | iter=5 | mode=build | story=US-005 | duration=15507s | status=success
@@ -115,3 +116,11 @@
 [2026-05-16 20:44:55] make audit blocked by no-artifact Stage 2 run
 [2026-05-16 20:49:36] US-008 verification recorded focused pass and blocked global gates
 [2026-05-16 20:50:57] Updated progress log for US-008 outcome
+[2026-05-16 20:51:23] ITERATION 8 end (duration=10469s)
+[2026-05-16 20:51:26] ITERATION 9 start (mode=build story=US-009)
+[2026-05-16 20:53:08] Start US-009 full audited workflow gate
+[2026-05-16 21:25:21] Bounded stalled make audit attempt after ~30 minutes without Stage 2 pm1.mat; patched random histogram chunking
+[2026-05-16 21:43:27] Routed Stage 2 row-invariant kernels through native extension and passed focused kernel tests
+[2026-05-16 22:00:59] Added native Stage 2 random histogram path with MATLAB-v5 RNG parity coverage
+[2026-05-16 22:48:41] make audit advanced past Stage 2 but blocked in Stage 3 selection without select1.mat
+[2026-05-16 22:52:18] Verification completed: focused/full pytest passed; audit JSON assertion failed because latest audit remains incomplete

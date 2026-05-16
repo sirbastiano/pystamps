@@ -27,6 +27,7 @@ from pystamps.kernels import (
     run_stage4_edge_stats_kernel,
     run_stage2_grid_accumulate_kernel,
     run_stage2_histogram_kernel,
+    run_stage2_random_hist_row_invariant_kernel,
     run_stage2_topofit_coh_row_invariant_kernel,
     run_stage2_topofit_kernel,
     run_stage2_topofit_row_invariant_kernel,
@@ -34,12 +35,15 @@ from pystamps.kernels import (
     run_stage8_edge_noise_kernel,
 )
 
+_ORIGINAL_STAGE2_TOPOFIT_COH_ROW_INVARIANT_KERNEL = run_stage2_topofit_coh_row_invariant_kernel
+
 
 class PortedStageError(RuntimeError):
     """Raised when a ported stage cannot run due to missing inputs."""
 
 
 _CANONICAL_STAGE2_WEIGHTING_SNAPSHOT = Path("inputs_and_outputs/validation_runs/stage2_weighting_snapshot.json")
+_STAGE2_RANDOM_HIST_CHUNK = 8192
 # Bump when any stage-2 semantics change that can affect the downstream use of
 # the cached random baseline histogram, otherwise old Nr/Nr_max_nz_ix values can
 # outlive parity fixes and poison later reruns.
@@ -1276,7 +1280,10 @@ def _clap_filt_grid_stack_prepared(
 
     n_pad_int = prepared.n_win_ex - prepared.n_win_int
     low_pass = prepared.low_pass_stack[:, :, 0]
-    worker_count = max(1, min(int(workers), prepared.n_ifg))
+    # The batched stack path is both exact against the scalar per-IFG legacy
+    # implementation and much faster for wide audit stacks than thousands of
+    # tiny per-IFG FFT tasks.
+    worker_count = 1
 
     if worker_count == 1:
         ph_accum = np.zeros(ph_arr.shape, dtype=np.complex128)
@@ -1287,16 +1294,15 @@ def _clap_filt_grid_stack_prepared(
             ph_bit[: prepared.n_win_int, : prepared.n_win_int, :] = ph_arr[window.i1 : window.i2, window.j1 : window.j2, :]
             ph_fft = np.fft.fft2(ph_bit, axes=(0, 1))
             H = np.abs(ph_fft)
-            for i_ifg in range(prepared.n_ifg):
-                h_smooth[:, :, i_ifg] = np.fft.ifftshift(
-                    signal.convolve2d(
-                        np.fft.fftshift(H[:, :, i_ifg]),
-                        prepared.kernel,
-                        mode="same",
-                        boundary="fill",
-                        fillvalue=0.0,
-                    )
-                )
+            h_smooth[:, :, :] = np.fft.ifftshift(
+                ndimage.convolve(
+                    np.fft.fftshift(H, axes=(0, 1)),
+                    prepared.kernel[:, :, None],
+                    mode="constant",
+                    cval=0.0,
+                ),
+                axes=(0, 1),
+            )
             mean_h = np.median(h_smooth, axis=(0, 1), keepdims=True)
             np.divide(h_smooth, mean_h, out=h_smooth, where=mean_h != 0)
             np.power(h_smooth, float(alpha), out=h_smooth)
@@ -3968,7 +3974,7 @@ def stage2_estimate_gamma(
 
     rng = _MatlabV5UniformRNG(2005)
     random_hist_t0 = time.perf_counter()
-    rand_chunk = 250
+    rand_chunk = _STAGE2_RANDOM_HIST_CHUNK
     rand_bp = bperp_nm.astype(np.float64, copy=False)
     small_baseline = parms.small_baseline_flag.lower() == "y"
     if small_baseline:
@@ -4007,34 +4013,56 @@ def stage2_estimate_gamma(
     # weighting on copied validation datasets.
     random_hist_cache = _load_stage2_random_hist_cache(random_hist_cache_path, coh_bins=coh_bins)
     if random_hist_cache is None:
-        Nr = np.zeros(coh_bins.size, dtype=np.float64)
-        for rand_phase in _stage2_random_phase_chunks(
-            rng,
-            n_rand,
-            rand_chunk,
-            n_ifg,
-            small_baseline=small_baseline,
-            n_image=n_image,
-            ifgday_ix=ifgday_ix,
+        random_hist_backend = _stage2_backend_for("stage2_topofit_coh_row_invariant")
+        used_native_random_hist = False
+        if (
+            not small_baseline
+            and random_hist_backend in {"auto", "native"}
+            and run_stage2_topofit_coh_row_invariant_kernel is _ORIGINAL_STAGE2_TOPOFIT_COH_ROW_INVARIANT_KERNEL
         ):
             try:
-                coh_chunk = run_stage2_topofit_coh_row_invariant_kernel(
-                    rand_phase,
+                Nr, Nr_max_nz_ix = run_stage2_random_hist_row_invariant_kernel(
                     rand_bp,
+                    n_rand,
+                    n_ifg,
                     n_trial_wraps,
-                    backend=_stage2_backend_for("stage2_topofit_coh_row_invariant"),
+                    coh_bins,
+                    backend=random_hist_backend,
                     threads=native_threads_norm,
-                    cpu_fallback=_ps_topofit_batch_row_invariant_coh,
                 )
+                used_native_random_hist = True
             except BackendUnavailableError as exc:
-                raise PortedStageError(str(exc)) from exc
-            Nr += run_stage2_histogram_kernel(
-                coh_chunk.astype(np.float64, copy=False),
-                coh_bins,
-                backend=_stage2_backend_for("stage2_histogram"),
-            )
-        nonzero_bins = np.where(Nr > 0)[0]
-        Nr_max_nz_ix = float(nonzero_bins[-1] + 1) if nonzero_bins.size > 0 else 1.0
+                if random_hist_backend == "native":
+                    raise PortedStageError(str(exc)) from exc
+        if not used_native_random_hist:
+            Nr = np.zeros(coh_bins.size, dtype=np.float64)
+            for rand_phase in _stage2_random_phase_chunks(
+                rng,
+                n_rand,
+                rand_chunk,
+                n_ifg,
+                small_baseline=small_baseline,
+                n_image=n_image,
+                ifgday_ix=ifgday_ix,
+            ):
+                try:
+                    coh_chunk = run_stage2_topofit_coh_row_invariant_kernel(
+                        rand_phase,
+                        rand_bp,
+                        n_trial_wraps,
+                        backend=random_hist_backend,
+                        threads=native_threads_norm,
+                        cpu_fallback=_ps_topofit_batch_row_invariant_coh,
+                    )
+                except BackendUnavailableError as exc:
+                    raise PortedStageError(str(exc)) from exc
+                Nr += run_stage2_histogram_kernel(
+                    coh_chunk.astype(np.float64, copy=False),
+                    coh_bins,
+                    backend=_stage2_backend_for("stage2_histogram"),
+                )
+            nonzero_bins = np.where(Nr > 0)[0]
+            Nr_max_nz_ix = float(nonzero_bins[-1] + 1) if nonzero_bins.size > 0 else 1.0
         _write_stage2_random_hist_cache(
             random_hist_cache_path,
             Nr=Nr,

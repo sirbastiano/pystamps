@@ -17,6 +17,7 @@ Ship correct, minimal, verifiable changes. Prefer root-cause fixes. Keep diffs a
 - Avoid `grep -R`, `find`, `ls -R`, and broad reads.
 - For full-validation parity runs, take the required dataset list from `pystamps/data/audited_workflow_manifest.json` or `make audit`; the older two-dataset command is stale once new audited targets are added.
 - When running pytest groups that include `tests/test_validate_audit.py`, prefer a repo-local `TMPDIR` if `/tmp` is space-constrained.
+- After changing `src/lib.rs`, run `uv run python -m pip install --force-reinstall --no-deps -e .` before native-kernel tests or audit runs so the local extension exposes new symbols.
 
 ## Routing
 - `implement`: code, tests, config, or behavior changes.

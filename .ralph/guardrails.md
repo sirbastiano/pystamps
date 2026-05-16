@@ -32,3 +32,13 @@
 - **Trigger**: When `notebooks/03_stage_by_stage_oracle.ipynb` creates `PATCH_*/pm1.mat` but no `select1.mat`, `weed1.mat`, or merged artifacts appear for more than 30 minutes.
 - **Instruction**: Treat the run as stuck in Stage 2 verification/plotting or Stage 3 setup. Check artifact mtimes and kernel CPU once more, then terminate and record the notebook gate as blocked rather than waiting indefinitely.
 - **Added after**: Iteration 8 - notebook execution produced `pm1.mat`, then made no later artifact progress for roughly 45 minutes and ended with DeadKernelError after termination.
+
+### Sign: Bound Full Audit Stage 2 Stalls
+- **Trigger**: When `make audit` spends more than 30 minutes in an `*_stage2_8` validation run with no new `PATCH_*/pm1.mat` or later stage artifacts after the initial run-copy setup.
+- **Instruction**: Check the current validation run mtimes and process CPU once more, then terminate the run and record the audit gate as blocked unless a scoped performance fix is being made before rerunning the exact `make audit` command.
+- **Added after**: Iteration 9 - repeated full-audit Stage 2 run stayed CPU-bound for ~30 minutes with only `patch.list` written.
+
+### Sign: Bound Full Audit Post-Stage2 Stalls
+- **Trigger**: When `make audit` writes `PATCH_*/pm1.mat` but no `select1.mat`, `weed1.mat`, or merged artifacts appear for more than 30 minutes.
+- **Instruction**: Check artifact mtimes and process CPU once more, then terminate and record the audit gate as blocked unless a scoped Stage 3+ performance fix is being made before rerunning the exact `make audit` command.
+- **Added after**: Iteration 9 - full-audit Stage 2 completed, then Stage 3 selection/re-estimation stayed CPU-bound without writing `select1.mat`.

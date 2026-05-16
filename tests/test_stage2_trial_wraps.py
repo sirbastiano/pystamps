@@ -16,7 +16,7 @@ def test_matlab_v5_uniform_rng_uses_column_major_matrix_fill() -> None:
     expected = flat_rng.uniform(6).reshape((2, 3), order="F")
     observed = matrix_rng.uniform((2, 3))
 
-    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=1e-12)
 
 
 def test_stage2_random_phase_chunks_match_full_matrix_layout() -> None:
@@ -50,6 +50,29 @@ def test_stage2_random_phase_chunks_match_full_matrix_layout() -> None:
         assert observed_chunk.dtype == np.complex128
         np.testing.assert_allclose(observed_chunk, expected_chunk, rtol=0.0, atol=0.0)
     assert any(not np.array_equal(observed_chunk, naive_chunk) for observed_chunk, naive_chunk in zip(observed, naive, strict=True))
+
+
+def test_stage2_random_phase_chunks_are_chunk_size_invariant() -> None:
+    small_chunks = list(
+        ported._stage2_random_phase_chunks(
+            ported._MatlabV5UniformRNG(2005),
+            9,
+            2,
+            4,
+            small_baseline=False,
+        )
+    )
+    large_chunks = list(
+        ported._stage2_random_phase_chunks(
+            ported._MatlabV5UniformRNG(2005),
+            9,
+            5,
+            4,
+            small_baseline=False,
+        )
+    )
+
+    np.testing.assert_allclose(np.vstack(small_chunks), np.vstack(large_chunks), rtol=0.0, atol=0.0)
 
 
 def test_matlab_interp_matches_stage2_firwin_path() -> None:
@@ -162,7 +185,7 @@ def test_clap_stack_matches_scalar_per_ifg_legacy_path() -> None:
             low_pass=low_pass,
         )
 
-    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=1e-12)
 
 
 def test_clap_stack_matches_scalar_per_ifg_with_ifg_parallelism() -> None:

@@ -359,9 +359,13 @@ def _stage2_topofit_row_invariant_native(
     native_mod = _load_stage2_native_module()
     if native_mod is None:
         raise BackendUnavailableError("Native stage-2 extension is unavailable")
-    # Keep explicit native requests exact until the compiled row-invariant solver
-    # reaches Python parity again.
-    return _stage2_topofit_row_invariant_python(cpxphase, bperp, n_trial_wraps, threads)
+    bperp_vec, _ = _stage2_row_invariant_bperp_matrix(bperp, np.asarray(cpxphase).shape[0])
+    return native_mod.ps_topofit_batch_row_invariant(
+        np.ascontiguousarray(cpxphase, dtype=np.complex128),
+        np.ascontiguousarray(bperp_vec, dtype=np.float64),
+        float(n_trial_wraps),
+        _native_threads(threads),
+    )
 
 
 def _stage2_topofit_coh_row_invariant_python(
@@ -386,7 +390,16 @@ def _stage2_topofit_coh_row_invariant_native(
     native_mod = _load_stage2_native_module()
     if native_mod is None:
         raise BackendUnavailableError("Native stage-2 extension is unavailable")
-    return _stage2_topofit_coh_row_invariant_python(cpxphase, bperp, n_trial_wraps, threads)
+    bperp_vec, _ = _stage2_row_invariant_bperp_matrix(bperp, np.asarray(cpxphase).shape[0])
+    return np.asarray(
+        native_mod.ps_topofit_coh_row_invariant(
+            np.ascontiguousarray(cpxphase, dtype=np.complex128),
+            np.ascontiguousarray(bperp_vec, dtype=np.float64),
+            float(n_trial_wraps),
+            _native_threads(threads),
+        ),
+        dtype=np.float64,
+    )
 
 
 DEFAULT_REGISTRY.register_provider(
@@ -494,6 +507,36 @@ def run_stage2_topofit_coh_row_invariant_kernel(
         )
     resolved = _resolve_stage2_kernel("stage2_topofit_coh_row_invariant", backend, implementations=implementations)
     return np.asarray(resolved.fn(cpxphase, bperp, n_trial_wraps, threads), dtype=np.float64)
+
+
+def run_stage2_random_hist_row_invariant_kernel(
+    bperp: np.ndarray,
+    n_rand: int,
+    n_ifg: int,
+    n_trial_wraps: float,
+    coh_bins: np.ndarray,
+    *,
+    backend: str = "auto",
+    threads: int = 0,
+) -> tuple[np.ndarray, float]:
+    requested = _resolve_stage2_kernel_backend(backend)
+    if requested == "python":
+        raise BackendUnavailableError("Native stage-2 random histogram kernel is unavailable for python backend")
+    native_mod = _load_stage2_native_module()
+    if native_mod is None:
+        raise BackendUnavailableError("Native stage-2 extension is unavailable")
+    fn = getattr(native_mod, "stage2_random_hist_row_invariant", None)
+    if not callable(fn):
+        raise BackendUnavailableError("Native stage-2 random histogram kernel is unavailable")
+    hist, nr_max_nz_ix = fn(
+        np.ascontiguousarray(np.asarray(bperp, dtype=np.float64).reshape(-1)),
+        int(n_rand),
+        int(n_ifg),
+        float(n_trial_wraps),
+        np.ascontiguousarray(np.asarray(coh_bins, dtype=np.float64).reshape(-1)),
+        _native_threads(threads),
+    )
+    return np.asarray(hist, dtype=np.float64), float(nr_max_nz_ix)
 
 
 def run_stage2_histogram_kernel(

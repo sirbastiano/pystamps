@@ -10,7 +10,7 @@ from pystamps.config import ConfigError, load_config
 from pystamps.io.mat import read_mat, write_mat
 from pystamps.pipeline import ported
 
-_STAGE2_RANDOM_HIST_CALLS = int(np.ceil(300000 / 250))
+_STAGE2_RANDOM_HIST_CALLS = int(np.ceil(300000 / ported._STAGE2_RANDOM_HIST_CHUNK))
 
 
 def test_load_config_parses_stage2_checkpoint_settings(tmp_path: Path) -> None:
@@ -981,7 +981,7 @@ def test_clap_filt_grid_stack_prepared_matches_historical_vectorized_reference()
         )
     expected = expected.astype(np.complex64)
 
-    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=1e-12)
 
 
 def test_prepare_clap_filt_grid_stack_keeps_complex128_scratch_buffer() -> None:

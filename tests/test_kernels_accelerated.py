@@ -9,6 +9,7 @@ from pystamps.kernels import (
     run_stage4_edge_stats_kernel,
     run_stage2_grid_accumulate_kernel,
     run_stage2_histogram_kernel,
+    run_stage2_random_hist_row_invariant_kernel,
     run_stage2_topofit_coh_row_invariant_kernel,
     run_stage2_topofit_kernel,
     run_stage2_topofit_row_invariant_kernel,
@@ -582,6 +583,18 @@ def test_stage2_native_dispatch_uses_native_module(monkeypatch: pytest.MonkeyPat
             calls.append(f"rowcoh:{threads}")
             return np.full(cpxphase.shape[0], 9.0, dtype=np.float64)
 
+        def stage2_random_hist_row_invariant(
+            self,
+            bperp: np.ndarray,
+            n_rand: int,
+            n_ifg: int,
+            n_trial_wraps: float,
+            coh_bins: np.ndarray,
+            threads: int,
+        ) -> tuple[np.ndarray, float]:
+            calls.append(f"randhist:{threads}:{n_rand}:{n_ifg}")
+            return np.asarray([1.0, 2.0, 0.0], dtype=np.float64), 2.0
+
         def histogram_with_centers(
             self,
             values: np.ndarray,
@@ -628,34 +641,29 @@ def test_stage2_native_dispatch_uses_native_module(monkeypatch: pytest.MonkeyPat
         backend="native",
         threads=6,
     )
+    random_hist, random_hist_max = run_stage2_random_hist_row_invariant_kernel(
+        np.asarray([1.0, 2.0, 3.0], dtype=np.float64),
+        5,
+        3,
+        1.0,
+        np.asarray([0.0, 0.6, 1.0], dtype=np.float64),
+        backend="native",
+        threads=7,
+    )
     hist = run_stage2_histogram_kernel(
         np.asarray([0.1, 0.4, 0.7], dtype=np.float64),
         np.asarray([0.0, 0.6, 1.0], dtype=np.float64),
         backend="native",
     )
 
-    expected_topofit = ported._ps_topofit_batch_generic(
-        np.ones((2, 3), dtype=np.complex128),
-        np.asarray([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], dtype=np.float64),
-        1.0,
-    )
-    expected_row = ported._ps_topofit_batch_row_invariant(
-        np.ones((2, 3), dtype=np.complex128),
-        np.asarray([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], dtype=np.float64),
-        1.0,
-    )
-    expected_coh = ported._ps_topofit_batch_row_invariant_coh(
-        np.ones((2, 3), dtype=np.complex128),
-        np.asarray([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]], dtype=np.float64),
-        1.0,
-    )
-
-    assert calls == ["grid:3", "hist"]
+    assert calls == ["grid:3", "row:4", "row:5", "row:2", "rowcoh:6", "randhist:7:5:3", "hist"]
     np.testing.assert_allclose(grid, np.full((2, 1, 3), 7 + 0j, dtype=np.complex64))
-    np.testing.assert_allclose(topofit[0], expected_topofit[0], atol=0.0, rtol=0.0)
-    np.testing.assert_allclose(topofit_single[0], expected_topofit[0], atol=0.0, rtol=0.0)
-    np.testing.assert_allclose(topofit_row[0], expected_row[0], atol=0.0, rtol=0.0)
-    np.testing.assert_allclose(coh_row, expected_coh, atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(topofit[0], np.full(2, 5.0, dtype=np.float64), atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(topofit_single[0], np.full(2, 5.0, dtype=np.float64), atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(topofit_row[0], np.full(2, 5.0, dtype=np.float64), atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(coh_row, np.full(2, 9.0, dtype=np.float64), atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(random_hist, np.asarray([1.0, 2.0, 0.0], dtype=np.float64), atol=0.0, rtol=0.0)
+    assert random_hist_max == 2.0
     np.testing.assert_allclose(hist, np.asarray([2.0, 1.0, 0.0], dtype=np.float64))
 
 
@@ -707,6 +715,59 @@ def test_stage2_native_kernels_match_python_reference() -> None:
     )
     np.testing.assert_allclose(hist_observed, hist_expected, atol=0.0, rtol=0.0)
     np.testing.assert_allclose(hist_observed, np.asarray([1.0, 2.0, 1.0], dtype=np.float64), atol=0.0, rtol=0.0)
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("pystamps.kernels._stage2_native") is None,
+    reason="native stage-2 extension not available",
+)
+def test_stage2_native_matlab_v5_rng_matches_python_reference() -> None:
+    from pystamps.kernels import _stage2_native
+
+    expected = ported._MatlabV5UniformRNG(2005)._uniform_flat(80)
+    observed = np.asarray(_stage2_native.matlab_v5_uniform_flat(2005, 80))
+
+    np.testing.assert_allclose(observed, expected, atol=0.0, rtol=0.0)
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("pystamps.kernels._stage2_native") is None,
+    reason="native stage-2 extension not available",
+)
+def test_stage2_native_random_hist_matches_python_reference() -> None:
+    bperp = np.asarray([-20.0, 0.0, 35.0, 60.0], dtype=np.float64)
+    coh_bins = np.arange(0.005, 1.0, 0.01, dtype=np.float64)
+    rng = ported._MatlabV5UniformRNG(2005)
+    expected = np.zeros(coh_bins.size, dtype=np.float64)
+    for rand_phase in ported._stage2_random_phase_chunks(
+        rng,
+        16,
+        5,
+        bperp.size,
+        small_baseline=False,
+    ):
+        coh = run_stage2_topofit_coh_row_invariant_kernel(
+            rand_phase,
+            bperp,
+            0.75,
+            backend="python",
+        )
+        expected += run_stage2_histogram_kernel(coh, coh_bins, backend="python")
+
+    observed, observed_max = run_stage2_random_hist_row_invariant_kernel(
+        bperp,
+        16,
+        bperp.size,
+        0.75,
+        coh_bins,
+        backend="native",
+        threads=2,
+    )
+
+    nonzero = np.where(expected > 0)[0]
+    expected_max = float(nonzero[-1] + 1) if nonzero.size else 1.0
+    np.testing.assert_allclose(observed, expected, atol=0.0, rtol=0.0)
+    assert observed_max == expected_max
 
 
 @pytest.mark.skipif(

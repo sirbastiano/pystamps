@@ -480,7 +480,122 @@ fn argmax_first(values: &[f64]) -> usize {
     best_ix
 }
 
-const STAGE2_TOPOFIT_NEAR_MAX_COH_TOL: f64 = 5.0e-3;
+struct MatlabV5UniformRng {
+    index: usize,
+    borrow: f64,
+    j: u32,
+    state: [f64; 32],
+}
+
+impl MatlabV5UniformRng {
+    const ULP: f64 = 1.0 / 9007199254740992.0;
+    const MASK52: u64 = (1_u64 << 52) - 1;
+
+    fn new(seed: i64) -> Self {
+        let mut rng = MatlabV5UniformRng {
+            index: 0,
+            borrow: 0.0,
+            j: if seed != 0 { seed as u32 } else { 1_u32 << 31 },
+            state: [0.0; 32],
+        };
+        rng.randsetup();
+        rng
+    }
+
+    fn randint32(mut value: u32) -> u32 {
+        value ^= value.wrapping_shl(13);
+        value ^= value >> 17;
+        value ^= value.wrapping_shl(5);
+        value
+    }
+
+    fn randsetup(&mut self) {
+        let mut j = self.j;
+        for idx in 0..32 {
+            let mut x = 0_u64;
+            for _ in 0..53 {
+                j = Self::randint32(j);
+                x = (x << 1) | (((j >> 19) & 1) as u64);
+            }
+            self.state[idx] = (x as f64) * 2_f64.powi(-53);
+        }
+    }
+
+    fn randbits(&mut self, value: f64) -> f64 {
+        let jlo = self.j;
+        let jhi = Self::randint32(jlo);
+        self.j = jhi;
+        let mask = (((jhi as u64) << 32) & Self::MASK52) ^ (jlo as u64);
+        if value == 0.0 {
+            return ((0_u64 ^ mask) as f64) * 2_f64.powi(-53);
+        }
+        let bits = value.to_bits();
+        let exponent_bits = ((bits >> 52) & 0x7ff) as i32;
+        let mantissa_bits = bits & Self::MASK52;
+        let exponent = exponent_bits - 1022;
+        let mantissa = (1_u64 << 52) | mantissa_bits;
+        ((mantissa ^ mask) as f64) * 2_f64.powi(exponent - 53)
+    }
+
+    fn next(&mut self) -> f64 {
+        let mut value = self.state[(self.index + 20) & 31] - self.state[(self.index + 5) & 31] - self.borrow;
+        if value < 0.0 {
+            value += 1.0;
+            self.borrow = Self::ULP;
+        } else {
+            self.borrow = 0.0;
+        }
+        self.state[self.index] = value;
+        self.index = (self.index + 1) & 31;
+        self.randbits(value)
+    }
+}
+
+fn histogram_counts_with_centers(values: &[f64], centers: &[f64]) -> Vec<f64> {
+    let mut out = vec![0.0_f64; centers.len()];
+    if centers.is_empty() {
+        return out;
+    }
+    if centers.len() == 1 {
+        out[0] = values.iter().filter(|value| value.is_finite()).count() as f64;
+        return out;
+    }
+
+    let equal_spacing = centers
+        .windows(2)
+        .map(|pair| pair[1] - pair[0])
+        .collect::<Vec<_>>();
+    let is_equal_spacing = equal_spacing.iter().all(|diff| {
+        (*diff - equal_spacing[0]).abs()
+            <= f64::EPSILON * centers.iter().fold(1.0_f64, |acc, value| acc.max(value.abs()))
+    });
+
+    if is_equal_spacing {
+        let d = if centers.len() < 3 {
+            1.0
+        } else {
+            (centers[centers.len() - 1] - centers[0]) / ((centers.len() - 1) as f64)
+        };
+        let cutoff0 = (centers[0] + centers[1]) / 2.0;
+        for &value in values.iter().filter(|value| value.is_finite()) {
+            let assignment = (1.0 + ((value - cutoff0) / d).ceil().max(0.0).min((centers.len() - 1) as f64)) as usize;
+            out[assignment.saturating_sub(1)] += 1.0;
+        }
+        return out;
+    }
+
+    let mids = centers.windows(2).map(|pair| (pair[0] + pair[1]) / 2.0).collect::<Vec<_>>();
+    for &value in values.iter().filter(|value| value.is_finite()) {
+        let mut idx = mids.partition_point(|mid| *mid < value);
+        if idx >= centers.len() {
+            idx = centers.len() - 1;
+        }
+        out[idx] += 1.0;
+    }
+    out
+}
+
+const STAGE2_TOPOFIT_NEAR_MAX_COH_TOL: f64 = 2.0e-4;
 
 fn near_max_trial_indices(coh_trial: &[f64]) -> Vec<usize> {
     if coh_trial.len() <= 1 {
@@ -1264,6 +1379,91 @@ fn ps_topofit_coh_row_invariant<'py>(
     });
 
     Ok(Array1::from_vec(coh_values).into_pyarray(py))
+}
+
+#[pyfunction]
+fn matlab_v5_uniform_flat<'py>(py: Python<'py>, seed: i64, size: usize) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let mut rng = MatlabV5UniformRng::new(seed);
+    let mut out = Vec::with_capacity(size);
+    for _ in 0..size {
+        out.push(rng.next());
+    }
+    Ok(Array1::from_vec(out).into_pyarray(py))
+}
+
+#[pyfunction]
+fn stage2_random_hist_row_invariant<'py>(
+    py: Python<'py>,
+    bperp_vec: PyReadonlyArray1<f64>,
+    n_rand: usize,
+    n_ifg: usize,
+    n_trial_wraps: f64,
+    coh_bins: PyReadonlyArray1<f64>,
+    threads: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, f64)> {
+    let bp_view = bperp_vec.as_array();
+    let bins_view = coh_bins.as_array();
+    let bp_slice = bp_view
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("bperp vector must be contiguous"))?;
+    let bins_slice = bins_view
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("coherence bins must be contiguous"))?;
+    if bp_slice.len() != n_ifg {
+        return Err(PyValueError::new_err("bperp vector length must match n_ifg"));
+    }
+
+    let total = n_rand
+        .checked_mul(n_ifg)
+        .ok_or_else(|| PyValueError::new_err("random histogram dimensions overflow"))?;
+    let mut rng = MatlabV5UniformRng::new(2005);
+    let mut phases = Vec::with_capacity(total);
+    for _ in 0..total {
+        phases.push(rng.next() * (2.0 * PI));
+    }
+
+    let trial_mult = trial_values(n_trial_wraps);
+    let basis = row_invariant_basis(bp_slice, &trial_mult);
+    let pool = build_pool(threads)?;
+
+    let coh_values = py.detach(move || {
+        let compute = || {
+            (0..n_rand)
+                .into_par_iter()
+                .map(|row_ix| {
+                    let mut cpx_row = Vec::with_capacity(n_ifg);
+                    for col_ix in 0..n_ifg {
+                        let phase = phases[row_ix + col_ix * n_rand];
+                        let (sn, cs) = phase.sin_cos();
+                        cpx_row.push(Complex64::new(cs, sn));
+                    }
+                    solve_row_row_invariant(&cpx_row, bp_slice, &trial_mult, &basis, false).coh
+                })
+                .collect::<Vec<_>>()
+        };
+        match pool {
+            Some(pool) => pool.install(compute),
+            None => (0..n_rand)
+                .map(|row_ix| {
+                    let mut cpx_row = Vec::with_capacity(n_ifg);
+                    for col_ix in 0..n_ifg {
+                        let phase = phases[row_ix + col_ix * n_rand];
+                        let (sn, cs) = phase.sin_cos();
+                        cpx_row.push(Complex64::new(cs, sn));
+                    }
+                    solve_row_row_invariant(&cpx_row, bp_slice, &trial_mult, &basis, false).coh
+                })
+                .collect::<Vec<_>>(),
+        }
+    });
+
+    let hist = histogram_counts_with_centers(&coh_values, bins_slice);
+    let nr_max_nz_ix = hist
+        .iter()
+        .rposition(|value| *value > 0.0)
+        .map(|idx| (idx + 1) as f64)
+        .unwrap_or(1.0);
+    Ok((Array1::from_vec(hist).into_pyarray(py), nr_max_nz_ix))
 }
 
 #[pyfunction]
@@ -2193,6 +2393,8 @@ fn _stage2_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ps_topofit_batch_generic_f32, m)?)?;
     m.add_function(wrap_pyfunction!(ps_topofit_batch_row_invariant, m)?)?;
     m.add_function(wrap_pyfunction!(ps_topofit_coh_row_invariant, m)?)?;
+    m.add_function(wrap_pyfunction!(matlab_v5_uniform_flat, m)?)?;
+    m.add_function(wrap_pyfunction!(stage2_random_hist_row_invariant, m)?)?;
     m.add_function(wrap_pyfunction!(histogram_with_centers, m)?)?;
     m.add_function(wrap_pyfunction!(stage4_edge_stats, m)?)?;
     m.add_function(wrap_pyfunction!(stage7_scla, m)?)?;
