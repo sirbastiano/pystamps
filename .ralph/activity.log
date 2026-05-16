@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-16 01:51:24 | run=20260515-151412-1547726 | iter=2 | mode=build | story=US-002 | duration=21105s | status=success
 - 2026-05-15 19:59:36 | run=20260515-151412-1547726 | iter=1 | mode=build | story=US-001 | duration=17123s | status=success
 - 2026-05-13 14:48:06 | run=20260513-094222-768318 | iter=5 | mode=build | story=US-005 | duration=1020s | status=success
 - 2026-05-13 14:31:02 | run=20260513-094222-768318 | iter=4 | mode=build | story=US-004 | duration=12055s | status=success
@@ -66,3 +67,11 @@
 [2026-05-16 01:45:35] Generated US-002 first drift trace with matching notebook and audit Stage 2 boundary
 [2026-05-16 01:48:06] Verification for US-002: focused pytest groups and full pytest passed; notebook passed; make audit and latest_audit assertion failed on expected audit drift/tool-gate state
 [2026-05-16 01:50:26] Updated progress log for US-002 outcome
+[2026-05-16 01:51:23] ITERATION 2 end (duration=21105s)
+[2026-05-16 01:51:27] ITERATION 3 start (mode=build story=US-003)
+[2026-05-16 01:54:05] Start US-003 Stage 2 oracle parity work
+[2026-05-16 02:02:23] Implemented US-003 topofit coarse-candidate Stage 2 parity fix and targeted regression
+[2026-05-16 04:13:41] Updated US-003 Stage 2 random histogram cache version after topofit selector parity change
+[2026-05-16 08:09:29] Updated US-003 Stage 2 random histogram cache version after native selector rebuild
+[2026-05-16 08:21:49] Reverted exploratory Stage 2 precision-path change; keeping topofit coarse selector diagnostics
+[2026-05-16 08:53:08] Ran US-003 targeted Stage 2/native tests and confirmed Stage 2 pm1.mat still fails at C_ps max_abs 0.0295872

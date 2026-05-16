@@ -514,24 +514,13 @@ fn near_max_trial_indices(coh_trial: &[f64]) -> Vec<usize> {
     candidate_ix
 }
 
-fn select_candidate(candidate_ix: &[usize], candidate_coh: &[f64], refined_coh: &[f64], trial_count: usize) -> usize {
+fn select_candidate(candidate_ix: &[usize], candidate_coh: &[f64], _refined_coh: &[f64], _trial_count: usize) -> usize {
     if candidate_ix.is_empty() {
         return 0;
     }
 
     let coarse_best_local = argmax_first(candidate_coh);
-    let coarse_best_trial_ix = candidate_ix[coarse_best_local];
-    if candidate_ix.len() == 1 {
-        return coarse_best_trial_ix;
-    }
-
-    let endpoint_symmetric =
-        candidate_ix.len() == 2 && candidate_ix[0] == 0 && candidate_ix[candidate_ix.len() - 1] == trial_count - 1;
-    if endpoint_symmetric {
-        return coarse_best_trial_ix;
-    }
-
-    candidate_ix[argmax_first(refined_coh)]
+    candidate_ix[coarse_best_local]
 }
 
 fn collect_row(cpx_row: &[Complex64], bp_row: &[f64]) -> RowData {

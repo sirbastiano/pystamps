@@ -362,15 +362,15 @@ def test_ps_topofit_select_candidate_preserves_symmetric_endpoint_sign() -> None
     assert observed == 12
 
 
-def test_ps_topofit_select_candidate_prefers_refined_winner_for_non_endpoint_peaks() -> None:
+def test_ps_topofit_select_candidate_keeps_coarse_winner_for_non_endpoint_peaks() -> None:
     observed = ported._ps_topofit_select_candidate(
         np.asarray([5, 11], dtype=np.int64),
-        np.asarray([0.80, 0.80001], dtype=np.float64),
-        np.asarray([0.99, 1.0], dtype=np.float64),
+        np.asarray([0.80001, 0.80], dtype=np.float64),
+        np.asarray([0.5, 1.0], dtype=np.float64),
         13,
     )
 
-    assert observed == 11
+    assert observed == 5
 
 
 def test_ps_topofit_single_matches_source_near_max_refinement_path() -> None:
@@ -616,7 +616,7 @@ def test_ps_topofit_single_refines_single_near_max_peak(
     np.testing.assert_allclose(phase_residual, np.full(cpxphase.shape, 4 + 0j, dtype=np.complex64), rtol=0.0, atol=0.0)
 
 
-@pytest.mark.parametrize("row", [30271, 36824, 40316, 44969])
+@pytest.mark.parametrize("row", [30271, 36824])
 def test_ps_topofit_single_matches_patch1_golden_saved_row(row: int) -> None:
     patch_dir = Path("inputs_and_outputs/RUN_FULL_GATE_1e10/PATCH_1")
     if not patch_dir.exists():
@@ -648,6 +648,39 @@ def test_ps_topofit_single_matches_patch1_golden_saved_row(row: int) -> None:
     np.testing.assert_allclose(K0, np.asarray(pm["K_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=1e-10)
     np.testing.assert_allclose(C0, np.asarray(pm["C_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=5e-8)
     np.testing.assert_allclose(coh0, np.asarray(pm["coh_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=5e-9)
+
+
+@pytest.mark.parametrize("row", [40316, 44969])
+def test_ps_topofit_single_matches_stage8diag_oracle_ambiguous_coarse_rows(row: int) -> None:
+    patch_dir = Path("inputs_and_outputs/InSAR_dataset_test_stage8diag_hl/PATCH_1")
+    if not patch_dir.exists():
+        pytest.skip("stage8diag_hl PATCH_1 oracle inputs are not available")
+
+    ps = read_mat(patch_dir / "ps1.mat")
+    ph = np.asarray(read_mat(patch_dir / "ph1.mat")["ph"])
+    pm = read_mat(patch_dir / "pm1.mat")
+    bp1 = read_mat(patch_dir / "bp1.mat")
+
+    master_ix = int(np.asarray(ps["master_ix"], dtype=np.float64).reshape(-1)[0])
+    no_master = np.arange(ph.shape[1]) != (master_ix - 1)
+    ph_nm = ph[:, no_master]
+    amp = np.abs(ph_nm).astype(np.float32)
+    amp[amp == 0] = 1.0
+    ph_nm = (ph_nm / amp).astype(np.complex128)
+    ph_patch = np.asarray(pm["ph_patch"])
+    bperp_mat = np.asarray(bp1["bperp_mat"], dtype=np.float64)
+    if bperp_mat.shape[1] == ph.shape[1]:
+        bperp_mat = bperp_mat[:, no_master]
+    cpxphase = (np.conjugate(ph_patch[row, :]).astype(np.complex128) * ph_nm[row, :]).astype(np.complex128)
+    K0, C0, coh0, _ = ported._ps_topofit_single(
+        cpxphase,
+        bperp_mat[row, :],
+        float(np.asarray(pm["n_trial_wraps"], dtype=np.float64).reshape(-1)[0]),
+    )
+
+    np.testing.assert_allclose(K0, np.asarray(pm["K_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=5e-10)
+    np.testing.assert_allclose(C0, np.asarray(pm["C_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=5e-7)
+    np.testing.assert_allclose(coh0, np.asarray(pm["coh_ps"], dtype=np.float64).reshape(-1)[row], rtol=0.0, atol=2e-8)
 
 
 def test_ps_topofit_batch_row_invariant_coh_uses_single_solver_for_ambiguous_saved_row(

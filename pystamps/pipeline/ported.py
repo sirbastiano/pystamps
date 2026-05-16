@@ -43,7 +43,7 @@ _CANONICAL_STAGE2_WEIGHTING_SNAPSHOT = Path("inputs_and_outputs/validation_runs/
 # Bump when any stage-2 semantics change that can affect the downstream use of
 # the cached random baseline histogram, otherwise old Nr/Nr_max_nz_ix values can
 # outlive parity fixes and poison later reruns.
-_STAGE2_RANDOM_HIST_CACHE_VERSION = 14
+_STAGE2_RANDOM_HIST_CACHE_VERSION = 16
 _STAGE2_TOPOFIT_NEAR_MAX_COH_TOL = 2.0e-4
 
 
@@ -2452,30 +2452,16 @@ def _ps_topofit_near_max_trial_indices(coh_trial: np.ndarray) -> np.ndarray:
 def _ps_topofit_select_candidate(
     candidate_ix: np.ndarray,
     candidate_coh: np.ndarray,
-    refined_coh: np.ndarray,
-    trial_count: int,
+    _refined_coh: np.ndarray,
+    _trial_count: int,
 ) -> int:
     candidate_arr = np.asarray(candidate_ix, dtype=np.int64).reshape(-1)
     coarse_arr = np.asarray(candidate_coh, dtype=np.float64).reshape(-1)
-    refined_arr = np.asarray(refined_coh, dtype=np.float64).reshape(-1)
     if candidate_arr.size == 0:
         return 0
 
     coarse_best_local = int(np.argmax(coarse_arr))
-    coarse_best_trial_ix = int(candidate_arr[coarse_best_local])
-    if candidate_arr.size == 1:
-        return coarse_best_trial_ix
-
-    endpoint_symmetric = (
-        candidate_arr.size == 2
-        and int(candidate_arr[0]) == 0
-        and int(candidate_arr[-1]) == int(trial_count - 1)
-    )
-    if endpoint_symmetric:
-        return coarse_best_trial_ix
-
-    refined_best_local = int(np.argmax(refined_arr))
-    return int(candidate_arr[refined_best_local])
+    return int(candidate_arr[coarse_best_local])
 
 
 def _ps_topofit_refine_candidate(
