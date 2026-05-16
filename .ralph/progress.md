@@ -310,3 +310,45 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: threaded CLAP diagnostics are much slower than expected for full PATCH_1; use existing debug artifacts or single-worker probes carefully.
   - Useful context: oracle final `ph_weight` magnitudes show the largest remaining weighting deltas at rows 22182 and 12693; row 22182 differs by about `0.0498673` in the final saved weighting used by iteration 8.
 ---
+## [2026-05-16 13:29:41 UTC] - US-005: Restore Stage 4 weed parity
+Thread: 
+Run: 20260515-151412-1547726 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 148bc76 fix(stage4): preserve triangle weed edges
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run pytest -q tests/test_stage4_ported.py tests/test_kernels_accelerated.py::test_stage4_stage7_stage8_native_kernels_match_python_reference -> PASS
+  - Command: uv run python - <<'PY' ... stage4_weed_ps(..., backend='native') + verify_run_against_golden(..., patterns=('PATCH_*/weed1.mat',)) ... PY -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stage 2/3 still fail; Stage 4 shape follows wrong Stage 3 cardinality)
+  - Command: make audit -> FAIL (interrupted: exact audit path could not resolve `snaphu`)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (`completed=false`, `ok=false`, `interrupted=true`)
+  - Command: make build -> PASS
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - dist/pystamps-0.1.1.dev114+g3727c2128.d20260516-cp314-cp314-linux_x86_64.whl
+  - dist/pystamps-0.1.1.dev114+g3727c2128.d20260516.tar.gz
+  - notebooks/03_stage_by_stage_oracle.ipynb
+  - pystamps/_version.py
+  - pystamps/pipeline/ported.py
+  - tests/test_stage4_ported.py
+- What was implemented
+  - Preserved Triangle endpoint orientation for Stage 4 weed edge statistics and wrote `psweed.1.node` coordinates with MATLAB-style `%f` precision.
+  - Added regressions for configured Triangle usage, existing Triangle edge orientation, duplicate lon/lat pruning, and the shorter `ix_weed2`/noise-stat mask shapes.
+  - Verified Stage 4 `ix_weed`, `ix_weed2`, `ps_std`, and `ps_max` match the oracle when Stage 3 supplies the oracle 79,227 selected PS input; no oracle `select1.mat` or `weed1.mat` was copied into notebook scratch as evidence.
+  - US-005 remains blocked in the full notebook because fresh Stage 3 currently selects 79,229 PS, so Stage 4 receives the wrong input cardinality and the stage verifier still fails.
+- **Learnings for future iterations:**
+  - Patterns discovered: Stage 4 `ps_std`/`ps_max` are sensitive to Triangle endpoint orientation even when the undirected edge set is identical.
+  - Gotchas encountered: `make audit` still needs explicit bundled tool resolution; exact `make audit` failed at Stage 6 with missing `snaphu`.
+  - Useful context: positive guardrail routing check: a prompt to run `make audit` should trigger the audit external-tool sign; negative check: a pytest-only change should not trigger that sign.
+---
