@@ -246,3 +246,33 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `uv run` repeatedly warns about a stale editable install `RECORD`, but tests and scripts still ran; `make audit` currently fails because the audit config does not resolve `snaphu`.
   - Useful context: the parity helper is expected to fail until upstream stage parity work is complete; success output is `OK: stages 1 through 8 all matched`.
 ---
+## [2026-05-16 08:53:55 UTC] - US-003: Restore Stage 2 oracle parity
+Thread: 
+Run: 20260515-151412-1547726 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: c101de5 fix(stage2): keep coarse topofit candidates
+- Post-commit status: `clean`
+- Verification:
+  - Command: uv run python setup.py build_rust --inplace -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py::test_stage2_estimate_gamma_uses_legacy_precision_path tests/test_stage2_ported.py::test_ps_topofit_select_candidate_keeps_coarse_winner_for_non_endpoint_peaks tests/test_stage2_ported.py::test_ps_topofit_single_matches_stage8diag_oracle_ambiguous_coarse_rows --tb=short -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_kernels_accelerated.py --tb=short -> PASS
+  - Command: uv run python - <<'PY' ... verify_run_against_golden(..., patterns=('PATCH_*/pm1.mat',)) ... PY -> FAIL (PATCH_1/pm1.mat C_ps max_abs=0.0295872)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - pystamps/pipeline/ported.py
+  - src/lib.rs
+  - tests/test_stage2_ported.py
+- What was implemented
+  - Fixed the first large Stage 2 topofit drift by selecting the coarse coherence winner for ambiguous candidates in Python and Rust native paths, matching the local StaMPS `ps_topofit.m` coarse `max(coh_trial)` branch.
+  - Added Stage 8 diagnostic oracle row regressions for rows 40316 and 44969 and kept the older RUN_FULL_GATE rows that still represent that artifact.
+  - US-003 remains open: the first-drift fix reduces the Stage 2 boundary mismatch, but `PATCH_1/pm1.mat` still fails on `C_ps` with max_abs `0.0295872`.
+- **Learnings for future iterations:**
+  - Patterns discovered: exact oracle `ph_weight` replay through current grid/CLAP/topofit reproduces oracle `ph_patch` to about `2.6e-7`, so the remaining drift is upstream in the iteration-7 K/weighting path.
+  - Gotchas encountered: threaded CLAP diagnostics are much slower than expected for full PATCH_1; use existing debug artifacts or single-worker probes carefully.
+  - Useful context: oracle final `ph_weight` magnitudes show the largest remaining weighting deltas at rows 22182 and 12693; row 22182 differs by about `0.0498673` in the final saved weighting used by iteration 8.
+---
