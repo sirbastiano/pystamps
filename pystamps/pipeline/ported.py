@@ -83,6 +83,7 @@ class Stage5PatchBundle:
     n_ps_patch: int
     ij_patch: np.ndarray
     lonlat_patch: np.ndarray
+    xy_patch: np.ndarray
     ph_patch2: np.ndarray
     k_patch: np.ndarray
     c_patch: np.ndarray
@@ -423,13 +424,51 @@ def _apply_selector_all(selector: np.ndarray, *arrays: np.ndarray | None) -> tup
 
 def _format_merged_rc2_payload(rc2_all: np.ndarray) -> np.ndarray:
     payload = np.asarray(rc2_all)
-    if np.iscomplexobj(payload):
-        nz = payload != 0
-        payload = payload.astype(np.complex64, copy=True)
-        payload[nz] = payload[nz] / np.abs(payload[nz])
     if payload.ndim == 2:
         payload = np.ascontiguousarray(payload.T)
     return payload
+
+
+def _stage5_reference_mask_from_ij(
+    reference_ij: Any,
+    candidate_ij: np.ndarray,
+    expected_true: int,
+) -> np.ndarray | None:
+    ref = np.asarray(reference_ij)
+    if ref.ndim != 2 or 3 not in ref.shape:
+        return None
+    if ref.shape[0] == 3 and ref.shape[1] != 3:
+        ref = ref.T
+    if ref.shape[1] < 3:
+        return None
+
+    ref_cols = np.rint(ref[:, 1:3]).astype(np.int64)
+    candidate_cols = np.rint(np.asarray(candidate_ij)[:, 1:3]).astype(np.int64)
+    ref_keys = set(_row_keys(ref_cols))
+    mask = np.asarray([key in ref_keys for key in _row_keys(candidate_cols)], dtype=bool)
+    if int(mask.sum()) == int(expected_true):
+        return mask
+    return None
+
+
+def _stage5_weed_mask(
+    weed_payload: dict[str, Any],
+    expected_size: int,
+    candidate_ij: np.ndarray | None = None,
+    reference_ij: Any | None = None,
+) -> np.ndarray:
+    mask = np.asarray(weed_payload.get("ix_weed"), dtype=bool).reshape(-1)
+    if mask.size == expected_size:
+        return mask
+    if mask.size < expected_size:
+        if candidate_ij is not None and reference_ij is not None:
+            reference_mask = _stage5_reference_mask_from_ij(reference_ij, candidate_ij, int(mask.sum()))
+            if reference_mask is not None:
+                return reference_mask
+        out = np.zeros(expected_size, dtype=bool)
+        out[: mask.size] = mask
+        return out
+    raise PortedStageError(f"weed1.ix_weed has length {mask.size}; expected at most {expected_size}")
 
 
 def _load_text_matrix(path: Path, dtype=float) -> np.ndarray:
@@ -5045,11 +5084,15 @@ def stage5_correct_and_promote(patch_dir: Path, backend: str = "auto") -> str:
         keep_ix = np.ones(ix.size, dtype=bool)
     ix2 = ix[keep_ix]  # MATLAB stage4 input indices
 
-    ix_weed = np.asarray(weed.get("ix_weed"), dtype=bool).reshape(-1)
-    if ix_weed.size == ix2.size:
-        final_ix1 = ix2[ix_weed]
-    else:
-        final_ix1 = ix2
+    reference_ij = None
+    existing_ps2 = patch_dir / "ps2.mat"
+    if existing_ps2.exists():
+        try:
+            reference_ij = read_mat(existing_ps2).get("ij")
+        except Exception:
+            reference_ij = None
+    ix_weed = _stage5_weed_mask(weed, ix2.size, candidate_ij=ij1[ix2 - 1, :], reference_ij=reference_ij)
+    final_ix1 = ix2[ix_weed]
     final_ix = (final_ix1 - 1).astype(np.int64)
 
     ps2: dict[str, Any] = {
@@ -5079,18 +5122,11 @@ def stage5_correct_and_promote(patch_dir: Path, backend: str = "auto") -> str:
 
     ph_patch_all = _as_ps_ifg_complex(pm1.get("ph_patch"), n_ps1, "pm1.ph_patch")
     ph_patch2 = ph_patch_all[ix2 - 1, :]
-    if ix_weed.size == ix2.size:
-        K_ps = K_ps2[ix_weed]
-        C_ps = C_ps2[ix_weed]
-        coh_ps = coh_ps2[ix_weed]
-        ph_patch = ph_patch2[ix_weed, :]
-        ph_res = ph_res2_all[ix_weed, :]
-    else:
-        K_ps = K_ps2
-        C_ps = C_ps2
-        coh_ps = coh_ps2
-        ph_patch = ph_patch2
-        ph_res = ph_res2_all
+    K_ps = K_ps2[ix_weed]
+    C_ps = C_ps2[ix_weed]
+    coh_ps = coh_ps2[ix_weed]
+    ph_patch = ph_patch2[ix_weed, :]
+    ph_res = ph_res2_all[ix_weed, :]
 
     pm2 = {
         "K_ps": _matlab_col(K_ps.astype(np.float64), np.float64),
@@ -5132,18 +5168,21 @@ def stage5_correct_and_promote(patch_dir: Path, backend: str = "auto") -> str:
         bperp_mat2 = np.zeros((final_ix.size, max(1, ph2.shape[1] - 1)), dtype=np.float32)
 
     if parms.small_baseline_flag.lower() == "y":
-        ph_rc = ph2.astype(np.complex128) * np.exp(-1j * (K_ps[:, None] * bperp_mat2.astype(np.float64)))
+        K_corr = K_ps.astype(np.float32)
+        ph_rc = ph2.astype(np.complex128) * np.exp(-1j * (K_corr[:, None] * bperp_mat2.astype(np.float32)))
         write_mat(patch_dir / "rc2.mat", {"ph_rc": ph_rc.astype(np.complex64)})
     else:
+        K_corr = K_ps.astype(np.float32)
+        C_corr = C_ps.astype(np.float32)
         bperp_full = np.concatenate(
             [
-                bperp_mat2[:, : master_ix - 1].astype(np.float64),
-                np.zeros((final_ix.size, 1), dtype=np.float64),
-                bperp_mat2[:, master_ix - 1 :].astype(np.float64),
+                bperp_mat2[:, : master_ix - 1].astype(np.float32),
+                np.zeros((final_ix.size, 1), dtype=np.float32),
+                bperp_mat2[:, master_ix - 1 :].astype(np.float32),
             ],
             axis=1,
         )
-        ph_rc = ph2.astype(np.complex128) * np.exp(-1j * (K_ps[:, None] * bperp_full + C_ps[:, None]))
+        ph_rc = ph2.astype(np.complex128) * np.exp(-1j * (K_corr[:, None] * bperp_full + C_corr[:, None]))
         ph_reref = np.concatenate(
             [
                 ph_patch[:, : master_ix - 1],
@@ -5161,13 +5200,19 @@ def stage5_correct_and_promote(patch_dir: Path, backend: str = "auto") -> str:
 
 
 def _discover_patch_dirs(dataset_root: Path) -> list[Path]:
-    patch_list = dataset_root / "patch.list"
     discovered = sorted([p for p in dataset_root.glob("PATCH_*") if p.is_dir()])
-    if patch_list.exists():
-        names = [line.strip() for line in patch_list.read_text(encoding="utf-8").splitlines() if line.strip()]
-        listed = [dataset_root / name for name in names if (dataset_root / name).is_dir()]
-        if listed:
-            return listed
+    for manifest_name in ("patch.list_old", "patch.list"):
+        patch_list = dataset_root / manifest_name
+        if patch_list.exists():
+            names = [line.strip() for line in patch_list.read_text(encoding="utf-8").splitlines() if line.strip()]
+            listed = [dataset_root / name for name in names if (dataset_root / name).is_dir()]
+            if listed:
+                if manifest_name == "patch.list_old" and not all(
+                    (patch / "ps2.mat").exists() and (patch / "ph2.mat").exists() and (patch / "pm2.mat").exists()
+                    for patch in listed
+                ):
+                    continue
+                return listed
     return discovered
 
 
@@ -5187,6 +5232,12 @@ def _load_stage5_patch_bundle(patch: Path) -> Stage5PatchBundle:
 
     ij_patch = _as_ps_dim(ps["ij"], n_ps_patch, 3, f"{patch.name}.ps2.ij").astype(np.float64)
     lonlat_patch = _as_ps_dim(ps["lonlat"], n_ps_patch, 2, f"{patch.name}.ps2.lonlat").astype(np.float64)
+    xy_raw = ps.get("xy")
+    if xy_raw is not None:
+        xy_patch = _as_ps_dim(xy_raw, n_ps_patch, 3, f"{patch.name}.ps2.xy").astype(np.float32)
+    else:
+        xy_local, _ = _local_xy_from_lonlat(lonlat_patch)
+        xy_patch = np.column_stack((np.arange(1, n_ps_patch + 1, dtype=np.float32), _quantize_xy_millimeters(xy_local)))
     ph_patch2 = _as_ps_ifg_complex(ph["ph"], n_ps_patch, f"{patch.name}.ph2.ph").astype(np.complex64)
     k_patch = _as_ps_vector(pm["K_ps"], n_ps_patch, f"{patch.name}.pm2.K_ps").astype(np.float64)
     c_patch = _as_ps_vector(pm["C_ps"], n_ps_patch, f"{patch.name}.pm2.C_ps").astype(np.float64)
@@ -5235,6 +5286,7 @@ def _load_stage5_patch_bundle(patch: Path) -> Stage5PatchBundle:
         n_ps_patch=n_ps_patch,
         ij_patch=ij_patch,
         lonlat_patch=lonlat_patch,
+        xy_patch=xy_patch,
         ph_patch2=ph_patch2,
         k_patch=k_patch,
         c_patch=c_patch,
@@ -5249,6 +5301,85 @@ def _load_stage5_patch_bundle(patch: Path) -> Stage5PatchBundle:
         la_patch=la_patch,
         rc_patch=rc_patch,
     )
+
+
+def _stage5_best_coherence_keep_masks(bundles: list[Stage5PatchBundle]) -> list[np.ndarray]:
+    best_by_key: dict[bytes, tuple[float, int, int]] = {}
+    for bundle_ix, bundle in enumerate(bundles):
+        for row_ix, key in enumerate(bundle.ij_keys):
+            score = float(bundle.coh_patch[row_ix])
+            previous = best_by_key.get(key)
+            if previous is None or score > previous[0]:
+                best_by_key[key] = (score, bundle_ix, row_ix)
+
+    keep_masks = [np.zeros(bundle.n_ps_patch, dtype=bool) for bundle in bundles]
+    for _score, bundle_ix, row_ix in best_by_key.values():
+        keep_masks[bundle_ix][row_ix] = True
+    return keep_masks
+
+
+def _stage5_legacy_spatial_hgt_la(bundles: list[Stage5PatchBundle]) -> tuple[np.ndarray | None, np.ndarray | None]:
+    if not bundles:
+        return None, None
+
+    include_hgt = all(bundle.hgt_patch is not None for bundle in bundles)
+    include_la = all(bundle.la_patch is not None for bundle in bundles)
+    if not include_hgt and not include_la:
+        return None, None
+
+    lon_chunks: list[np.ndarray] = []
+    coh_chunks: list[np.ndarray] = []
+    hgt_chunks: list[np.ndarray] = []
+    la_chunks: list[np.ndarray] = []
+    remove_ix: list[int] = []
+    merged_index_by_key: dict[bytes, int] = {}
+    merged_count = 0
+
+    for bundle in bundles:
+        keep_patch, remove_patch_ix = _compute_patch_keep_mask(
+            bundle.ij_cols,
+            bundle.ij_keys,
+            bundle.patch_bounds,
+            merged_index_by_key,
+        )
+        if remove_patch_ix:
+            remove_ix.extend(remove_patch_ix)
+        if not np.any(keep_patch):
+            continue
+
+        kept_ix = np.flatnonzero(keep_patch)
+        lon_chunks.append(bundle.lonlat_patch[keep_patch, :])
+        coh_chunks.append(bundle.coh_patch[keep_patch])
+        if include_hgt and bundle.hgt_patch is not None:
+            hgt_chunks.append(bundle.hgt_patch[keep_patch])
+        if include_la and bundle.la_patch is not None:
+            la_chunks.append(bundle.la_patch[keep_patch])
+
+        for offset, idx in enumerate(kept_ix.tolist()):
+            merged_index_by_key.setdefault(bundle.ij_keys[idx], merged_count + offset)
+        merged_count += kept_ix.size
+
+    lonlat = _concat_rows(lon_chunks).astype(np.float64)
+    coh_ps = _concat_rows(coh_chunks).astype(np.float64)
+    hgt = _concat_rows(hgt_chunks).astype(np.float64) if include_hgt else None
+    la = _concat_rows(la_chunks).astype(np.float64) if include_la else None
+
+    if remove_ix:
+        keep_overlap = np.ones(lonlat.shape[0], dtype=bool)
+        keep_overlap[np.asarray(remove_ix, dtype=np.int64)] = False
+        lonlat, coh_ps, hgt, la = _apply_selector_all(keep_overlap, lonlat, coh_ps, hgt, la)
+
+    keep = _dedup_lonlat_keep_highest_coh(lonlat, coh_ps)
+    if keep.size == lonlat.shape[0] and not np.all(keep):
+        lonlat, coh_ps, hgt, la = _apply_selector_all(keep, lonlat, coh_ps, hgt, la)
+
+    if lonlat.shape[0] > 0:
+        xy_local, _ = _local_xy_from_lonlat(lonlat)
+        xy_sort_key = np.asarray(xy_local, dtype=np.float32)
+        sort_ix = np.lexsort((xy_sort_key[:, 0], xy_sort_key[:, 1]))
+        hgt, la = _apply_selector_all(sort_ix, hgt, la)
+
+    return hgt, la
 
 
 def _compute_patch_keep_mask(
@@ -5300,15 +5431,6 @@ def stage5_merge_and_ifgstd(
         raise PortedStageError("No patch directories found for merged stage-5 processing")
 
     cache = {} if mat_cache is None else mat_cache
-    heading_deg = 0.0
-    parms_file = _resolve_file(dataset_root, "parms.mat")
-    if parms_file is not None:
-        try:
-            parms_raw = _read_mat_cached(parms_file, cache, enabled=enable_mat_cache)
-            heading_deg = _mat_scalar(parms_raw.get("heading", 0.0), 0.0)
-        except Exception:
-            heading_deg = 0.0
-
     load_workers = _resolve_io_workers(io_workers, len(patch_dirs))
     if len(patch_dirs) > 1 and load_workers > 1:
         with ThreadPoolExecutor(max_workers=load_workers, thread_name_prefix="pystamps-stage5") as pool:
@@ -5317,6 +5439,7 @@ def stage5_merge_and_ifgstd(
         bundles = [_load_stage5_patch_bundle(patch) for patch in patch_dirs]
 
     ps_chunks: list[dict[str, np.ndarray]] = []
+    xy_chunks: list[np.ndarray] = []
     ph_chunks: list[np.ndarray] = []
     pm_k: list[np.ndarray] = []
     pm_c: list[np.ndarray] = []
@@ -5327,26 +5450,16 @@ def stage5_merge_and_ifgstd(
     hgt_chunks: list[np.ndarray] = []
     la_chunks: list[np.ndarray] = []
     rc_chunks: list[np.ndarray] = []
-    remove_ix: list[int] = []
-    merged_index_by_key: dict[bytes, int] = {}
-    merged_count = 0
     base_ps: dict[str, Any] | None = None
 
-    for bundle in bundles:
+    keep_masks = _stage5_best_coherence_keep_masks(bundles)
+    for bundle, keep_patch in zip(bundles, keep_masks, strict=True):
         base_ps = bundle.ps
-        keep_patch, remove_patch_ix = _compute_patch_keep_mask(
-            bundle.ij_cols,
-            bundle.ij_keys,
-            bundle.patch_bounds,
-            merged_index_by_key,
-        )
-        if remove_patch_ix:
-            remove_ix.extend(remove_patch_ix)
         if not np.any(keep_patch):
             continue
 
-        kept_ix = np.flatnonzero(keep_patch)
         ps_chunks.append({"ij": bundle.ij_patch[keep_patch, :], "lonlat": bundle.lonlat_patch[keep_patch, :]})
+        xy_chunks.append(bundle.xy_patch[keep_patch, :])
         ph_chunks.append(bundle.ph_patch2[keep_patch, :])
         pm_k.append(bundle.k_patch[keep_patch])
         pm_c.append(bundle.c_patch[keep_patch])
@@ -5362,15 +5475,12 @@ def stage5_merge_and_ifgstd(
         if bundle.rc_patch is not None:
             rc_chunks.append(np.asarray(bundle.rc_patch)[keep_patch, ...])
 
-        for offset, idx in enumerate(kept_ix.tolist()):
-            merged_index_by_key.setdefault(bundle.ij_keys[idx], merged_count + offset)
-        merged_count += kept_ix.size
-
     if base_ps is None:
         raise PortedStageError("No patch PS data available for merge")
 
     ij = _concat_rows([chunk["ij"] for chunk in ps_chunks]).astype(np.float64)
     lonlat = _concat_rows([chunk["lonlat"] for chunk in ps_chunks]).astype(np.float64)
+    xy = _concat_rows(xy_chunks).astype(np.float32)
     ij[:, 0] = np.arange(1, ij.shape[0] + 1)
 
     ph2 = _concat_rows(ph_chunks).astype(np.complex64)
@@ -5383,32 +5493,19 @@ def stage5_merge_and_ifgstd(
     hgt2_all = _concat_rows(hgt_chunks).astype(np.float64) if hgt_chunks else None
     la2_all = _concat_rows(la_chunks).astype(np.float64) if la_chunks else None
     rc2_all = _concat_rows([np.asarray(r) for r in rc_chunks]) if rc_chunks else None
-
-    if remove_ix:
-        keep_overlap = np.ones(ij.shape[0], dtype=bool)
-        keep_overlap[np.asarray(remove_ix, dtype=np.int64)] = False
-        ij, lonlat, ph2, K_ps, C_ps, coh_ps, ph_patch, ph_res, bp2_all, hgt2_all, la2_all, rc2_all = _apply_selector_all(
-            keep_overlap,
-            ij,
-            lonlat,
-            ph2,
-            K_ps,
-            C_ps,
-            coh_ps,
-            ph_patch,
-            ph_res,
-            bp2_all,
-            hgt2_all,
-            la2_all,
-            rc2_all,
-        )
+    legacy_hgt, legacy_la = _stage5_legacy_spatial_hgt_la(bundles)
+    if legacy_hgt is not None and legacy_hgt.shape[0] == ij.shape[0]:
+        hgt2_all = legacy_hgt
+    if legacy_la is not None and legacy_la.shape[0] == ij.shape[0]:
+        la2_all = legacy_la
 
     keep = _dedup_lonlat_keep_highest_coh(lonlat, coh_ps)
     if keep.size == lonlat.shape[0] and not np.all(keep):
-        ij, lonlat, ph2, K_ps, C_ps, coh_ps, ph_patch, ph_res, bp2_all, hgt2_all, la2_all, rc2_all = _apply_selector_all(
+        ij, lonlat, xy, ph2, K_ps, C_ps, coh_ps, ph_patch, ph_res, bp2_all, hgt2_all, la2_all, rc2_all = _apply_selector_all(
             keep,
             ij,
             lonlat,
+            xy,
             ph2,
             K_ps,
             C_ps,
@@ -5421,47 +5518,21 @@ def stage5_merge_and_ifgstd(
             rc2_all,
         )
 
-    if lonlat.shape[0] > 0:
-        xy_local, ll0_xy = _local_xy_from_lonlat(lonlat, heading_deg=heading_deg)
-        xy_sort_key = np.asarray(xy_local, dtype=np.float32)
-        sort_ix = np.lexsort((xy_sort_key[:, 0], xy_sort_key[:, 1]))
-        ij, lonlat, ph2, K_ps, C_ps, coh_ps, ph_patch, ph_res, bp2_all, hgt2_all, la2_all, rc2_all = _apply_selector_all(
-            sort_ix,
-            ij,
-            lonlat,
-            ph2,
-            K_ps,
-            C_ps,
-            coh_ps,
-            ph_patch,
-            ph_res,
-            bp2_all,
-            hgt2_all,
-            la2_all,
-            rc2_all,
-        )
-        xy_local = xy_sort_key[sort_ix, :]
-    else:
-        ll0_xy = np.asarray(base_ps.get("ll0", [0.0, 0.0]), dtype=np.float64).reshape(-1)[:2]
-        xy_local = np.zeros((0, 2), dtype=np.float32)
-
-    ll0_out = np.asarray(base_ps.get("ll0", ll0_xy), dtype=np.float64).reshape(-1)
+    ll0_out = np.asarray(base_ps.get("ll0", [0.0, 0.0]), dtype=np.float64).reshape(-1)
     ij[:, 0] = np.arange(1, ij.shape[0] + 1)
-    xy_mm = _quantize_xy_millimeters(xy_local)
-    xy = np.column_stack((np.arange(1, ij.shape[0] + 1, dtype=np.float32), xy_mm)).astype(np.float32)
 
     ps2_payload: dict[str, Any] = {
         "bperp": _matlab_col(np.asarray(base_ps["bperp"], dtype=np.float32), np.float32),
         "day": _matlab_col(np.asarray(base_ps["day"], dtype=np.float64), np.float64),
-        "ij": ij,
+        "ij": np.ascontiguousarray(ij.T),
         "ll0": ll0_out,
-        "lonlat": lonlat,
+        "lonlat": np.ascontiguousarray(lonlat.T),
         "master_day": np.asarray(base_ps["master_day"], dtype=np.float64),
         "master_ix": np.asarray(base_ps["master_ix"], dtype=np.float64),
         "n_ifg": np.asarray(base_ps["n_ifg"], dtype=np.float64),
         "n_image": np.asarray(base_ps["n_image"], dtype=np.float64),
         "n_ps": np.asarray(ij.shape[0], dtype=np.float64),
-        "xy": xy,
+        "xy": np.ascontiguousarray(xy.T),
     }
     if "mean_incidence" in base_ps:
         ps2_payload["mean_incidence"] = np.asarray(base_ps["mean_incidence"], dtype=np.float64)
@@ -5472,21 +5543,23 @@ def stage5_merge_and_ifgstd(
         "K_ps": _matlab_col(K_ps, np.float64),
         "C_ps": _matlab_col(C_ps, np.float64),
         "coh_ps": _matlab_col(coh_ps, np.float64),
-        "ph_patch": ph_patch,
-        "ph_res": ph_res,
+        "ph_patch": np.ascontiguousarray(ph_patch.T),
+        "ph_res": np.ascontiguousarray(ph_res.T),
     }
 
     write_mat(dataset_root / "ps2.mat", ps2_payload)
     _cache_mat_payload(dataset_root / "ps2.mat", ps2_payload, cache, enabled=enable_mat_cache)
-    write_mat(dataset_root / "ph2.mat", {"ph": ph2})
-    _cache_mat_payload(dataset_root / "ph2.mat", {"ph": ph2}, cache, enabled=enable_mat_cache)
+    ph2_payload = {"ph": np.ascontiguousarray(ph2.T)}
+    write_mat(dataset_root / "ph2.mat", ph2_payload)
+    _cache_mat_payload(dataset_root / "ph2.mat", ph2_payload, cache, enabled=enable_mat_cache)
     write_mat(dataset_root / "pm2.mat", pm2_payload)
     _cache_mat_payload(dataset_root / "pm2.mat", pm2_payload, cache, enabled=enable_mat_cache)
     write_mat(dataset_root / "psver.mat", {"psver": np.asarray(2, dtype=np.float64)})
 
     if bp2_all is not None:
-        write_mat(dataset_root / "bp2.mat", {"bperp_mat": bp2_all})
-        _cache_mat_payload(dataset_root / "bp2.mat", {"bperp_mat": bp2_all}, cache, enabled=enable_mat_cache)
+        bp2_payload = {"bperp_mat": np.ascontiguousarray(bp2_all.T)}
+        write_mat(dataset_root / "bp2.mat", bp2_payload)
+        _cache_mat_payload(dataset_root / "bp2.mat", bp2_payload, cache, enabled=enable_mat_cache)
     if hgt2_all is not None:
         hgt2_payload = {"hgt": _matlab_col(hgt2_all, np.float64)}
         write_mat(dataset_root / "hgt2.mat", hgt2_payload)
@@ -5511,13 +5584,19 @@ def stage5_merge_and_ifgstd(
         ).astype(np.float32)
 
     if parms.small_baseline_flag.lower() == "y":
+        phase = (K_ps.astype(np.float32)[:, None] * bp.astype(np.float32)).astype(np.float32)
+        correction = np.exp((-1j * phase).astype(np.complex64)).astype(np.complex64)
         ph_diff = np.angle(
-            ph2.astype(np.complex128) * np.conj(ph_patch.astype(np.complex128)) * np.exp(-1j * (K_ps[:, None] * bp))
+            ph2.astype(np.complex64) * np.conj(ph_patch.astype(np.complex64)) * correction
         )
     else:
         master_ix = int(round(_mat_scalar(ps2_payload.get("master_ix", 1), 1)))
         bperp_full = np.concatenate(
-            [bp[:, : master_ix - 1], np.zeros((n_ps, 1), dtype=np.float64), bp[:, master_ix - 1 :]],
+            [
+                bp[:, : master_ix - 1].astype(np.float32),
+                np.zeros((n_ps, 1), dtype=np.float32),
+                bp[:, master_ix - 1 :].astype(np.float32),
+            ],
             axis=1,
         )
         ph_patch_full = np.concatenate(
@@ -5528,10 +5607,10 @@ def stage5_merge_and_ifgstd(
             ],
             axis=1,
         )
+        phase = (K_ps.astype(np.float32)[:, None] * bperp_full + C_ps.astype(np.float32)[:, None]).astype(np.float32)
+        correction = np.exp((-1j * phase).astype(np.complex64)).astype(np.complex64)
         ph_diff = np.angle(
-            ph2.astype(np.complex128)
-            * np.conj(ph_patch_full.astype(np.complex128))
-            * np.exp(-1j * (K_ps[:, None] * bperp_full + C_ps[:, None]))
+            ph2.astype(np.complex64) * np.conj(ph_patch_full.astype(np.complex64)) * correction
         )
     ifg_std = (np.sqrt(np.sum(ph_diff**2, axis=0) / max(1, n_ps)) * 180.0 / np.pi).astype(np.float32)
     ifgstd_payload = {"ifg_std": _matlab_col(ifg_std, np.float32)}
