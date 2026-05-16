@@ -5,6 +5,46 @@ Started: Wed May 13 09:42:22 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-05-16 17:55:40 UTC] - US-007: Restore Stage 6 unwrap parity
+Thread: 
+Run: 20260515-151412-1547726 (iteration 7)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-7.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-7.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 81f6ae2 fix(stage6): resolve bundled unwrap tools
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run pytest -q tests/test_stage6_ported.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: make build -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (terminated after >85 minutes in Stage 2; DeadKernelError)
+  - Command: make audit -> FAIL (terminated after >20 minutes with no current audit `PATCH_1/pm1.mat` or Stage 6 debug artifact)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (AssertionError)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (stale executed notebook still reports Stage 2-8 failures)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - dist/pystamps-0.1.1.dev118+g6b3fe325c.d20260516-cp314-cp314-linux_x86_64.whl
+  - dist/pystamps-0.1.1.dev118+g6b3fe325c.d20260516.tar.gz
+  - pystamps/_version.py
+  - pystamps/pipeline/ported.py
+  - tests/test_stage6_ported.py
+- What was implemented
+  - Added `.cache/pystamps-tools/bin` to Stage 6 external-tool resolution so exact audit/notebook paths can resolve bundled `triangle` and `snaphu` without PATH edits.
+  - Added a Stage 6 regression proving bundled `snaphu` is found when PATH is empty.
+  - Recorded the repeated notebook Stage 2 hang in the error log and guardrails.
+  - US-007 remains incomplete: Stage 6 artifact parity was not proven because the required notebook and audit gates did not advance past existing Stage 2 execution blockers.
+- **Learnings for future iterations:**
+  - Patterns discovered: `_maybe_resolve_external_tool` already centralizes Stage 4/6/7/8 external-tool lookup, so adding the repo-local cache there fixes exact `make audit` tool discovery without touching every caller.
+  - Gotchas encountered: the stage-by-stage notebook can stay CPU-bound in Stage 2 for over an hour before any downstream Stage 6 evidence is produced.
+  - Useful context: positive guardrail routing check: a stage-by-stage notebook run stuck in Stage 2 with unchanged `PATCH_*/pm1.mat` mtimes should trigger `Bound Notebook Stage 2 Hangs`; negative check: a fast failing pytest command should not trigger that sign.
+---
 ## [2026-05-16 09:12:25 UTC] - US-004: Restore Stage 3 selection parity
 Thread: 
 Run: 20260515-151412-1547726 (iteration 4)
