@@ -503,3 +503,141 @@ def test_stage3_saved_patch1_row_matches_oracle_residual_angles() -> None:
     expected = np.asarray(sel["ph_res2"], dtype=np.float32)[row, ifg_index_ix]
 
     np.testing.assert_allclose(observed, expected, rtol=0.0, atol=np.finfo(np.float32).eps)
+
+
+def test_stage3_boundary_keep_ix_candidates_match_oracle() -> None:
+    patch_dir = Path("inputs_and_outputs/InSAR_dataset_test_stage8diag_hl/PATCH_1")
+
+    sel = read_mat(patch_dir / "select1.mat")
+    ps = read_mat(patch_dir / "ps1.mat")
+    ph1 = read_mat(patch_dir / "ph1.mat")
+    bp1 = read_mat(patch_dir / "bp1.mat")
+    pm1 = read_mat(patch_dir / "pm1.mat")
+    da1 = read_mat(patch_dir / "da1.mat")
+    parms = ported._load_parms(patch_dir)
+
+    boundary_rows = np.asarray([19181, 52486, 80527], dtype=np.int64)
+    ix = np.asarray(sel["ix"], dtype=np.float64).reshape(-1).astype(np.int64)
+    source_ix = ix[boundary_rows]
+    np.testing.assert_array_equal(
+        source_ix,
+        np.asarray([19289, 52810, 81017], dtype=np.int64),
+    )
+
+    ph_grid = np.asarray(pm1["ph_grid"], dtype=np.complex64)
+    grid_ij = np.asarray(pm1["grid_ij"], dtype=np.int64)
+    ph_all = np.asarray(ph1["ph"], dtype=np.complex128)
+    master_ix = int(round(float(np.asarray(ps["master_ix"], dtype=np.float64).reshape(-1)[0])))
+    ph_work = ph_all[:, np.arange(ph_all.shape[1]) != (master_ix - 1)]
+    bperp_work = np.asarray(ps["bperp"], dtype=np.float64).reshape(-1)[
+        np.arange(ph_all.shape[1]) != (master_ix - 1)
+    ]
+    bperp_mat = np.asarray(bp1["bperp_mat"], dtype=np.float64)
+    ifg_index_ix = np.asarray(sel["ifg_index"], dtype=np.float64).reshape(-1).astype(np.int64) - 1
+    options = ported._build_stage_options(patch_dir)
+    n_win = int(round(options.clap_win))
+    n_trial_wraps = float(np.asarray(pm1["n_trial_wraps"], dtype=np.float64).reshape(-1)[0])
+
+    observed_k = []
+    observed_c = []
+    observed_coh = []
+    for row, ps_idx_1b in zip(boundary_rows, source_ix):
+        ps_idx = int(ps_idx_1b - 1)
+        (
+            ph_patch2_row,
+            ph_res2_row,
+            k_opt,
+            c_opt,
+            coh_opt,
+            valid_row,
+        ) = ported._stage3_reestimate_candidate(
+            ph_grid=ph_grid,
+            grid_ij=grid_ij,
+            ph_work_row=ph_work[ps_idx, :],
+            bperp_row=bperp_mat[ps_idx, :],
+            ifg_index_ix=ifg_index_ix,
+            ps_idx=ps_idx,
+            n_i=int(np.max(grid_ij[:, 0])),
+            n_j=int(np.max(grid_ij[:, 1])),
+            n_win=n_win,
+            slc_osf=max(1, int(round(float(parms.slc_osf)))),
+            alpha=float(options.clap_alpha),
+            beta=float(options.clap_beta),
+            low_pass=np.asarray(pm1["low_pass"], dtype=np.float64),
+            n_trial_wraps=n_trial_wraps,
+        )
+        assert valid_row
+        np.testing.assert_allclose(
+            ph_patch2_row.astype(np.complex64),
+            np.asarray(sel["ph_patch2"], dtype=np.complex64)[row, :],
+            rtol=0.0,
+            atol=np.finfo(np.float32).eps,
+        )
+        np.testing.assert_allclose(
+            ph_res2_row,
+            np.asarray(sel["ph_res2"], dtype=np.float32)[row, :],
+            rtol=0.0,
+            atol=4 * np.finfo(np.float32).eps,
+        )
+        observed_k.append(k_opt)
+        observed_c.append(c_opt)
+        observed_coh.append(coh_opt)
+
+    observed_k = np.asarray(observed_k, dtype=np.float64)
+    observed_c = np.asarray(observed_c, dtype=np.float64)
+    observed_coh = np.asarray(observed_coh, dtype=np.float64)
+    np.testing.assert_allclose(
+        observed_k,
+        np.asarray(sel["K_ps2"]).reshape(-1)[boundary_rows],
+        rtol=0.0,
+        atol=np.finfo(np.float32).eps,
+    )
+    np.testing.assert_allclose(
+        observed_c,
+        np.asarray(sel["C_ps2"]).reshape(-1)[boundary_rows],
+        rtol=0.0,
+        atol=np.finfo(np.float32).eps,
+    )
+    np.testing.assert_allclose(
+        observed_coh,
+        np.asarray(sel["coh_ps2"]).reshape(-1)[boundary_rows],
+        rtol=0.0,
+        atol=np.finfo(np.float32).eps,
+    )
+
+    n_ps = int(round(float(np.asarray(ps["n_ps"], dtype=np.float64).reshape(-1)[0])))
+    coh_for_threshold = np.asarray(pm1["coh_ps"], dtype=np.float64).reshape(-1).copy()
+    coh_for_threshold[ix - 1] = np.asarray(sel["coh_ps2"], dtype=np.float64).reshape(-1)
+    D_A = np.asarray(da1["D_A"], dtype=np.float64).reshape(-1)
+    D_A_sort = np.sort(D_A)
+    bin_size = 10000 if D_A.size >= 50000 else 2000
+    D_A_max = np.concatenate(
+        ([0.0], D_A_sort[bin_size : D_A.size - bin_size : bin_size], [D_A_sort[-1]])
+    )
+    xy = ported._as_ps_dim(ps.get("xy"), n_ps, 3, "ps1.xy").astype(np.float64)
+    patch_area = np.prod(np.max(xy[:, 1:3], axis=0) - np.min(xy[:, 1:3], axis=0)) / 1e6
+    max_percent_rand = float(parms.density_rand) * patch_area / max(1, (D_A_max.size - 1))
+    if parms.select_method.upper() == "PERCENT":
+        max_percent_rand = float(parms.percent_rand)
+
+    coh_thresh_all, _ = ported._coh_threshold_from_dist(
+        coh_values=coh_for_threshold,
+        D_A=D_A,
+        D_A_max=D_A_max,
+        coh_bins=np.asarray(pm1["coh_bins"], dtype=np.float64).reshape(-1),
+        Nr_dist=np.asarray(pm1["Nr"], dtype=np.float64).reshape(-1),
+        low_coh_thresh=15 if parms.small_baseline_flag.lower() == "y" else 31,
+        max_percent_rand=max_percent_rand,
+        select_method=parms.select_method,
+    )
+    coh_thresh = coh_thresh_all[source_ix - 1]
+    bperp_range = float(np.max(bperp_work) - np.min(bperp_work))
+    K_ps = np.asarray(pm1["K_ps"], dtype=np.float64).reshape(-1)[source_ix - 1]
+    observed_keep = (observed_coh > coh_thresh) & (
+        np.abs(K_ps - observed_k) < (2 * np.pi / bperp_range)
+    )
+    expected_keep = np.asarray(sel["keep_ix"]).reshape(-1).astype(bool)[boundary_rows]
+
+    np.testing.assert_array_equal(expected_keep, np.asarray([True, False, False]))
+    np.testing.assert_array_equal(observed_keep, expected_keep)
+    assert np.count_nonzero(np.asarray(sel["keep_ix"]).reshape(-1).astype(bool)) == 79228

@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-16 08:54:53 | run=20260515-151412-1547726 | iter=3 | mode=build | story=US-003 | duration=25407s | status=success
 - 2026-05-16 01:51:24 | run=20260515-151412-1547726 | iter=2 | mode=build | story=US-002 | duration=21105s | status=success
 - 2026-05-15 19:59:36 | run=20260515-151412-1547726 | iter=1 | mode=build | story=US-001 | duration=17123s | status=success
 - 2026-05-13 14:48:06 | run=20260513-094222-768318 | iter=5 | mode=build | story=US-005 | duration=1020s | status=success
@@ -76,3 +77,8 @@
 [2026-05-16 08:21:49] Reverted exploratory Stage 2 precision-path change; keeping topofit coarse selector diagnostics
 [2026-05-16 08:53:08] Ran US-003 targeted Stage 2/native tests and confirmed Stage 2 pm1.mat still fails at C_ps max_abs 0.0295872
 [2026-05-16 08:54:26] Updated US-003 progress log with incomplete Stage 2 outcome and residual C_ps drift
+[2026-05-16 08:54:53] ITERATION 3 end (duration=25407s)
+[2026-05-16 08:54:56] ITERATION 4 start (mode=build story=US-004)
+[2026-05-16 08:56:49] Start US-004 Stage 3 selection parity work
+[2026-05-16 09:07:45] Added US-004 Stage 3 boundary keep_ix regression and per-candidate reestimate helper
+[2026-05-16 09:10:32] Ran US-004 pytest gates; select1 parity and latest audit assertions remain blocked by upstream Stage 2 drift

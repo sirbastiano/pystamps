@@ -2751,6 +2751,73 @@ def _ifg_index_for_selection(ps: dict[str, Any], parms: Parms) -> np.ndarray:
     return np.asarray(ifg, dtype=np.float64)
 
 
+def _stage3_reestimate_candidate(
+    *,
+    ph_grid: np.ndarray,
+    grid_ij: np.ndarray,
+    ph_work_row: np.ndarray,
+    bperp_row: np.ndarray,
+    ifg_index_ix: np.ndarray,
+    ps_idx: int,
+    n_i: int,
+    n_j: int,
+    n_win: int,
+    slc_osf: int,
+    alpha: float,
+    beta: float,
+    low_pass: np.ndarray,
+    n_trial_wraps: float,
+) -> tuple[np.ndarray, np.ndarray, float, float, float, bool]:
+    n_ifg_work = ph_work_row.size
+    ph_patch2_row = np.zeros(n_ifg_work, dtype=np.complex128)
+    ph_res2_row = np.zeros(n_ifg_work, dtype=np.float32)
+    half_win = n_win // 2
+    ps_ij_i = int(grid_ij[ps_idx, 0])
+    ps_ij_j = int(grid_ij[ps_idx, 1])
+
+    i_min = max(ps_ij_i - half_win, 1)
+    i_max = i_min + n_win - 1
+    if i_max > n_i:
+        i_min = i_min - i_max + n_i
+        i_max = n_i
+    j_min = max(ps_ij_j - half_win, 1)
+    j_max = j_min + n_win - 1
+    if j_max > n_j:
+        j_min = j_min - j_max + n_j
+        j_max = n_j
+
+    if i_min < 1 or j_min < 1:
+        return ph_patch2_row, ph_res2_row, 0.0, 0.0, 0.0, False
+
+    ps_bit_i = ps_ij_i - i_min + 1
+    ps_bit_j = ps_ij_j - j_min + 1
+    ph_bit = ph_grid[i_min - 1 : i_max, j_min - 1 : j_max, :].astype(np.complex128, copy=True)
+    ph_bit[ps_bit_i - 1, ps_bit_j - 1, :] = 0
+
+    rad = slc_osf - 1
+    ii = np.arange(ps_bit_i - rad, ps_bit_i + rad + 1, dtype=np.int64)
+    ii = ii[(ii > 0) & (ii <= ph_bit.shape[0])] - 1
+    jj = np.arange(ps_bit_j - rad, ps_bit_j + rad + 1, dtype=np.int64)
+    jj = jj[(jj > 0) & (jj <= ph_bit.shape[1])] - 1
+    if ii.size and jj.size:
+        ph_bit[np.ix_(ii, jj, np.asarray([0], dtype=np.int64))] = 0
+
+    ph_filt = _clap_filt_patch_stack(ph_bit, alpha, beta, low_pass)
+    ph_patch2_row = np.asarray(ph_filt[ps_bit_i - 1, ps_bit_j - 1, :], dtype=np.complex128)
+    psdph = ph_work_row * np.conj(ph_patch2_row)
+    if np.count_nonzero(psdph == 0) != 0:
+        return ph_patch2_row, ph_res2_row, np.nan, 0.0, np.nan, False
+
+    psdph = np.divide(psdph, np.abs(psdph), out=np.zeros_like(psdph), where=np.abs(psdph) != 0)
+    k_opt, c_opt, coh_opt, phase_residual = _ps_topofit_single(
+        psdph[ifg_index_ix].astype(np.complex64, copy=False),
+        bperp_row[ifg_index_ix],
+        n_trial_wraps,
+    )
+    ph_res2_row[ifg_index_ix] = np.angle(phase_residual).astype(np.float32, copy=False)
+    return ph_patch2_row, ph_res2_row, k_opt, c_opt, coh_opt, True
+
+
 def _ifg_index_for_weed(ps: dict[str, Any], parms: Parms) -> np.ndarray:
     n_ifg = int(round(_mat_scalar(ps.get("n_ifg", 0), 0)))
     drop = set(int(v) for v in parms.drop_ifg_index.tolist())
@@ -4461,7 +4528,6 @@ def stage3_select_ps(patch_dir: Path, backend: str = "auto") -> str:
                     n_win = int(round(options.clap_win))
                     if n_win <= 0:
                         n_win = 32
-                    half_win = n_win // 2
                     alpha = float(options.clap_alpha)
                     beta = float(options.clap_beta)
                     low_pass = np.asarray(pm.get("low_pass"), dtype=np.float64)
@@ -4472,64 +4538,32 @@ def stage3_select_ps(patch_dir: Path, backend: str = "auto") -> str:
                     n_j = int(np.max(grid_ij[:, 1]))
                     slc_osf = max(1, int(round(float(parms.slc_osf))))
 
-                    for row_local, ps_idx in enumerate(ix0):
-                        ps_ij_i = int(grid_ij[ps_idx, 0])
-                        ps_ij_j = int(grid_ij[ps_idx, 1])
-
-                        i_min = max(ps_ij_i - half_win, 1)
-                        i_max = i_min + n_win - 1
-                        if i_max > n_i:
-                            i_min = i_min - i_max + n_i
-                            i_max = n_i
-                        j_min = max(ps_ij_j - half_win, 1)
-                        j_max = j_min + n_win - 1
-                        if j_max > n_j:
-                            j_min = j_min - j_max + n_j
-                            j_max = n_j
-
-                        if i_min < 1 or j_min < 1:
-                            ph_patch2[row_local, :] = 0
-                            continue
-
-                        ps_bit_i = ps_ij_i - i_min + 1
-                        ps_bit_j = ps_ij_j - j_min + 1
-                        ph_bit = ph_grid[i_min - 1 : i_max, j_min - 1 : j_max, :].astype(np.complex128, copy=True)
-                        ph_bit[ps_bit_i - 1, ps_bit_j - 1, :] = 0
-
-                        rad = slc_osf - 1
-                        ii = np.arange(ps_bit_i - rad, ps_bit_i + rad + 1, dtype=np.int64)
-                        ii = ii[(ii > 0) & (ii <= ph_bit.shape[0])] - 1
-                        jj = np.arange(ps_bit_j - rad, ps_bit_j + rad + 1, dtype=np.int64)
-                        jj = jj[(jj > 0) & (jj <= ph_bit.shape[1])] - 1
-                        if ii.size and jj.size:
-                            ph_bit[np.ix_(ii, jj, np.asarray([0], dtype=np.int64))] = 0
-
-                        ph_filt = np.empty_like(ph_bit, dtype=np.complex128)
-                        for i_ifg in range(n_ifg_work):
-                            ph_filt[:, :, i_ifg] = _clap_filt_patch(ph_bit[:, :, i_ifg], alpha, beta, low_pass)
-                        ph_patch2[row_local, :] = np.asarray(ph_filt[ps_bit_i - 1, ps_bit_j - 1, :], dtype=np.complex128)
-
                     bperp_mat = _as_ps_matrix(read_mat(bp1_file).get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float64)
                     n_trial_wraps = float(_mat_scalar(pm.get("n_trial_wraps", 0.0), 0.0))
                     valid_rows = np.zeros(ix.size, dtype=bool)
                     for row_local, ps_idx in enumerate(ix0):
-                        psdph = ph_work[ps_idx, :] * np.conj(ph_patch2[row_local, :])
-                        if np.count_nonzero(psdph == 0) != 0:
-                            K_ps2[row_local] = np.nan
-                            coh_ps2[row_local] = np.nan
-                            continue
-                        psdph = np.divide(psdph, np.abs(psdph), out=np.zeros_like(psdph), where=np.abs(psdph) != 0)
-                        psdph_fit = psdph[ifg_index_ix].astype(np.complex64, copy=False)
-                        k_opt, c_opt, coh_opt, phase_residual = _ps_topofit_single(
-                            psdph_fit,
-                            bperp_mat[ps_idx, :][ifg_index_ix],
-                            n_trial_wraps,
+                        ph_patch2_row, ph_res2_row, k_opt, c_opt, coh_opt, valid_row = _stage3_reestimate_candidate(
+                            ph_grid=ph_grid,
+                            grid_ij=grid_ij,
+                            ph_work_row=ph_work[ps_idx, :],
+                            bperp_row=bperp_mat[ps_idx, :],
+                            ifg_index_ix=ifg_index_ix,
+                            ps_idx=int(ps_idx),
+                            n_i=n_i,
+                            n_j=n_j,
+                            n_win=n_win,
+                            slc_osf=slc_osf,
+                            alpha=alpha,
+                            beta=beta,
+                            low_pass=low_pass,
+                            n_trial_wraps=n_trial_wraps,
                         )
+                        ph_patch2[row_local, :] = ph_patch2_row
+                        ph_res2[row_local, :] = ph_res2_row
                         K_ps2[row_local] = k_opt
                         C_ps2[row_local] = c_opt
                         coh_ps2[row_local] = coh_opt
-                        ph_res2[row_local, ifg_index_ix] = np.angle(phase_residual).astype(np.float32, copy=False)
-                        valid_rows[row_local] = True
+                        valid_rows[row_local] = valid_row
 
                     coh_for_threshold = coh_ps.copy()
                     coh_for_threshold[ix0] = coh_ps2
