@@ -5,7 +5,11 @@ from pathlib import Path
 import numpy as np
 
 from pystamps.pipeline import ported
-from pystamps.pipeline.ported import _smooth_scla_neighbor_envelope
+from pystamps.pipeline.ported import (
+    _compute_active_single_master_uw_space_time,
+    _single_master_scaled_trial_wraps,
+    _smooth_scla_neighbor_envelope,
+)
 
 
 def test_smooth_scla_neighbor_envelope_clamps_to_neighbor_bounds() -> None:
@@ -157,3 +161,52 @@ def test_stage8_filter_scn_reruns_unwrap_and_writes_mean_velocity(monkeypatch: o
     assert "scla_smooth2.mat" not in written
     assert set(written) == {"mean_v.mat", "uw_space_time.mat"}
     np.testing.assert_allclose(written["mean_v.mat"]["m"], np.asarray([[1.0], [2.0]], dtype=np.float32), atol=0.0, rtol=0.0)
+
+
+def test_single_master_la_error_trial_window_uses_daisy_chain_perp_baseline_range() -> None:
+    scaled = _single_master_scaled_trial_wraps(
+        n_trial_wraps=2.0,
+        bperp_range_orig=150.0,
+        bperp_range=50.0,
+    )
+
+    assert scaled == 2.0 * 50.0 / 150.0
+
+
+def test_single_master_space_time_noise_uses_matlab_rejection_cutoff(monkeypatch: object) -> None:
+    def fake_estimate(dph_space: np.ndarray, **kwargs: object) -> np.ndarray:
+        return np.zeros((dph_space.shape[0],), dtype=np.float32)
+
+    def fake_smooth(*args: object, **kwargs: object) -> tuple[np.ndarray, np.ndarray]:
+        return (
+            np.zeros((2, 3), dtype=np.float32),
+            np.asarray(
+                [
+                    [0.0, 0.0, 2.0],
+                    [0.0, 0.0, 2.2],
+                ],
+                dtype=np.float32,
+            ),
+        )
+
+    monkeypatch.setattr(ported, "_estimate_la_error_single_master", fake_estimate)
+    monkeypatch.setattr(ported, "_smooth_3d_full_single_master", fake_smooth)
+
+    uw_ph = np.ones((3, 3), dtype=np.complex64)
+    edgs = np.asarray([[1.0, 1.0, 2.0], [2.0, 2.0, 3.0]], dtype=np.float64)
+
+    _G, _dph_space, _dph_smooth_ifg, dph_noise, dph_space_uw = _compute_active_single_master_uw_space_time(
+        uw_ph,
+        edgs,
+        day=np.asarray([0.0, 10.0, 20.0, 30.0], dtype=np.float64),
+        master_ix=1,
+        bperp=np.asarray([100.0, 200.0, 300.0], dtype=np.float64),
+        unwrap_ifg=np.asarray([2, 3, 4], dtype=np.int64),
+        time_win=36.0,
+        n_trial_wraps=1.0,
+    )
+
+    np.testing.assert_allclose(dph_noise[0], np.asarray([0.0, 0.0, 2.0], dtype=np.float32), atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(dph_space_uw[0], np.asarray([0.0, 0.0, 2.0], dtype=np.float32), atol=0.0, rtol=0.0)
+    assert np.isnan(dph_noise[1]).all()
+    assert np.isnan(dph_space_uw[1]).all()

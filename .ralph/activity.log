@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-16 17:56:51 | run=20260515-151412-1547726 | iter=7 | mode=build | story=US-007 | duration=7456s | status=success
 - 2026-05-16 15:52:33 | run=20260515-151412-1547726 | iter=6 | mode=build | story=US-006 | duration=8430s | status=success
 - 2026-05-16 13:31:59 | run=20260515-151412-1547726 | iter=5 | mode=build | story=US-005 | duration=15507s | status=success
 - 2026-05-16 09:13:30 | run=20260515-151412-1547726 | iter=4 | mode=build | story=US-004 | duration=1114s | status=success
@@ -106,3 +107,10 @@
 [2026-05-16 17:54:14] US-007 verification: make audit terminated after Stage 2 made no artifact progress for current audit stamp
 [2026-05-16 17:54:35] US-007 verification completed: Stage 6/full pytest/build passed; notebook, make audit, latest audit assertion, and notebook parity helper failed
 [2026-05-16 17:56:17] Updated progress log for US-007 outcome
+[2026-05-16 17:56:51] ITERATION 7 end (duration=7456s)
+[2026-05-16 17:56:54] ITERATION 8 start (mode=build story=US-008)
+[2026-05-16 17:58:31] Start US-008 Stage 7/8 parity work
+[2026-05-16 18:40:05] Implemented US-008 Stage 8 noise parity fixes
+[2026-05-16 20:16:19] Notebook gate blocked by repeated no-progress execution
+[2026-05-16 20:44:55] make audit blocked by no-artifact Stage 2 run
+[2026-05-16 20:49:36] US-008 verification recorded focused pass and blocked global gates

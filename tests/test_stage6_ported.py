@@ -203,14 +203,14 @@ def test_extract_grid_values_for_ps_uses_matlab_column_major_order() -> None:
     np.testing.assert_array_equal(out, np.asarray([1.0, 5.0, 3.0], dtype=np.float32))
 
 
-def test_compute_active_single_master_masks_noise_above_legacy_cutoff(monkeypatch) -> None:
+def test_compute_active_single_master_masks_noise_above_matlab_cutoff(monkeypatch) -> None:
     def fake_estimate(*args, **kwargs):
         return np.zeros((1,), dtype=np.float32)
 
     def fake_smooth(*args, **kwargs):
         return (
             np.zeros((1, 3), dtype=np.float32),
-            np.asarray([[0.0, 0.0, 2.2]], dtype=np.float32),
+            np.asarray([[0.0, 0.0, 2.4]], dtype=np.float32),
         )
 
     monkeypatch.setattr(ported, "_estimate_la_error_single_master", fake_estimate)

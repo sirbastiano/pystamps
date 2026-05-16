@@ -2037,6 +2037,16 @@ def _single_master_insert_master_ix(day: np.ndarray) -> int:
     return int(close_master_ix[-1])
 
 
+def _single_master_scaled_trial_wraps(
+    n_trial_wraps: float,
+    bperp_range_orig: float,
+    bperp_range: float,
+) -> float:
+    if bperp_range_orig == 0.0 or bperp_range == 0.0:
+        return float(n_trial_wraps)
+    return float(n_trial_wraps) * bperp_range / bperp_range_orig
+
+
 def _estimate_la_error_single_master(
     dph_space: np.ndarray,
     *,
@@ -2057,9 +2067,7 @@ def _estimate_la_error_single_master(
     bperp_diff = np.diff(bperp_master)
     bperp_range_orig = float(np.max(bperp_arr) - np.min(bperp_arr))
     bperp_range = float(np.max(bperp_diff) - np.min(bperp_diff))
-    n_trial_wraps_sub = float(n_trial_wraps)
-    if bperp_range_orig != 0.0:
-        n_trial_wraps_sub *= bperp_range / bperp_range_orig
+    n_trial_wraps_sub = _single_master_scaled_trial_wraps(n_trial_wraps, bperp_range_orig, bperp_range)
     ix = bperp_diff != 0
     bperp_diff = bperp_diff[ix]
 
