@@ -352,3 +352,44 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `make audit` still needs explicit bundled tool resolution; exact `make audit` failed at Stage 6 with missing `snaphu`.
   - Useful context: positive guardrail routing check: a prompt to run `make audit` should trigger the audit external-tool sign; negative check: a pytest-only change should not trigger that sign.
 ---
+## [2026-05-16 15:50:23 UTC] - US-006: Restore Stage 5 merge parity
+Thread:
+Run: 20260515-151412-1547726 (iteration 6)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-6.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f668a78 fix(stage5): align merge artifact ordering
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run pytest -q tests/test_stage5_ported.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: make build -> PASS
+  - Command: git diff --check -> PASS
+  - Command: uv run python - <<'PY' ... stage5_merge_and_ifgstd + compare root Stage 5 artifacts ... PY -> PASS
+  - Command: uv run python - <<'PY' ... stage5_correct_and_promote + compare patch Stage 5 artifacts ... PY -> FAIL (17 patch artifact mismatches remain)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (DeadKernelError after more than 20 minutes in Stage 2; no pm1.mat produced)
+  - Command: PATH="$PWD/.cache/pystamps-tools/bin:$PATH" timeout 1200 make audit -> FAIL (timed out/terminated after 1200s)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (`completed=false`, `ok=false`, `interrupted=true`, `failed_workflows=['full_validation']`)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - dist/pystamps-0.1.1.dev116+g1c8c14b46.d20260516-cp314-cp314-linux_x86_64.whl
+  - dist/pystamps-0.1.1.dev116+g1c8c14b46.d20260516.tar.gz
+  - pystamps/_version.py
+  - pystamps/pipeline/ported.py
+  - tests/test_stage5_ported.py
+- What was implemented
+  - Repaired short legacy Stage 5 weed masks with reference `ps2.ij` recovery and false-padding fallback.
+  - Matched root Stage 5 merged artifacts from oracle patch outputs by selecting duplicate rows by highest coherence, preserving patch `xy`, writing root MAT payloads in oracle orientation, preserving `rc2` magnitudes, using float32 `ifgstd2` math, and preserving legacy `hgt2`/`la2` ordering.
+  - Made patch discovery use `patch.list_old` only when listed Stage 5 patch outputs already exist, so clean patch promotion still uses current `patch.list`.
+  - Added focused regressions for legacy patch-list discovery, rc2 formatting, best-coherence duplicate selection, and short weed-mask handling.
+  - US-006 remains incomplete: exact Stage 4 seed patch promotion still differs from local patch oracle artifacts, including P2 `pm2.ph_patch`, `bp2.bperp_mat`, and `rc2.ph_rc`.
+- **Learnings for future iterations:**
+  - Patterns discovered: oracle root Stage 5 merge uses all four patches from `patch.list_old`, selects duplicate `ij` rows by highest `coh_ps`, and preserves patch row order and patch `xy` for ps/ph/pm/bp/rc.
+  - Gotchas encountered: legacy P1 `weed1.ix_weed` is one element short; a reference `ps2.ij` can reconstruct the missing false candidate, but value mismatches remain.
+  - Useful context: P2/P3/P4 patch oracle outputs are not simple selected rows from their exact `pm1`/`bp1` inputs, so remaining patch failures should be investigated before marking US-006 complete.
+---

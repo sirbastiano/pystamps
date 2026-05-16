@@ -95,3 +95,4 @@
 [2026-05-16 13:32:02] ITERATION 6 start (mode=build story=US-006)
 [2026-05-16 14:18:00] Implemented US-006 Stage 5 mask handling, merged MAT orientation, rc2 preservation, and patch-list-old merge discovery
 [2026-05-16 15:45:39] Ran US-006 verification: focused/full pytest and build passed; direct Stage 5 merge from oracle patch artifacts matched; notebook/audit/latest-audit gates remain failing from earlier run attempts
+[2026-05-16 15:50:23] Updated progress log for US-006 outcome
