@@ -471,3 +471,45 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: legacy P1 `weed1.ix_weed` is one element short; a reference `ps2.ij` can reconstruct the missing false candidate, but value mismatches remain.
   - Useful context: P2/P3/P4 patch oracle outputs are not simple selected rows from their exact `pm1`/`bp1` inputs, so remaining patch failures should be investigated before marking US-006 complete.
 ---
+## [2026-05-16 22:52:18 UTC] - US-009: Pass full audited workflow gate
+Thread:
+Run: 20260515-151412-1547726 (iteration 9)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-9.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-9.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bda7b62 perf(audit): accelerate stage2 audit execution
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run pytest -q tests/test_stage2_trial_wraps.py::test_stage2_random_phase_chunks_are_chunk_size_invariant tests/test_kernels_accelerated.py::test_stage2_native_dispatch_uses_native_module tests/test_kernels_accelerated.py::test_stage2_native_kernels_match_python_reference tests/test_kernels_accelerated.py::test_stage2_native_matlab_v5_rng_matches_python_reference tests/test_kernels_accelerated.py::test_stage2_native_random_hist_matches_python_reference -> PASS
+  - Command: uv run pytest -q tests/test_stage2_trial_wraps.py::test_clap_stack_matches_scalar_per_ifg_legacy_path tests/test_stage2_trial_wraps.py::test_clap_stack_matches_scalar_per_ifg_with_ifg_parallelism tests/test_stage2_ported.py::test_clap_filt_grid_stack_prepared_matches_historical_vectorized_reference -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: make audit -> FAIL (terminated after 1462.95s; `PATCH_1/pm1.mat` was written for `20260516_222322`, but no `select1.mat` appeared and Stage 3 selection/re-estimation stayed CPU-bound)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (`completed=false`, `ok=false`, `interrupted=true` from stale interrupted artifact)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - AGENTS.md
+  - pystamps/kernels/__init__.py
+  - pystamps/kernels/accelerated.py
+  - pystamps/pipeline/ported.py
+  - src/lib.rs
+  - tests/test_kernels_accelerated.py
+  - tests/test_stage2_ported.py
+  - tests/test_stage2_trial_wraps.py
+- What was implemented
+  - Added a native MATLAB-v5 RNG and fused Stage 2 random-histogram path, with exact Python parity tests.
+  - Routed row-invariant Stage 2 native kernels after aligning the native near-max tolerance with Python.
+  - Reduced Stage 2 CLAP work by using the batched stack path and N-D convolution while preserving scalar-path parity within tight tolerance.
+  - Updated guardrails and AGENTS operational notes for repeated audit stalls and Rust extension rebuilds.
+  - US-009 remains incomplete: exact `make audit` now clears Stage 2 but blocks before Stage 3 writes `select1.mat`.
+- **Learnings for future iterations:**
+  - Patterns discovered: `make audit` uses final-only Stage 2 checkpoints, so `pm1.mat` is the first durable progress marker for the full diagnostic run.
+  - Gotchas encountered: after Rust changes, the local native extension must be rebuilt with `uv run python -m pip install --force-reinstall --no-deps -e .`; plain `uv run` can keep an older symbol set.
+  - Useful context: positive routing check: editing `src/lib.rs` should trigger the AGENTS native-extension rebuild note; negative routing check: editing only `.ralph/progress.md` should not trigger that rebuild note.
+---

@@ -124,3 +124,4 @@
 [2026-05-16 22:00:59] Added native Stage 2 random histogram path with MATLAB-v5 RNG parity coverage
 [2026-05-16 22:48:41] make audit advanced past Stage 2 but blocked in Stage 3 selection without select1.mat
 [2026-05-16 22:52:18] Verification completed: focused/full pytest passed; audit JSON assertion failed because latest audit remains incomplete
+[2026-05-16 22:53:38] Updated US-009 progress log with blocked audit outcome
