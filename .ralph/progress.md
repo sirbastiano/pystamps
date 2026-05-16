@@ -5,6 +5,42 @@ Started: Wed May 13 09:42:22 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-05-16 01:49:54Z] - US-002: Capture current first-drift evidence
+Thread:
+Run: 20260515-151412-1547726 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 3ff8dc1 chore(validation): record us-002 first drift
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS
+  - Command: make audit -> FAIL (default audit config does not resolve snaphu before comparison)
+  - Command: OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag --allow-subset --config inputs_and_outputs/validation_runs/us002_current_first_drift/audit_tools_config.yaml --output inputs_and_outputs/validation_runs/us002_current_first_drift/focused_audit.json -> FAIL (expected drift; completed=true, interrupted=false, ok=false)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (latest_audit.json completed=false, ok=false, interrupted=true)
+  - Command: uv run python - <<'PY' ... first_drift_trace.json assertions ... PY -> PASS
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - inputs_and_outputs/validation_runs/us002_current_first_drift/audit_tools_config.yaml
+  - inputs_and_outputs/validation_runs/us002_current_first_drift/first_drift_trace.json
+  - inputs_and_outputs/validation_runs/us002_current_first_drift/focused_audit.json
+  - notebooks/03_stage_by_stage_oracle.ipynb
+- What was implemented
+  - Re-executed the stage-by-stage notebook from fresh scratch and recorded the notebook first drift.
+  - Ran the default audit gate and recorded that it fails before comparison when snaphu is not configured on PATH.
+  - Ran a focused required-dataset audit with explicit local tool paths and persisted the completed audit payload plus combined trace.
+  - Captured matching notebook/audit first drift: Stage 2 `PATCH_1/pm1.mat`, key `C_ps`, shape `[81428]`, max_abs `1.9354102714012509`, with Stage 1 inputs feeding the Stage 2 failing artifact.
+- **Learnings for future iterations:**
+  - Patterns discovered: `scripts/validate_audit.py` already emits Stage 2/3/4 boundary probes and artifact lineage when the run reaches comparison.
+  - Gotchas encountered: `make audit` uses default `snaphu`/`triangle` names; the notebook can find `.cache/pystamps-tools/bin`, but the audit needs PATH or an explicit config for those tools.
+  - Useful context: current first-drift evidence starts at Stage 2, so downstream Stage 3/4 differences should be treated as consequences until Stage 2 `pm1.mat` parity is fixed.
+---
 ## [2026-05-13 11:09:00 UTC] - US-003: Align docs with audit evidence
 Thread: 
 Run: 20260513-094222-768318 (iteration 3)
