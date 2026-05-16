@@ -1,0 +1,6 @@
+runtime:
+  stage2_kernel_backend: native
+  stage2_native_threads: 8
+tools:
+  triangle: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.cache/pystamps-tools/bin/triangle
+  snaphu: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.cache/pystamps-tools/bin/snaphu

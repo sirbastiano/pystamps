@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-15 19:59:36 | run=20260515-151412-1547726 | iter=1 | mode=build | story=US-001 | duration=17123s | status=success
 - 2026-05-13 14:48:06 | run=20260513-094222-768318 | iter=5 | mode=build | story=US-005 | duration=1020s | status=success
 - 2026-05-13 14:31:02 | run=20260513-094222-768318 | iter=4 | mode=build | story=US-004 | duration=12055s | status=success
 - 2026-05-13 11:10:02 | run=20260513-094222-768318 | iter=3 | mode=build | story=US-003 | duration=1121s | status=success
@@ -55,3 +56,12 @@
 [2026-05-15 15:25:18] Added exact notebook parity assertion script and unit tests
 [2026-05-15 19:54:42] Ran US-001 verification: focused tests/full pytest passed; notebook executed; parity helper negative path passed; make audit failed on missing snaphu
 [2026-05-15 19:57:25] Updated progress log for US-001 outcome
+[2026-05-15 19:59:36] ITERATION 1 end (duration=17123s)
+[2026-05-15 19:59:39] ITERATION 2 start (mode=build story=US-002)
+[2026-05-15 20:01:02] Start US-002 first-drift evidence capture
+[2026-05-15 22:01:03] Notebook fresh execution completed for US-002
+[2026-05-15 23:43:35] make audit failed for US-002 before comparison because snaphu was not configured on PATH
+[2026-05-15 23:44:38] Added US-002 audit tool config for focused first-drift audit evidence
+[2026-05-16 01:44:29] Focused audit completed for US-002 with Stage 2 first boundary drift
+[2026-05-16 01:45:35] Generated US-002 first drift trace with matching notebook and audit Stage 2 boundary
+[2026-05-16 01:48:06] Verification for US-002: focused pytest groups and full pytest passed; notebook passed; make audit and latest_audit assertion failed on expected audit drift/tool-gate state

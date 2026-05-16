@@ -1,0 +1,477 @@
+{
+  "generated_at_utc": "2026-05-16T01:45:29Z",
+  "story": "US-002",
+  "purpose": "Fresh first-drift evidence from notebook and audit paths.",
+  "commands": {
+    "notebook": {
+      "command": "uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb",
+      "status": "passed",
+      "notebook_path": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/notebooks/03_stage_by_stage_oracle.ipynb",
+      "scratch_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run",
+      "oracle_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl"
+    },
+    "audit_full_gate": {
+      "command": "make audit",
+      "status": "failed_before_comparison",
+      "reason": "Pipeline regeneration failed for InSAR_dataset_test_stage8diag: [{\"stage\": 6, \"scope\": \"merged\", \"target\": \"InSAR_dataset_test_stage8diag_stage2_8\", \"status\": \"failed\", \"details\": \"Stage 6 (Unwrap phase) merged execution is not yet fully ported. Expected output: phuw2.mat. Required external tool 'snaphu' is not available (configured as 'snaphu')\"}, {\"stage\": 7, \"scope\": \"merged\", \"target\": \"InSAR_dataset_test_stage8diag_stage2_8\", \"status\": \"failed\", \"details\": \"Stage 7 (Calculate SCLA) merged execution is not yet fully ported. Expected output: scla2.mat. Required external tool 'snaphu' is not available (configured as 'snaphu')\"}, {\"stage\": 8, \"scope\": \"merged\", \"target\": \"InSAR_dataset_test_stage8diag_stage2_8\", \"status\": \"failed\", \"details\": \"Stage 8 (Filter SCN) merged execution is not yet fully ported. Expected output: uw_space_time.mat. Required external tool 'snaphu' is not available (configured as 'snaphu')\"}]",
+      "output_path": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/latest_audit.json"
+    },
+    "audit_focused": {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONPATH=. uv run python scripts/validate_audit.py --datasets inputs_and_outputs/InSAR_dataset_test_stage8diag --allow-subset --config inputs_and_outputs/validation_runs/us002_current_first_drift/audit_tools_config.yaml --output inputs_and_outputs/validation_runs/us002_current_first_drift/focused_audit.json",
+      "status": "failed_with_expected_drift",
+      "exit_code": 1,
+      "output_path": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/us002_current_first_drift/focused_audit.json",
+      "completed": true,
+      "interrupted": false,
+      "ok": false
+    }
+  },
+  "notebook": {
+    "first_failing_stage": 2,
+    "stage_summaries": {
+      "1": {
+        "stage": 1,
+        "mode": "latest pySTAMPS outputs",
+        "checked": 5,
+        "failed": 0,
+        "matched": true
+      },
+      "2": {
+        "stage": 2,
+        "mode": "latest pySTAMPS outputs",
+        "checked": 1,
+        "failed": 1,
+        "matched": false
+      },
+      "3": {
+        "stage": 3,
+        "mode": "latest pySTAMPS outputs",
+        "checked": 1,
+        "failed": 1,
+        "matched": false
+      },
+      "4": {
+        "stage": 4,
+        "mode": "latest pySTAMPS outputs",
+        "checked": 1,
+        "failed": 1,
+        "matched": false
+      },
+      "5": {
+        "stage": 5,
+        "mode": "latest pySTAMPS outputs",
+        "checked": 17,
+        "failed": 15,
+        "matched": false
+      },
+      "6": {
+        "stage": 6,
+        "mode": "latest pySTAMPS outputs",
+        "checked": 3,
+        "failed": 3,
+        "matched": false
+      },
+      "7": {
+        "stage": 7,
+        "mode": "latest pySTAMPS outputs",
+        "checked": 2,
+        "failed": 1,
+        "matched": false
+      },
+      "8": {
+        "stage": 8,
+        "mode": "latest pySTAMPS outputs",
+        "checked": 2,
+        "failed": 2,
+        "matched": false
+      }
+    },
+    "first_divergent_boundary": {
+      "artifact_path": "PATCH_1/pm1.mat",
+      "stage_boundary": 2,
+      "stage_scope": "stage2",
+      "failure_class": "stage2_patch_boundary",
+      "label": "Stage 2 patch boundary",
+      "guidance": "pm1.mat diverges before later patch stages; fix stage-2 parity before changing stage-3/4 or downstream code.",
+      "failure_kind": "value_mismatch",
+      "failing_key": "C_ps",
+      "shape_run": [
+        81428
+      ],
+      "shape_oracle": [
+        81428
+      ],
+      "max_abs": 1.9354102714012509,
+      "message": "Value mismatch for key 'C_ps', max_abs=1.93541",
+      "oracle_source": {
+        "name": "cpp_wrapper",
+        "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+        "repository_url": "https://github.com/dbekaert/StaMPS",
+        "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed"
+      },
+      "artifact_lineage": [
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/ps1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/ph1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/bp1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 2,
+          "artifact_path": "PATCH_1/pm1.mat",
+          "role": "failing_artifact"
+        }
+      ],
+      "probe_output_path": null
+    },
+    "stage_boundary_probes": [
+      {
+        "stage_boundary": 2,
+        "patterns": [
+          "PATCH_*/pm1.mat"
+        ],
+        "ok": false,
+        "checked": 1,
+        "failed": 1,
+        "first_boundary_failure": {
+          "path": "PATCH_1/pm1.mat",
+          "message": "Value mismatch for key 'C_ps', max_abs=1.93541",
+          "stage_scope": "stage2",
+          "failure_class": "stage2_patch_boundary",
+          "label": "Stage 2 patch boundary",
+          "failing_key": "C_ps",
+          "failure_kind": "value_mismatch",
+          "shape_run": [
+            81428
+          ],
+          "shape_oracle": [
+            81428
+          ],
+          "max_abs": 1.9354102714012509,
+          "guidance": "pm1.mat diverges before later patch stages; fix stage-2 parity before changing stage-3/4 or downstream code."
+        },
+        "trace": {
+          "artifact_path": "PATCH_1/pm1.mat",
+          "stage_boundary": 2,
+          "stage_scope": "stage2",
+          "failure_class": "stage2_patch_boundary",
+          "label": "Stage 2 patch boundary",
+          "guidance": "pm1.mat diverges before later patch stages; fix stage-2 parity before changing stage-3/4 or downstream code.",
+          "failure_kind": "value_mismatch",
+          "failing_key": "C_ps",
+          "shape_run": [
+            81428
+          ],
+          "shape_oracle": [
+            81428
+          ],
+          "max_abs": 1.9354102714012509,
+          "message": "Value mismatch for key 'C_ps', max_abs=1.93541",
+          "oracle_source": {
+            "name": "cpp_wrapper",
+            "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+            "repository_url": "https://github.com/dbekaert/StaMPS",
+            "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed"
+          },
+          "artifact_lineage": [
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/ps1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/ph1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/bp1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 2,
+              "artifact_path": "PATCH_1/pm1.mat",
+              "role": "failing_artifact"
+            }
+          ],
+          "probe_output_path": null
+        }
+      },
+      {
+        "stage_boundary": 3,
+        "patterns": [
+          "PATCH_*/select1.mat"
+        ],
+        "ok": false,
+        "checked": 1,
+        "failed": 1,
+        "first_boundary_failure": {
+          "path": "PATCH_1/select1.mat",
+          "message": "Value mismatch for key 'C_ps2', max_abs=6.14221",
+          "stage_scope": "stage3",
+          "failure_class": "stage3_patch_boundary",
+          "label": "Stage 3 patch boundary",
+          "failing_key": "C_ps2",
+          "failure_kind": "value_mismatch",
+          "shape_run": [
+            80938
+          ],
+          "shape_oracle": [
+            80938
+          ],
+          "max_abs": 6.142209529876709,
+          "guidance": "select1.mat diverges before later stages; fix stage-3 parity before changing stage-4 or downstream code."
+        },
+        "trace": {
+          "artifact_path": "PATCH_1/select1.mat",
+          "stage_boundary": 3,
+          "stage_scope": "stage3",
+          "failure_class": "stage3_patch_boundary",
+          "label": "Stage 3 patch boundary",
+          "guidance": "select1.mat diverges before later stages; fix stage-3 parity before changing stage-4 or downstream code.",
+          "failure_kind": "value_mismatch",
+          "failing_key": "C_ps2",
+          "shape_run": [
+            80938
+          ],
+          "shape_oracle": [
+            80938
+          ],
+          "max_abs": 6.142209529876709,
+          "message": "Value mismatch for key 'C_ps2', max_abs=6.14221",
+          "oracle_source": {
+            "name": "cpp_wrapper",
+            "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+            "repository_url": "https://github.com/dbekaert/StaMPS",
+            "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed"
+          },
+          "artifact_lineage": [
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/ps1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/ph1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/bp1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/da1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 2,
+              "artifact_path": "PATCH_1/pm1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 3,
+              "artifact_path": "PATCH_1/select1.mat",
+              "role": "failing_artifact"
+            }
+          ],
+          "probe_output_path": null
+        }
+      },
+      {
+        "stage_boundary": 4,
+        "patterns": [
+          "PATCH_*/weed1.mat"
+        ],
+        "ok": false,
+        "checked": 1,
+        "failed": 1,
+        "first_boundary_failure": {
+          "path": "PATCH_1/weed1.mat",
+          "message": "Shape mismatch for key 'ix_weed': (79229,) != (79227,)",
+          "stage_scope": "stage4",
+          "failure_class": "stage4_patch_boundary",
+          "label": "Stage 4 patch boundary",
+          "failing_key": "ix_weed",
+          "failure_kind": "shape_mismatch",
+          "shape_run": [
+            79229
+          ],
+          "shape_oracle": [
+            79227
+          ],
+          "max_abs": null,
+          "guidance": "weed1.mat diverges before merged stages; fix stage-4 parity before changing stage-5/6 or stage-7/8 code."
+        },
+        "trace": {
+          "artifact_path": "PATCH_1/weed1.mat",
+          "stage_boundary": 4,
+          "stage_scope": "stage4",
+          "failure_class": "stage4_patch_boundary",
+          "label": "Stage 4 patch boundary",
+          "guidance": "weed1.mat diverges before merged stages; fix stage-4 parity before changing stage-5/6 or stage-7/8 code.",
+          "failure_kind": "shape_mismatch",
+          "failing_key": "ix_weed",
+          "shape_run": [
+            79229
+          ],
+          "shape_oracle": [
+            79227
+          ],
+          "max_abs": null,
+          "message": "Shape mismatch for key 'ix_weed': (79229,) != (79227,)",
+          "oracle_source": {
+            "name": "cpp_wrapper",
+            "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+            "repository_url": "https://github.com/dbekaert/StaMPS",
+            "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed"
+          },
+          "artifact_lineage": [
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/ps1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 1,
+              "artifact_path": "PATCH_1/da1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 2,
+              "artifact_path": "PATCH_1/pm1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 3,
+              "artifact_path": "PATCH_1/select1.mat",
+              "role": "upstream_input"
+            },
+            {
+              "stage": 4,
+              "artifact_path": "PATCH_1/weed1.mat",
+              "role": "failing_artifact"
+            }
+          ],
+          "probe_output_path": null
+        }
+      }
+    ]
+  },
+  "audit": {
+    "dataset": "InSAR_dataset_test_stage8diag",
+    "workflow": "InSAR_dataset_test_stage8diag_audit",
+    "run_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/20260515_234457/InSAR_dataset_test_stage8diag_stage2_8",
+    "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag",
+    "first_divergent_boundary": {
+      "artifact_path": "PATCH_1/pm1.mat",
+      "stage_boundary": 2,
+      "stage_scope": "stage2",
+      "failure_class": "stage2_patch_boundary",
+      "label": "Stage 2 patch boundary",
+      "guidance": "pm1.mat diverges before later patch stages; fix stage-2 parity before changing stage-3/4 or downstream code.",
+      "failure_kind": "value_mismatch",
+      "failing_key": "C_ps",
+      "shape_run": [
+        81428
+      ],
+      "shape_oracle": [
+        81428
+      ],
+      "max_abs": 1.9354102714012509,
+      "message": "Value mismatch for key 'C_ps', max_abs=1.93541",
+      "oracle_source": {
+        "name": "cpp_wrapper",
+        "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag",
+        "repository_url": "https://github.com/dbekaert/StaMPS",
+        "pinned_revision": "c159eb81b16c446e0e8fdef7dd435eb22e0240ed"
+      },
+      "artifact_lineage": [
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/ps1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/ph1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/bp1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 2,
+          "artifact_path": "PATCH_1/pm1.mat",
+          "role": "failing_artifact"
+        }
+      ],
+      "probe_output_path": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/20260515_234457/InSAR_dataset_test_stage8diag_stage2_boundary_probe.json"
+    },
+    "first_divergent_boundary_output_path": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/20260515_234457/InSAR_dataset_test_stage8diag_first_boundary_trace.json",
+    "stage_boundary_probe_output_paths": [
+      "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/20260515_234457/InSAR_dataset_test_stage8diag_stage2_boundary_probe.json",
+      "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/20260515_234457/InSAR_dataset_test_stage8diag_stage3_boundary_probe.json",
+      "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/20260515_234457/InSAR_dataset_test_stage8diag_stage4_boundary_probe.json"
+    ]
+  },
+  "comparison": {
+    "audit_first_drift_matches_notebook_first_drift": true,
+    "matched_fields": [
+      "stage_boundary",
+      "artifact_path",
+      "stage_scope",
+      "failure_class"
+    ],
+    "root_cause_target": {
+      "stage": 2,
+      "artifact_path": "PATCH_1/pm1.mat",
+      "failing_key": "C_ps",
+      "failure_kind": "value_mismatch",
+      "shape_run": [
+        81428
+      ],
+      "shape_oracle": [
+        81428
+      ],
+      "max_abs": 1.9354102714012509,
+      "upstream_dependency_chain": [
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/ps1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/ph1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 1,
+          "artifact_path": "PATCH_1/bp1.mat",
+          "role": "upstream_input"
+        },
+        {
+          "stage": 2,
+          "artifact_path": "PATCH_1/pm1.mat",
+          "role": "failing_artifact"
+        }
+      ]
+    },
+    "negative_case_check": "Trace starts at Stage 2 before Stage 3 or Stage 4 downstream failures."
+  }
+}
