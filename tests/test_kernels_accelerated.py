@@ -704,6 +704,16 @@ def test_stage2_native_kernels_match_python_reference() -> None:
     coh_row = run_stage2_topofit_coh_row_invariant_kernel(cpxphase, bperp_row, 1.5, backend="native")
     np.testing.assert_allclose(coh_row, expected_row[2], atol=1e-10, rtol=0.0)
 
+    cpxphase_zero = cpxphase.copy()
+    cpxphase_zero[2, 0] = 0.0
+    cpxphase_zero[4, 3] = 0.0
+    expected_zero = ported._ps_topofit_batch_row_invariant(cpxphase_zero, bperp_row, n_trial_wraps=1.5)
+    observed_zero = run_stage2_topofit_row_invariant_kernel(cpxphase_zero, bperp_row, 1.5, backend="native")
+    np.testing.assert_allclose(observed_zero[0], expected_zero[0], atol=1e-10, rtol=0.0)
+    np.testing.assert_allclose(observed_zero[1], expected_zero[1], atol=1e-10, rtol=0.0)
+    np.testing.assert_allclose(observed_zero[2], expected_zero[2], atol=1e-10, rtol=0.0)
+    np.testing.assert_allclose(observed_zero[3], expected_zero[3], atol=1e-5, rtol=0.0)
+
     hist_expected = accel._stage2_histogram_with_centers_cpu(
         np.asarray([0.1, 0.49, 0.7, 0.9, np.nan], dtype=np.float64),
         np.asarray([0.0, 0.5, 1.0], dtype=np.float64),

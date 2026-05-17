@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-16 22:54:17 | run=20260515-151412-1547726 | iter=9 | mode=build | story=US-009 | duration=7372s | status=success
 - 2026-05-16 20:51:23 | run=20260515-151412-1547726 | iter=8 | mode=build | story=US-008 | duration=10469s | status=success
 - 2026-05-16 17:56:51 | run=20260515-151412-1547726 | iter=7 | mode=build | story=US-007 | duration=7456s | status=success
 - 2026-05-16 15:52:33 | run=20260515-151412-1547726 | iter=6 | mode=build | story=US-006 | duration=8430s | status=success
@@ -125,3 +126,11 @@
 [2026-05-16 22:48:41] make audit advanced past Stage 2 but blocked in Stage 3 selection without select1.mat
 [2026-05-16 22:52:18] Verification completed: focused/full pytest passed; audit JSON assertion failed because latest audit remains incomplete
 [2026-05-16 22:53:38] Updated US-009 progress log with blocked audit outcome
+[2026-05-16 22:54:17] ITERATION 9 end (duration=7372s)
+[2026-05-16 22:54:20] ITERATION 10 start (mode=build story=US-010)
+[2026-05-16 22:55:50] Start US-010 final notebook proof work
+[2026-05-16 22:57:20] Updated notebook path displays to use repo-relative labels
+[2026-05-16 22:58:49] Reinstalled editable package before native notebook and audit validation
+[2026-05-16 23:42:25] Added batched Stage 3 CLAP stack filtering after bounded notebook post-Stage2 stall
+[2026-05-16 23:53:31] Standalone Stage 3 completed after CLAP stack batching and threaded re-estimation
+[2026-05-17 03:46:58] Verification completed: pytest/build passed; notebook and audit gates failed on Stage 2 parity drift

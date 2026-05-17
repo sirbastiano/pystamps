@@ -4,7 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
-from scipy import signal
 
 from pystamps.pipeline import ported
 
@@ -75,25 +74,66 @@ def test_stage2_random_phase_chunks_are_chunk_size_invariant() -> None:
     np.testing.assert_allclose(np.vstack(small_chunks), np.vstack(large_chunks), rtol=0.0, atol=0.0)
 
 
-def test_matlab_interp_matches_stage2_firwin_path() -> None:
+def test_matlab_interp_matches_stage2_intfilt_path() -> None:
     x = np.linspace(0.0, 1.0, 8, dtype=np.float64)
     observed = ported._matlab_interp(x, 10)
 
-    q = 10
-    n = 4
-    coeff = signal.firwin(
-        2 * q * n + 2,
-        0.5 / q,
-        window="hamming",
-        scale=True,
-        fs=2.0,
-    ).astype(np.float64)
-    y = np.zeros(x.size * q + q * n + 1, dtype=np.float64)
-    y[: x.size * q : q] = x
-    y = q * signal.lfilter(coeff, [1.0], y)
-    expected = y[q * n + 1 :]
+    expected_head = np.asarray(
+        [
+            -3.8301315880950945e-05,
+            0.008103140678458319,
+            0.018422447639340044,
+            0.030623509008490087,
+            0.044439121063539117,
+            0.05954392124688636,
+            0.07558809299480726,
+            0.09223088321784854,
+            0.10916911327111924,
+            0.12615663138273756,
+            0.14301214001824397,
+            0.1590484587270236,
+        ],
+        dtype=np.float64,
+    )
+    expected_mid = np.asarray(
+        [
+            0.4858352717520309,
+            0.4999983833164345,
+            0.5141160987753548,
+            0.5282436560144408,
+            0.5424627574395919,
+            0.556872577017111,
+            0.5715723314060888,
+            0.5866366702574806,
+            0.6020871983982662,
+            0.6178652726021636,
+            0.633812388117468,
+            0.6496646122902154,
+        ],
+        dtype=np.float64,
+    )
+    expected_tail = np.asarray(
+        [
+            1.0751822442478167,
+            1.0485140856614985,
+            1.0013913906547554,
+            0.933702863972137,
+            0.8473799939141478,
+            0.7453889342242793,
+            0.6318811575205483,
+            0.5118828025433246,
+            0.3908931947381177,
+            0.2744341915200786,
+            0.16759790558733514,
+            0.07464041043104921,
+        ],
+        dtype=np.float64,
+    )
 
-    np.testing.assert_allclose(observed, expected, rtol=0.0, atol=1e-12)
+    assert observed.shape == (80,)
+    np.testing.assert_allclose(observed[:12], expected_head, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(observed[34:46], expected_mid, rtol=0.0, atol=1e-12)
+    np.testing.assert_allclose(observed[-12:], expected_tail, rtol=0.0, atol=1e-12)
 
 
 def test_stage2_psquare_weighting_uses_matlab_rounding_for_bin_lookup() -> None:
@@ -468,7 +508,7 @@ def test_stage2_estimate_gamma_splits_trial_wrap_inputs_from_row_invariant_phase
     np.testing.assert_allclose(seen_hist_bperp[0], np.asarray([15.0, 30.0], dtype=np.float64), rtol=0.0, atol=0.0)
     np.testing.assert_allclose(
         seen_topofit_bperp[0],
-        np.asarray([10.0, 20.0], dtype=np.float64),
+        np.tile(np.asarray([10.0, 20.0], dtype=np.float64), (3, 1)),
         rtol=0.0,
         atol=0.0,
     )

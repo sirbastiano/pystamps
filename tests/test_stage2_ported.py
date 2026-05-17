@@ -835,6 +835,63 @@ def test_ps_topofit_batch_uses_stage2_kernel_backend(monkeypatch) -> None:
     np.testing.assert_allclose(phase_residual, np.ones((4, 3), dtype=np.complex64))
 
 
+def test_ps_topofit_batch_recomputes_partial_zero_row_after_row_invariant_fast_path(monkeypatch) -> None:
+    calls: list[str] = []
+    cpxphase = np.exp(
+        1j
+        * np.asarray(
+            [
+                [0.1, 0.2, 0.3],
+                [0.2, 0.4, 0.8],
+            ],
+            dtype=np.float64,
+        )
+    ).astype(np.complex128)
+    cpxphase[1, 0] = 0.0
+    bperp = np.tile(np.asarray([10.0, 25.0, 40.0], dtype=np.float64), (2, 1))
+
+    def fake_fast(
+        cpxphase: np.ndarray,
+        bperp: np.ndarray,
+        n_trial_wraps: float,
+        *,
+        backend: str,
+        threads: int,
+        cpu_fallback: object | None,
+    ):
+        calls.append(backend)
+        n_row, n_col = cpxphase.shape
+        return (
+            np.full(n_row, 9.0, dtype=np.float64),
+            np.full(n_row, 8.0, dtype=np.float64),
+            np.full(n_row, 7.0, dtype=np.float64),
+            np.full((n_row, n_col), 1.0 + 0.0j, dtype=np.complex64),
+        )
+
+    monkeypatch.setattr(ported, "run_stage2_topofit_row_invariant_kernel", fake_fast)
+
+    K0, C0, coh0, phase_residual = ported._ps_topofit_batch(
+        cpxphase,
+        bperp,
+        n_trial_wraps=1.0,
+        kernel_backend="native",
+    )
+    expected_k, expected_c, expected_coh, expected_residual = ported._ps_topofit_single(
+        cpxphase[1, :],
+        bperp[1, :],
+        1.0,
+    )
+
+    assert calls == ["native"]
+    np.testing.assert_allclose(K0[0], 9.0)
+    np.testing.assert_allclose(C0[0], 8.0)
+    np.testing.assert_allclose(coh0[0], 7.0)
+    np.testing.assert_allclose(K0[1], expected_k, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(C0[1], expected_c, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(coh0[1], expected_coh, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(phase_residual[1, :], expected_residual.astype(np.complex64), rtol=0.0, atol=0.0)
+
+
 def test_stage2_ph_weight_block_uses_double_precision_phase_ramp() -> None:
     ph_nm = np.asarray(
         [

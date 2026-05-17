@@ -10,8 +10,9 @@ import subprocess
 import tempfile
 import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
-from multiprocessing import get_context
 from dataclasses import dataclass, field
+from functools import lru_cache
+from multiprocessing import get_context
 from pathlib import Path
 from typing import Any
 
@@ -47,7 +48,7 @@ _STAGE2_RANDOM_HIST_CHUNK = 8192
 # Bump when any stage-2 semantics change that can affect the downstream use of
 # the cached random baseline histogram, otherwise old Nr/Nr_max_nz_ix values can
 # outlive parity fixes and poison later reruns.
-_STAGE2_RANDOM_HIST_CACHE_VERSION = 16
+_STAGE2_RANDOM_HIST_CACHE_VERSION = 17
 _STAGE2_TOPOFIT_NEAR_MAX_COH_TOL = 2.0e-4
 
 
@@ -1024,6 +1025,7 @@ def _polyfit_eval_centered(x: np.ndarray, y: np.ndarray, deg: int, x_eval: float
     return float(np.polyval(coeff, x0_scaled))
 
 
+@lru_cache(maxsize=1)
 def _clap_filter_kernel() -> np.ndarray:
     # MATLAB gausswin(7) default alpha=2.5.
     alpha = 2.5
@@ -1050,6 +1052,9 @@ def _clap_filt_patch(ph: np.ndarray, alpha: float, beta: float, low_pass: np.nda
     H[H < 0.0] = 0.0
     G = H * float(beta) + np.asarray(low_pass, dtype=np.float64)
     return np.fft.ifft2(ph_fft * G)
+
+
+_CLAP_FILT_PATCH_ORIGINAL = _clap_filt_patch
 
 
 def _clap_filt_grid(
@@ -1347,6 +1352,40 @@ def _clap_filt_patch_stack(ph_stack: np.ndarray, alpha: float, beta: float, low_
     ph_arr = np.asarray(ph_stack)
     # Upstream ps_select accumulates clap_filt_patch outputs into a MATLAB
     # double workspace and only narrows back to single when writing ph_patch2.
+    if _clap_filt_patch is not _CLAP_FILT_PATCH_ORIGINAL:
+        ph_out = np.empty(ph_arr.shape, dtype=np.complex128)
+        for i in range(ph_stack.shape[2]):
+            ph_out[:, :, i] = _clap_filt_patch(
+                ph_stack[:, :, i],
+                alpha=alpha,
+                beta=beta,
+                low_pass=low_pass,
+            )
+        return ph_out
+
+    ph_work = np.asarray(ph_stack, dtype=np.complex128).copy()
+    ph_work[np.isnan(ph_work)] = 0
+    ph_fft = np.fft.fft2(ph_work, axes=(0, 1))
+    H = np.abs(ph_fft)
+    H = np.fft.ifftshift(
+        signal.convolve(
+            np.fft.fftshift(H, axes=(0, 1)),
+            _clap_filter_kernel()[:, :, np.newaxis],
+            mode="same",
+        ),
+        axes=(0, 1),
+    )
+    mean_h = np.median(H, axis=(0, 1), keepdims=True)
+    np.divide(H, mean_h, out=H, where=mean_h != 0.0)
+    H = np.power(H, float(alpha))
+    H -= 1.0
+    H[H < 0.0] = 0.0
+    G = H * float(beta) + np.asarray(low_pass, dtype=np.float64)[:, :, np.newaxis]
+    return np.fft.ifft2(ph_fft * G, axes=(0, 1))
+
+
+def _clap_filt_patch_stack_scalar(ph_stack: np.ndarray, alpha: float, beta: float, low_pass: np.ndarray) -> np.ndarray:
+    ph_arr = np.asarray(ph_stack)
     ph_out = np.empty(ph_arr.shape, dtype=np.complex128)
     for i in range(ph_stack.shape[2]):
         ph_out[:, :, i] = _clap_filt_patch(
@@ -1378,17 +1417,18 @@ def _matlab_interp(x: np.ndarray, factor: int) -> np.ndarray:
         return arr.copy()
     n = 4
     wc = 0.5
-    y = np.zeros(arr.size * q + q * n + 1, dtype=np.float64)
+    numtaps = 2 * q * n - 1
+    delay = (numtaps - 1) // 2
+    y = np.zeros(arr.size * q + delay, dtype=np.float64)
     y[: arr.size * q : q] = arr
-    b = signal.firwin(
-        2 * q * n + 2,
-        wc / q,
-        window="hamming",
-        scale=True,
+    b = signal.firls(
+        numtaps,
+        [0.0, wc / q, (2.0 - wc) / q, 1.0],
+        [1.0, 1.0, 0.0, 0.0],
         fs=2.0,
     ).astype(np.float64)
     y = q * signal.lfilter(b, [1.0], y)
-    return y[q * n + 1 :].astype(np.float64, copy=False)
+    return y[delay:].astype(np.float64, copy=False)
 
 
 def _stage2_weighting_snapshot_targets(patch_dir: Path) -> list[Path]:
@@ -2873,6 +2913,82 @@ def _stage3_reestimate_candidate(
     return ph_patch2_row, ph_res2_row, k_opt, c_opt, coh_opt, True
 
 
+def _stage3_reestimate_worker_count(n_rows: int) -> int:
+    if n_rows < 256 or _clap_filt_patch is not _CLAP_FILT_PATCH_ORIGINAL:
+        return 1
+    raw = os.environ.get("PYSTAMPS_STAGE3_REESTIMATE_WORKERS")
+    if raw:
+        try:
+            requested = int(raw)
+        except ValueError:
+            requested = 1
+    else:
+        requested = min(8, os.cpu_count() or 1)
+    return max(1, min(int(requested), int(n_rows)))
+
+
+def _stage3_reestimate_candidate_chunk(
+    row_indices: np.ndarray,
+    *,
+    ix0: np.ndarray,
+    ph_grid: np.ndarray,
+    grid_ij: np.ndarray,
+    ph_work: np.ndarray,
+    bperp_mat: np.ndarray,
+    ifg_index_ix: np.ndarray,
+    n_i: int,
+    n_j: int,
+    n_win: int,
+    slc_osf: int,
+    alpha: float,
+    beta: float,
+    low_pass: np.ndarray,
+    n_trial_wraps: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    rows = np.asarray(row_indices, dtype=np.int64).reshape(-1)
+    n_ifg_work = ph_work.shape[1]
+    ph_patch2 = np.zeros((rows.size, n_ifg_work), dtype=np.complex128)
+    ph_res2 = np.zeros((rows.size, n_ifg_work), dtype=np.float32)
+    K_ps2 = np.zeros(rows.size, dtype=np.float64)
+    C_ps2 = np.zeros(rows.size, dtype=np.float64)
+    coh_ps2 = np.zeros(rows.size, dtype=np.float64)
+    valid_rows = np.zeros(rows.size, dtype=bool)
+
+    for out_row, row_local in enumerate(rows):
+        ps_idx = int(ix0[row_local])
+        (
+            ph_patch2_row,
+            ph_res2_row,
+            k_opt,
+            c_opt,
+            coh_opt,
+            valid_row,
+        ) = _stage3_reestimate_candidate(
+            ph_grid=ph_grid,
+            grid_ij=grid_ij,
+            ph_work_row=ph_work[ps_idx, :],
+            bperp_row=bperp_mat[ps_idx, :],
+            ifg_index_ix=ifg_index_ix,
+            ps_idx=ps_idx,
+            n_i=n_i,
+            n_j=n_j,
+            n_win=n_win,
+            slc_osf=slc_osf,
+            alpha=alpha,
+            beta=beta,
+            low_pass=low_pass,
+            n_trial_wraps=n_trial_wraps,
+        )
+        ph_patch2[out_row, :] = ph_patch2_row
+        ph_res2[out_row, :] = ph_res2_row
+        K_ps2[out_row] = k_opt
+        C_ps2[out_row] = c_opt
+        coh_ps2[out_row] = coh_opt
+        valid_rows[out_row] = valid_row
+
+    return rows, ph_patch2, ph_res2, K_ps2, C_ps2, coh_ps2, valid_rows
+
+
 def _ifg_index_for_weed(ps: dict[str, Any], parms: Parms) -> np.ndarray:
     n_ifg = int(round(_mat_scalar(ps.get("n_ifg", 0), 0)))
     drop = set(int(v) for v in parms.drop_ifg_index.tolist())
@@ -4270,26 +4386,19 @@ def stage2_estimate_gamma(
             if not np.any(valid_chunk):
                 continue
             if row_invariant_bperp:
-                try:
-                    K_chunk, C_chunk, coh_chunk, phase_residual = run_stage2_topofit_row_invariant_kernel(
-                        psdph_chunk[valid_chunk].astype(np.complex128),
-                        row_bperp_nm,
-                        n_trial_wraps,
-                        backend=_stage2_backend_for("stage2_topofit_row_invariant"),
-                        threads=native_threads_norm,
-                        cpu_fallback=_ps_topofit_batch_row_invariant,
-                    )
-                except BackendUnavailableError as exc:
-                    raise PortedStageError(str(exc)) from exc
+                bperp_chunk = np.broadcast_to(row_bperp_nm, (int(np.sum(valid_chunk)), n_ifg))
+                topofit_backend_name = "stage2_topofit_row_invariant"
             else:
                 assert bperp_mat is not None
-                K_chunk, C_chunk, coh_chunk, phase_residual = _ps_topofit_batch(
-                    psdph_chunk[valid_chunk].astype(np.complex128),
-                    bperp_mat[start:stop, :][valid_chunk].astype(np.float64),
-                    n_trial_wraps,
-                    kernel_backend=_stage2_backend_for("stage2_topofit"),
-                    native_threads=native_threads_norm,
-                )
+                bperp_chunk = bperp_mat[start:stop, :][valid_chunk].astype(np.float64)
+                topofit_backend_name = "stage2_topofit"
+            K_chunk, C_chunk, coh_chunk, phase_residual = _ps_topofit_batch(
+                psdph_chunk[valid_chunk].astype(np.complex128),
+                bperp_chunk,
+                n_trial_wraps,
+                kernel_backend=_stage2_backend_for(topofit_backend_name),
+                native_threads=native_threads_norm,
+            )
             out_ix = np.flatnonzero(valid_chunk) + start
             K_ps[out_ix] = K_chunk
             C_ps[out_ix] = C_chunk
@@ -4619,29 +4728,47 @@ def stage3_select_ps(patch_dir: Path, backend: str = "auto") -> str:
                     bperp_mat = _as_ps_matrix(read_mat(bp1_file).get("bperp_mat"), n_ps, "bp1.bperp_mat").astype(np.float64)
                     n_trial_wraps = float(_mat_scalar(pm.get("n_trial_wraps", 0.0), 0.0))
                     valid_rows = np.zeros(ix.size, dtype=bool)
-                    for row_local, ps_idx in enumerate(ix0):
-                        ph_patch2_row, ph_res2_row, k_opt, c_opt, coh_opt, valid_row = _stage3_reestimate_candidate(
-                            ph_grid=ph_grid,
-                            grid_ij=grid_ij,
-                            ph_work_row=ph_work[ps_idx, :],
-                            bperp_row=bperp_mat[ps_idx, :],
-                            ifg_index_ix=ifg_index_ix,
-                            ps_idx=int(ps_idx),
-                            n_i=n_i,
-                            n_j=n_j,
-                            n_win=n_win,
-                            slc_osf=slc_osf,
-                            alpha=alpha,
-                            beta=beta,
-                            low_pass=low_pass,
-                            n_trial_wraps=n_trial_wraps,
-                        )
-                        ph_patch2[row_local, :] = ph_patch2_row
-                        ph_res2[row_local, :] = ph_res2_row
-                        K_ps2[row_local] = k_opt
-                        C_ps2[row_local] = c_opt
-                        coh_ps2[row_local] = coh_opt
-                        valid_rows[row_local] = valid_row
+                    worker_count = _stage3_reestimate_worker_count(ix.size)
+                    row_chunks = [
+                        chunk
+                        for chunk in np.array_split(np.arange(ix.size, dtype=np.int64), worker_count)
+                        if chunk.size
+                    ]
+                    chunk_kwargs = {
+                        "ix0": ix0,
+                        "ph_grid": ph_grid,
+                        "grid_ij": grid_ij,
+                        "ph_work": ph_work,
+                        "bperp_mat": bperp_mat,
+                        "ifg_index_ix": ifg_index_ix,
+                        "n_i": n_i,
+                        "n_j": n_j,
+                        "n_win": n_win,
+                        "slc_osf": slc_osf,
+                        "alpha": alpha,
+                        "beta": beta,
+                        "low_pass": low_pass,
+                        "n_trial_wraps": n_trial_wraps,
+                    }
+                    if worker_count == 1:
+                        chunk_results = [
+                            _stage3_reestimate_candidate_chunk(chunk, **chunk_kwargs)
+                            for chunk in row_chunks
+                        ]
+                    else:
+                        with ThreadPoolExecutor(max_workers=worker_count) as executor:
+                            futures = [
+                                executor.submit(_stage3_reestimate_candidate_chunk, chunk, **chunk_kwargs)
+                                for chunk in row_chunks
+                            ]
+                            chunk_results = [future.result() for future in futures]
+                    for rows, ph_patch_chunk, ph_res_chunk, k_chunk, c_chunk, coh_chunk, valid_chunk in chunk_results:
+                        ph_patch2[rows, :] = ph_patch_chunk
+                        ph_res2[rows, :] = ph_res_chunk
+                        K_ps2[rows] = k_chunk
+                        C_ps2[rows] = c_chunk
+                        coh_ps2[rows] = coh_chunk
+                        valid_rows[rows] = valid_chunk
 
                     coh_for_threshold = coh_ps.copy()
                     coh_for_threshold[ix0] = coh_ps2

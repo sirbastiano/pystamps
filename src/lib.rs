@@ -976,7 +976,11 @@ fn solve_row_row_invariant(
         };
     }
 
-    let coh_trial = coherence_trials_row_invariant(&row, basis, trial_mult.len());
+    let coh_trial = if row.valid_cols.len() == row.n_col {
+        coherence_trials_row_invariant(&row, basis, trial_mult.len())
+    } else {
+        coherence_trials_generic(&row, trial_mult)
+    };
     solve_row_from_trials(&row, trial_mult, &coh_trial, store_phase)
 }
 

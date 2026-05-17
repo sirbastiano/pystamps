@@ -260,9 +260,8 @@ def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple
         except TypeError:
             close = np.array_equal(lhs, rhs, equal_nan=True)
         if not close:
-            lhs_f = np.asarray(lhs, dtype=np.float64)
-            rhs_f = np.asarray(rhs, dtype=np.float64)
-            max_abs = float(np.nanmax(np.abs(lhs_f - rhs_f)))
+            diff = np.asarray(lhs) - np.asarray(rhs)
+            max_abs = float(np.nanmax(np.abs(diff)))
             return (
                 False,
                 f"Value mismatch for key '{key}', max_abs={max_abs:.6g}",

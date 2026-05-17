@@ -400,6 +400,20 @@ def test_clap_filt_patch_stack_returns_complex128_workspace() -> None:
     assert out.dtype == np.complex128
 
 
+def test_clap_filt_patch_stack_matches_scalar_path() -> None:
+    rng = np.random.default_rng(123)
+    ph = (
+        rng.normal(size=(5, 5, 3)).astype(np.float32)
+        + 1j * rng.normal(size=(5, 5, 3)).astype(np.float32)
+    ).astype(np.complex64)
+    low_pass = np.ones((5, 5), dtype=np.float64)
+
+    observed = ported._clap_filt_patch_stack(ph, alpha=0.7, beta=0.3, low_pass=low_pass)
+    expected = ported._clap_filt_patch_stack_scalar(ph, alpha=0.7, beta=0.3, low_pass=low_pass)
+
+    np.testing.assert_allclose(observed, expected, rtol=1e-12, atol=1e-12)
+
+
 def test_stage3_density_threshold_uses_matlab_da_bin_edges(tmp_path: Path, monkeypatch) -> None:
     patch_dir = tmp_path / "PATCH_1"
     patch_dir.mkdir()
