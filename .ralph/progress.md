@@ -5,6 +5,60 @@ Started: Wed May 13 09:42:22 UTC 2026
 - (add reusable patterns here)
 
 ---
+## [2026-05-17 03:48:20 UTC] - US-010: Commit final notebook proof
+Thread:
+Run: 20260515-151412-1547726 (iteration 10)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-10.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-10.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: cb9c8d5 perf(validation): unblock stage3 parity runs
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run python -m pip install --force-reinstall --no-deps -e . -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stages 2-8 still fail; first blocker Stage 2 `PATCH_1/pm1.mat` key `C_ps`)
+  - Command: make audit -> FAIL (`completed=true`, `interrupted=false`, `ok=false`, `failed_workflows=["full_validation"]`; first boundary Stage 2 `C_ps`)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (`ok=false`)
+  - Command: make build -> PASS
+  - Command: uv run pytest -q tests/test_verify.py tests/test_notebooks_api.py tests/test_validate_audit.py tests/test_parity_contract.py -> PASS
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - dist/pystamps-0.1.1.dev124+g43205ec9f.d20260517-cp314-cp314-linux_x86_64.whl
+  - dist/pystamps-0.1.1.dev124+g43205ec9f.d20260517.tar.gz
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7/scla.2.edge
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7/scla.2.ele
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7/scla.2.node
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7/triangle_scla.log
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag/scla.2.edge
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag/scla.2.ele
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag/scla.2.node
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag/triangle_scla.log
+  - notebooks/03_stage_by_stage_oracle.ipynb
+  - pystamps/_version.py
+  - pystamps/pipeline/ported.py
+  - pystamps/verify.py
+  - src/lib.rs
+  - tests/test_kernels_accelerated.py
+  - tests/test_stage2_ported.py
+  - tests/test_stage2_trial_wraps.py
+  - tests/test_stage3_ported.py
+- What was implemented
+  - Refreshed the stage-by-stage notebook from a fresh scratch run and made its displayed scratch/tool paths repo-relative.
+  - Batched Stage 3 CLAP stack filtering and threaded Stage 3 candidate re-estimation so notebook/audit runs advance past the prior post-Stage2 no-progress blocker.
+  - Removed complex-cast verifier warnings that leaked absolute local file paths into notebook stderr.
+  - US-010 remains incomplete: the final notebook still reports failed parity for stages 2-8, starting at Stage 2 `C_ps`.
+- **Learnings for future iterations:**
+  - Patterns discovered: Stage 3 re-estimation is independent by candidate; chunked threading reduces notebook Stage 3 from an unbounded stall to about 3 minutes on the notebook dataset.
+  - Gotchas encountered: fresh notebook execution can complete while still failing the proof; the parity helper is the acceptance gate, not the Jupyter exit code.
+  - Useful context: `make audit` now completes without interruption, but full validation is still blocked by Stage 2 `pm1.mat` `C_ps` drift; small-baseline Stage 7 audits pass.
+---
 ## [2026-05-16 20:50:23 UTC] - US-008: Restore Stage 7 and Stage 8 post-processing parity
 Thread:
 Run: 20260515-151412-1547726 (iteration 8)

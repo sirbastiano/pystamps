@@ -134,3 +134,4 @@
 [2026-05-16 23:42:25] Added batched Stage 3 CLAP stack filtering after bounded notebook post-Stage2 stall
 [2026-05-16 23:53:31] Standalone Stage 3 completed after CLAP stack batching and threaded re-estimation
 [2026-05-17 03:46:58] Verification completed: pytest/build passed; notebook and audit gates failed on Stage 2 parity drift
+[2026-05-17 03:48:20] Updated US-010 progress log with commit and blocked parity outcome
