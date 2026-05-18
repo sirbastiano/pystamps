@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-18 11:02:26 | run=20260518-083908-2624851 | iter=1 | mode=build | story=US-001 | duration=8598s | status=success
 - 2026-05-17 03:50:32 | run=20260515-151412-1547726 | iter=10 | mode=build | story=US-010 | duration=17772s | status=success
 - 2026-05-16 22:54:17 | run=20260515-151412-1547726 | iter=9 | mode=build | story=US-009 | duration=7372s | status=success
 - 2026-05-16 20:51:23 | run=20260515-151412-1547726 | iter=8 | mode=build | story=US-008 | duration=10469s | status=success
@@ -144,3 +145,8 @@
 [2026-05-18 10:56:51] Completed verification gates for US-001; expected parity/audit gates fail at Stage 2 boundary
 [2026-05-18 10:58:25] Final lightweight checks passed for US-001 diagnostic report
 [2026-05-18 11:00:00] Updated US-001 progress log with report commit and verification outcomes
+[2026-05-18 11:02:26] ITERATION 1 end (duration=8598s)
+[2026-05-18 11:02:29] ITERATION 2 start (mode=build story=US-002)
+[2026-05-18 11:03:49] Start US-002 Stage 2 K and weighting drift fix
+[2026-05-18 13:12:33] US-002 diagnostics completed; PATCH_1 still fails Stage 2 C_ps after precision/cache/input probes
+[2026-05-18 13:13:48] Updated US-002 progress log with blocked Stage 2 parity outcome

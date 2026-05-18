@@ -603,3 +603,32 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: full-grid CLAP replay is too slow for a report; localized CLAP window sampling exactly matched saved row `ph_patch`/topofit outputs and kept the report fast.
   - Useful context: the global parity and audit gates remain expected failures until US-002 fixes the Stage 2 K/weighting transition.
 ---
+## [2026-05-18 13:12:20 UTC] - US-002: Fix the first Stage 2 K and weighting drift
+Thread:
+Run: 20260518-083908-2624851 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no verified source fix; diagnostics-only outcome)
+- Post-commit status: clean after diagnostics commit
+- Verification:
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe_single_topofit --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295871)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe_legacy_ramp --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295871)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe_fresh_cache --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295872)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe_from_golden_inputs --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295872)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe_preserve_transition --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295872)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - No source fix was committed. Diagnostics ruled out native-only behavior, stale random-histogram cache, Stage 1 input drift, legacy phase-ramp precision, single-precision topofit, and full preserve-precision grid/filter transition as sufficient fixes for the remaining `PATCH_1` Stage 2 boundary failure.
+  - Negative case applied: `PATCH_1/pm1.mat` still fails, so no downstream stage fixes were started.
+  - Security/performance/regression review: no code was changed; the remaining regression risk is the unchanged Stage 2 `C_ps` parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: replaying oracle `ph_weight` through the live grid/filter/topofit path still matches oracle rows, so the unresolved defect remains in the iterative state that produces the iteration-8 carried `ph_weight`.
+  - Gotchas encountered: the apparent one-bin `Prand` lookup alignment for rows 22183/22101 was a false lead; a full shifted-lookup run made `C_ps` much worse (`max_abs=6.2354`).
+  - Useful context: Stage 2 runs from golden Stage 1 inputs fail identically, confirming this is not caused by fresh-run input material.
+---
