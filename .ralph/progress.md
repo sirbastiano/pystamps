@@ -663,3 +663,34 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run/PATCH_2/pm1.mat` is a symlinked oracle artifact; a real PATCH_2 Stage 2 probe must unlink and recompute it before comparison.
   - Useful context: PATCH_2 current Stage 2 stops after 4 iterations (`gamma_change_change=5.295322173331715e-05`), while the oracle log runs 7 iterations; this is consistent with the unresolved Stage 2 K/weighting transition drift rather than a downstream stage issue.
 ---
+## [2026-05-18 15:53:49 UTC] - US-004: Repair downstream parity after Stage 2 is clean
+Thread:
+Run: 20260518-083908-2624851 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 6b8c4c9 chore(ralph): record US-004 blocked precondition
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> FAIL (terminated; `uv` editable-build child stayed in `D` state before script execution)
+  - Command: .venv/bin/python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (terminated; `uv` editable-build child stayed in `D` state before script execution)
+  - Command: .venv/bin/python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` key `C_ps`, max_abs=0.0295872)
+  - Command: git diff --check -> PASS
+  - Command: remaining global quality gates -> SKIPPED (Stage 2 prerequisite is not clean, so downstream notebook/audit work would violate US-004 first-boundary order)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - pystamps/_version.py
+- What was implemented
+  - No downstream Stage 3+ code was changed. US-004 is blocked because the selected story requires Stage 2 parity to be clean first, and fresh Stage 2 recompute still fails `PATCH_1/pm1.mat` at `C_ps`.
+  - Added a guardrail and error-log entries for repeated `uv run` editable-build stalls; `.venv/bin/python` was used only to gather diagnostic parity evidence.
+  - Security/performance/regression review: no runtime code path was changed; no secrets were introduced; regression risk remains the pre-existing Stage 2 parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: the exact US-004 negative case applies before Stage 3, because `PATCH_1/pm1.mat` still fails at Stage 2 after a fresh recompute.
+  - Gotchas encountered: exact `uv run` commands can stall in editable build before target scripts start; capture process state before using `.venv/bin/python` as a diagnostic fallback.
+  - Useful context: positive routing check: a `uv run` command stuck in `setuptools.build_meta` with child `D` state should trigger the new guardrail; negative routing check: a `uv run` command that reaches pytest or the target script should not trigger the fallback guardrail.
+---
