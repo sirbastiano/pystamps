@@ -172,3 +172,10 @@
 [2026-05-18 16:12:26] US-005 verification blocked: exact uv run pytest gate stalled in editable build before pytest; .venv fallback passed for diagnostics
 [2026-05-18 16:13:42] Updated US-005 progress log with blocked exact-uv validation outcome
 [2026-05-18 16:18:18] ITERATION 5 end (duration=1201s)
+[2026-05-18 18:34:53] ITERATION 1 start (mode=build story=US-001)
+[2026-05-18 18:43:22] Start US-001 repair exact uv project execution
+[2026-05-18 18:57:08] US-001 changed pyproject to skip uv editable project builds for run commands
+[2026-05-18 19:00:34] US-001 disabled automatic uv project sync to avoid pre-command build backend stalls
+[2026-05-18 19:32:08] US-001 verification: exact uv smoke, focused pytest, stage2 probe, and full pytest ran; narrow compare reached script and failed known Stage 2 drift
+[2026-05-18 19:38:21] US-001 revalidated narrowed uv config with managed=false only
+[2026-05-18 19:42:27] US-001 updated AGENTS with uv run environment note
