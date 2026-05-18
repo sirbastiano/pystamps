@@ -179,3 +179,4 @@
 [2026-05-18 19:32:08] US-001 verification: exact uv smoke, focused pytest, stage2 probe, and full pytest ran; narrow compare reached script and failed known Stage 2 drift
 [2026-05-18 19:38:21] US-001 revalidated narrowed uv config with managed=false only
 [2026-05-18 19:42:27] US-001 updated AGENTS with uv run environment note
+[2026-05-18 19:45:02] Updated US-001 progress log with commit and verification details

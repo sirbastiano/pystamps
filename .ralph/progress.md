@@ -730,3 +730,37 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: a passing `.venv` pytest fallback is useful evidence but cannot satisfy the required `uv run` gate.
   - Useful context: the existing `Bound Uv Editable Build Stalls` guardrail matched this failure; no duplicate guardrail was added.
 ---
+## [2026-05-18 19:44:21 UTC] - US-001: Repair exact uv project execution
+Thread:
+Run: 20260518-183448-2827459 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: fe406b8 fix(config): prevent uv run rebuild stalls
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (known US-002 Stage 2 drift: `PATCH_1/pm1.mat` key `C_ps`, max_abs=0.0295872)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run pystamps --help -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (downstream parity proof is blocked by the known Stage 2 drift and would mutate the notebook outside US-001 scope)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (notebook execution gate was intentionally not refreshed after the Stage 2 compare failure)
+  - Command: make audit -> SKIPPED (blocked by the same Stage 2 parity failure; full audit belongs to later stories after US-002+)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - AGENTS.md
+  - pyproject.toml
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added `[tool.uv] managed = false` so exact `uv run` commands use the existing project environment instead of automatically syncing and invoking the build backend before the target command starts.
+  - Added a short AGENTS operational note that explicit sync/reinstall steps are required before gates if dependencies or native symbols are stale.
+  - Security/performance/regression review: no runtime input surface changed; the config removes repeated pre-command build work; focused pytest, full pytest, the Stage 2 probe, and `uv run pystamps --help` confirmed the expected execution paths still work.
+- **Learnings for future iterations:**
+  - Patterns discovered: `uv run` can still satisfy exact gates with `managed=false`; it launches `.venv/bin/python3` or `.venv/bin/pytest` without entering `setuptools.build_meta`.
+  - Gotchas encountered: `package = false` was broader than needed; `managed = false` alone fixed the exact gate while keeping the repo packaged.
+  - Useful context: positive routing check: exact `uv run` commands that stall before the target process in project sync/build belong to US-001-style config repair; negative routing check: a command that reaches the target script and then fails `PATCH_1/pm1.mat` parity belongs to US-002, not this uv execution story.
+---
