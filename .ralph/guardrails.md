@@ -42,3 +42,8 @@
 - **Trigger**: When `make audit` writes `PATCH_*/pm1.mat` but no `select1.mat`, `weed1.mat`, or merged artifacts appear for more than 30 minutes.
 - **Instruction**: Check artifact mtimes and process CPU once more, then terminate and record the audit gate as blocked unless a scoped Stage 3+ performance fix is being made before rerunning the exact `make audit` command.
 - **Added after**: Iteration 9 - full-audit Stage 2 completed, then Stage 3 selection/re-estimation stayed CPU-bound without writing `select1.mat`.
+
+### Sign: Bound Uv Editable Build Stalls
+- **Trigger**: When an exact `uv run ...` verification command remains in `setuptools.build_meta` with a child process in `D` state before the target script or test starts.
+- **Instruction**: Capture the stalled process state, terminate the wrapper, record the exact command as failed, and use the repo `.venv/bin/python` fallback only to gather diagnostic evidence.
+- **Added after**: Iteration 4 - repeated `uv run` editable-build stalls blocked Stage 2 precondition commands before `stage2_patch1_probe.py` or `narrow_compare.py` executed.

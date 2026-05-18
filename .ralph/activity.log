@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-18 14:37:01 | run=20260518-083908-2624851 | iter=3 | mode=build | story=US-003 | duration=4913s | status=success
 - 2026-05-18 13:14:53 | run=20260518-083908-2624851 | iter=2 | mode=build | story=US-002 | duration=7942s | status=success
 - 2026-05-18 11:02:26 | run=20260518-083908-2624851 | iter=1 | mode=build | story=US-001 | duration=8598s | status=success
 - 2026-05-17 03:50:32 | run=20260515-151412-1547726 | iter=10 | mode=build | story=US-010 | duration=17772s | status=success
@@ -157,3 +158,8 @@
 [2026-05-18 13:34:22] US-003 inspecting non-PATCH_1 Stage 2 parity surface
 [2026-05-18 14:31:20] US-003 diagnostics and focused validation completed; Stage 2 parity remains blocked on PATCH_1 and PATCH_2
 [2026-05-18 14:33:03] Updated US-003 progress log with blocked audited patch parity outcome
+[2026-05-18 14:36:51] ITERATION 3 end (duration=4913s)
+[2026-05-18 14:37:14] ITERATION 4 start (mode=build story=US-004)
+[2026-05-18 14:49:24] Start US-004 downstream parity repair run 20260518-083908-2624851 iteration 4
+[2026-05-18 14:51:23] US-004 verifying Stage 2 clean precondition before downstream fixes
+[2026-05-18 15:46:38] US-004 precondition verification complete: Stage 2 PATCH_1 pm1.mat still fails C_ps parity; no downstream changes made
