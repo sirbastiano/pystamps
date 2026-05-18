@@ -632,3 +632,34 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the apparent one-bin `Prand` lookup alignment for rows 22183/22101 was a false lead; a full shifted-lookup run made `C_ps` much worse (`max_abs=6.2354`).
   - Useful context: Stage 2 runs from golden Stage 1 inputs fail identically, confirming this is not caused by fresh-run input material.
 ---
+## [2026-05-18 14:31:40 UTC] - US-003: Generalize Stage 2 parity across audited patches
+Thread:
+Run: 20260518-083908-2624851 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no verified source fix; diagnostics-only outcome)
+- Post-commit status: clean after diagnostics commit
+- Verification:
+  - Command: git diff --check -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' --label inspect_current_stage2_probe -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295872; helper only checked PATCH_1 because golden `patch.list` lists PATCH_1)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe_patch2 --patch PATCH_2 --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: .venv/bin/python - <<'PY' ... direct compare stage2_parity_probe_patch2/PATCH_2/pm1.mat to InSAR_dataset_test_stage8diag_hl/PATCH_2/pm1.mat ... PY -> FAIL (`PATCH_2/pm1.mat` first failure `C_ps`, row 185140 zero-based, run=2.6022437535783034, golden=0.10107583073575727)
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> FAIL (terminated after `uv` editable-build helper stayed in uninterruptible I/O before pytest executed)
+  - Command: .venv/bin/python -m pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: remaining global gates -> SKIPPED (known Stage 2 boundary failures in PATCH_1 and PATCH_2 make full notebook/audit parity non-actionable)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - No source fix was committed. US-003 is blocked because the prerequisite Stage 2 boundary is still failing for `PATCH_1`, and the first non-`PATCH_1` audited probe (`PATCH_2`) also fails `pm1.mat` parity.
+  - Captured the first non-`PATCH_1` diagnostic: `PATCH_2/pm1.mat`, key `C_ps`, zero-based row 185140, current `2.6022437535783034`, golden `0.10107583073575727`.
+  - Confirmed the existing wildcard compare is not sufficient evidence for US-003 when `patch.list` only lists `PATCH_1`; it ignores present PATCH_2/PATCH_3/PATCH_4 `pm1.mat` files.
+  - Security/performance/regression review: no code was changed; the remaining regression risk is the unchanged Stage 2 parity failure across audited patch boundaries.
+- **Learnings for future iterations:**
+  - Patterns discovered: `verify_run_against_golden(..., patterns=('PATCH_*/pm1.mat',))` routes through `discover_dataset`, so `patch.list` can narrow wildcard patch verification to PATCH_1 even when other patch directories exist.
+  - Gotchas encountered: `inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run/PATCH_2/pm1.mat` is a symlinked oracle artifact; a real PATCH_2 Stage 2 probe must unlink and recompute it before comparison.
+  - Useful context: PATCH_2 current Stage 2 stops after 4 iterations (`gamma_change_change=5.295322173331715e-05`), while the oracle log runs 7 iterations; this is consistent with the unresolved Stage 2 K/weighting transition drift rather than a downstream stage issue.
+---
