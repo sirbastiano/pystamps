@@ -4,7 +4,6 @@ Started: Wed May 13 09:42:22 UTC 2026
 ## Codebase Patterns
 - (add reusable patterns here)
 
----
 ## [2026-05-17 03:48:20 UTC] - US-010: Commit final notebook proof
 Thread:
 Run: 20260515-151412-1547726 (iteration 10)
@@ -566,4 +565,41 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Patterns discovered: `make audit` uses final-only Stage 2 checkpoints, so `pm1.mat` is the first durable progress marker for the full diagnostic run.
   - Gotchas encountered: after Rust changes, the local native extension must be rebuilt with `uv run python -m pip install --force-reinstall --no-deps -e .`; plain `uv run` can keep an older symbol set.
   - Useful context: positive routing check: editing `src/lib.rs` should trigger the AGENTS native-extension rebuild note; negative routing check: editing only `.ralph/progress.md` should not trigger that rebuild note.
+---
+## [2026-05-18 10:59:00 UTC] - US-001: Build a Stage 2 prior-state drift report
+Thread:
+Run: 20260518-083908-2624851 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 3f09998 feat(stage2): add prior drift report
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: git diff --check -> PASS
+  - Command: uv run pytest -q tests/test_stage2_prior_state_drift_report.py -> PASS
+  - Command: uv run python scripts/stage2_prior_state_drift_report.py --run inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patch PATCH_1 --rows 22182 22100 12693 22181 22098 --row-base 1 --kernel-backend python --native-threads 0 --output inputs_and_outputs/validation_runs/stage2_prior_state_drift_report.json -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (known Stage 2 `PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295872)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stage 2 through Stage 8 parity still fail from upstream Stage 2 drift)
+  - Command: PATH="$PWD/.cache/pystamps-tools/bin:$PATH" make audit -> FAIL (`completed=true`, `ok=false`, `failed_workflows=['full_validation']`; first boundary remains Stage 2 `C_ps`)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> FAIL (`ok=false`, `failed_workflows=['full_validation']`)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - inputs_and_outputs/validation_runs/stage2_prior_state_drift_report.json
+  - scripts/stage2_prior_state_drift_report.py
+  - tests/test_stage2_prior_state_drift_report.py
+- What was implemented
+  - Added a Stage 2 prior-state drift report script that infers prior K from saved `ph_weight` phase ramps and prior weighting from `ph_weight` magnitudes.
+  - Replayed rows 22182, 22100, 12693, 22181, and 22098 through current/current, oracle-K/current-weight, current-K/oracle-weight, and oracle/oracle prior-state combinations.
+  - Emitted `inputs_and_outputs/validation_runs/stage2_prior_state_drift_report.json`; aggregate sources are `ph_weight`=`prior_K_state`, `ph_grid`=`prior_K_state`, `C_ps`/`coh_ps`=`prior_weighting_state`, and `K_ps`/`ph_patch`=`combined_prior_K_and_weighting_state`.
+  - Added unit coverage for prior-state inference and drift-source classification.
+- **Learnings for future iterations:**
+  - Patterns discovered: row 22182 has a prior-K delta of about -1.6354e-05 with nearly unchanged scalar row weighting; its own `ph_weight` drift is K-phase-ramp dominated, while topofit outputs need the combined prior state because neighboring weights affect grid/filter samples.
+  - Gotchas encountered: full-grid CLAP replay is too slow for a report; localized CLAP window sampling exactly matched saved row `ph_patch`/topofit outputs and kept the report fast.
+  - Useful context: the global parity and audit gates remain expected failures until US-002 fixes the Stage 2 K/weighting transition.
 ---
