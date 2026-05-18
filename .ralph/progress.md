@@ -694,3 +694,39 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: exact `uv run` commands can stall in editable build before target scripts start; capture process state before using `.venv/bin/python` as a diagnostic fallback.
   - Useful context: positive routing check: a `uv run` command stuck in `setuptools.build_meta` with child `D` state should trigger the new guardrail; negative routing check: a `uv run` command that reaches pytest or the target script should not trigger the fallback guardrail.
 ---
+## [2026-05-18 16:12:41 UTC] - US-005: Full rerun, audit, and push the notebook proof
+Thread:
+Run: 20260518-083908-2624851 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (US-005 blocked before a verified notebook/audit proof)
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: git diff --check -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> FAIL (terminated; editable-build child stayed in `D` state inside `setuptools.build_meta` before pytest executed)
+  - Command: .venv/bin/python -m pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS (diagnostic fallback only)
+  - Command: uv run python -c "print('uv-smoke-ok')" -> FAIL (terminated; same editable-build `D` state before Python executed)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> SKIPPED (exact `uv run` project invocation blocked before target execution)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> SKIPPED (blocked by exact `uv run` failure)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> SKIPPED (blocked by exact `uv run` failure)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (required proof cannot start while exact `uv run` is blocked)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (notebook execution proof did not run)
+  - Command: make audit -> SKIPPED (audit uses the same blocked `uv run` path)
+  - Command: uv run python - <<'PY' ... latest_audit.json assertions ... PY -> SKIPPED (audit output was not refreshed)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - pystamps/_version.py
+- What was implemented
+  - No runtime source, test, notebook, or PRD files were changed. US-005 is blocked because the first exact global gate could not start pytest under `uv run`.
+  - Recorded the generated `pystamps/_version.py` metadata refresh caused by local test/build imports.
+  - Applied the existing uv editable-build stall guardrail: captured the process state, terminated the wrapper, and used `.venv/bin/python` only for diagnostic evidence.
+  - Security/performance/regression review: no runtime code changed; no secrets were introduced; regression risk remains unresolved because the required notebook/audit proof did not run.
+- **Learnings for future iterations:**
+  - Patterns discovered: even `uv run python -c "print('uv-smoke-ok')"` stalls in editable build with the same `setuptools.build_meta` child in `D` state, so this is a general exact-uv project invocation blocker.
+  - Gotchas encountered: a passing `.venv` pytest fallback is useful evidence but cannot satisfy the required `uv run` gate.
+  - Useful context: the existing `Bound Uv Editable Build Stalls` guardrail matched this failure; no duplicate guardrail was added.
+---

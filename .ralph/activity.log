@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-18 15:58:09 | run=20260518-083908-2624851 | iter=4 | mode=build | story=US-004 | duration=4846s | status=success
 - 2026-05-18 14:37:01 | run=20260518-083908-2624851 | iter=3 | mode=build | story=US-003 | duration=4913s | status=success
 - 2026-05-18 13:14:53 | run=20260518-083908-2624851 | iter=2 | mode=build | story=US-002 | duration=7942s | status=success
 - 2026-05-18 11:02:26 | run=20260518-083908-2624851 | iter=1 | mode=build | story=US-001 | duration=8598s | status=success
@@ -164,3 +165,8 @@
 [2026-05-18 14:51:23] US-004 verifying Stage 2 clean precondition before downstream fixes
 [2026-05-18 15:46:38] US-004 precondition verification complete: Stage 2 PATCH_1 pm1.mat still fails C_ps parity; no downstream changes made
 [2026-05-18 15:54:45] Updated US-004 progress log with blocked Stage 2 precondition outcome
+[2026-05-18 15:57:53] ITERATION 4 end (duration=4846s)
+[2026-05-18 15:58:20] ITERATION 5 start (mode=build story=US-005)
+[2026-05-18 16:03:44] US-005 start: final rerun/audit/push verification begun after guardrails/context read
+[2026-05-18 16:12:26] US-005 verification blocked: exact uv run pytest gate stalled in editable build before pytest; .venv fallback passed for diagnostics
+[2026-05-18 16:13:42] Updated US-005 progress log with blocked exact-uv validation outcome
