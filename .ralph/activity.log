@@ -137,3 +137,9 @@
 [2026-05-17 03:46:58] Verification completed: pytest/build passed; notebook and audit gates failed on Stage 2 parity drift
 [2026-05-17 03:48:20] Updated US-010 progress log with commit and blocked parity outcome
 [2026-05-17 03:50:32] ITERATION 10 end (duration=17772s)
+[2026-05-18 08:39:08] ITERATION 1 start (mode=build story=US-001)
+[2026-05-18 08:40:13] Start US-001 Stage 2 prior-state drift report
+[2026-05-18 08:54:33] Added Stage 2 prior-state drift report script and unit coverage
+[2026-05-18 08:56:04] Generated Stage 2 prior-state drift report artifact
+[2026-05-18 10:56:51] Completed verification gates for US-001; expected parity/audit gates fail at Stage 2 boundary
+[2026-05-18 10:58:25] Final lightweight checks passed for US-001 diagnostic report
