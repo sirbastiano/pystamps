@@ -57,7 +57,6 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Patterns discovered: Stage 3 re-estimation is independent by candidate; chunked threading reduces notebook Stage 3 from an unbounded stall to about 3 minutes on the notebook dataset.
   - Gotchas encountered: fresh notebook execution can complete while still failing the proof; the parity helper is the acceptance gate, not the Jupyter exit code.
   - Useful context: `make audit` now completes without interruption, but full validation is still blocked by Stage 2 `pm1.mat` `C_ps` drift; small-baseline Stage 7 audits pass.
----
 ## [2026-05-16 20:50:23 UTC] - US-008: Restore Stage 7 and Stage 8 post-processing parity
 Thread:
 Run: 20260515-151412-1547726 (iteration 8)
@@ -834,4 +833,33 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Patterns discovered: `patch.list_old` is the authoritative patch source for the Stage 2 all-patch audit fixture; the shortened `patch.list` only lists PATCH_1.
   - Gotchas encountered: the verification bug is fixed, but US-003 remains blocked because actual Stage 2 `C_ps` parity still fails for all four patches.
   - Useful context: refreshed failures are PATCH_1 row 22182 max_abs=0.0295872, PATCH_2 row 185140 max_abs=2.50117, PATCH_3 row 153477 max_abs=1.3638, and PATCH_4 row 131566 max_abs=3.10975.
+---
+## [2026-05-19 01:15:38 UTC] - US-004: Repair downstream parity after Stage 2
+Thread:
+Run: 20260518-183448-2827459 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 3d84ab8 chore(ralph): record US-004 blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` mismatches in PATCH_1 through PATCH_4, starting with PATCH_1 max_abs=0.0295872)
+  - Command: git diff --check -> PASS
+  - Command: remaining global quality gates -> SKIPPED (US-004 negative case blocked downstream changes while Stage 2 parity still fails)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No downstream source, test, notebook, or PRD changes were made because the required Stage 2 all-patch precondition still fails.
+  - Recorded the US-004 blocker and added the `Prove Stage 2 Before Downstream Repair` guardrail.
+  - Security/performance/regression review: no runtime code changed, no secrets or unsafe file handling were introduced, and the only residual regression risk is the unresolved Stage 2 `C_ps` parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: current all-patch Stage 2 recompute completes, but oracle compare still fails `C_ps` in every authoritative patch.
+  - Gotchas encountered: a successful Stage 2 pipeline run is not enough for US-004; the all-patch oracle compare must pass before Stage 3+ repair is in scope.
+  - Useful context: positive routing check: a Stage 3+ repair request with any failing Stage 2 `pm1.mat` compare triggers the guardrail and stops; negative routing check: if the all-patch Stage 2 compare passes, Stage 3+ mismatch repair can proceed under US-004.
 ---
