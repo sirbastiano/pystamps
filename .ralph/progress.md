@@ -94,7 +94,6 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Patterns discovered: modern StaMPS routes this single-master notebook/audit path through `uw_sb_unwrap_space_time` / `3D_FULL`, so its Stage 8 trial-window scaling is `bperp_range_sub / bperp_range` and its direct noise cutoff is 1.2.
   - Gotchas encountered: `notebooks/03_stage_by_stage_oracle.ipynb` can progress through Stage 2 output creation and then stall before `select1.mat`; `make audit` can enter the same diagnostic Stage 2 no-artifact pattern.
   - Useful context: positive routing check: a repeated notebook/audit no-progress failure should trigger the guardrail update path. Negative routing check: a docs-only routing path would be wrong here because tests and pipeline helper code changed.
----
 ## [2026-05-16 17:55:40 UTC] - US-007: Restore Stage 6 unwrap parity
 Thread:
 Run: 20260515-151412-1547726 (iteration 7)
@@ -930,4 +929,42 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Patterns discovered: the Stage 2 probe now regenerates all authoritative patches, but wildcard compare is still the earliest failing US-006 gate.
   - Gotchas encountered: US-006 cannot be completed by rerunning the audit chain while all-patch Stage 2 `C_ps` parity remains red.
   - Useful context: next work should return to root-cause Stage 2 `C_ps` repair before attempting notebook parity, `make audit`, or push.
+---
+## [2026-05-19 09:36:46 UTC] - US-007: Diagnose Stage 2 C_ps divergence
+Thread:
+Run: 20260519-090457-3259084 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 60c1885 test(stage2): add c-ps drift diagnosis
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_prior_state_drift_report.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (PATCH_1 md5=663a2dc1621599fbba09f71715858cc0; PATCH_2 md5=d585e4cfd46183124f6893b7019fdb0d; PATCH_3 md5=287b33fc1f07cdffb271f1080676579c; PATCH_4 md5=85083bcb477afbb71244399c91c48d03)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (expected diagnostic result; checked=4, `C_ps` failed in PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/stage2_prior_state_drift_report.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --all-patches --kernel-backend native --native-threads 8 --output inputs_and_outputs/validation_runs/stage2_prior_state_drift_report.json -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by confirmed all-patch Stage 2 `C_ps` mismatch; no notebook changes in US-007)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (notebook execution skipped after Stage 2 diagnostic failure)
+  - Command: make audit -> SKIPPED (full audit remains blocked by Stage 2 `C_ps` parity failure)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - inputs_and_outputs/validation_runs/stage2_prior_state_drift_report.json
+  - scripts/stage2_prior_state_drift_report.py
+  - tests/test_stage2_prior_state_drift_report.py
+- What was implemented
+  - Added all-authoritative-patch auto mode to the bounded Stage 2 drift report, selecting first failing `C_ps` rows and max-absolute drift rows for PATCH_1 through PATCH_4.
+  - Regenerated the diagnostic artifact with first row/key/value evidence and replayed intermediates (`ph_weight`, `ph_grid`, `ph_patch`, `C_ps`) at the selected rows.
+  - Diagnosis: first failing `C_ps` row is row 1 (zero-based 0) in all patches; max drift rows are PATCH_1 zero-based 22182, PATCH_2 zero-based 185140, PATCH_3 zero-based 153477, PATCH_4 zero-based 131566.
+  - First divergent intermediate at max drift is `ph_weight` for all four patches. At the first failing row, PATCH_1 first diverges at `ph_grid`; PATCH_2 through PATCH_4 first diverge at `ph_weight`.
+  - Security/performance/regression review: no runtime Stage 2 behavior or external trust boundary changed; diagnostic replay is local-file only and bounded to selected rows; focused and full pytest pass, with residual risk limited to the known Stage 2 parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: oracle `C_ps` drift is already present at row 1 under 1e-10 tolerance, but the large max drift rows remain the prior known zero-based rows.
+  - Gotchas encountered: first-failure rows and max-absolute rows are not the same; recording both avoids chasing only tiny tolerance-edge differences.
+  - Useful context: replacing current prior state with oracle `K` and weighting drives max-row `C_ps` replay near oracle (`oracle_K_oracle_weight` near zero), so US-008 should focus on the prior `K_ps`/weighting state that produces `ph_weight`.
 ---
