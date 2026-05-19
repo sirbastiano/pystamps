@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-19 01:17:48 | run=20260518-183448-2827459 | iter=4 | mode=build | story=US-004 | duration=1285s | status=success
 - 2026-05-19 00:56:20 | run=20260518-183448-2827459 | iter=3 | mode=build | story=US-003 | duration=2116s | status=success
 - 2026-05-19 00:20:58 | run=20260518-183448-2827459 | iter=2 | mode=build | story=US-002 | duration=16273s | status=success
 - 2026-05-18 19:49:37 | run=20260518-183448-2827459 | iter=1 | mode=build | story=US-001 | duration=4477s | status=success
@@ -211,3 +212,11 @@
 [2026-05-19 01:14:10] Stage 2 all-patch precondition failed for US-004; downstream changes blocked
 [2026-05-19 01:14:40] Recorded US-004 Stage 2 blocker and guardrail
 [2026-05-19 01:16:04] Updated progress log for US-004 Stage 2 blocker
+[2026-05-19 01:17:47] ITERATION 4 end (duration=1285s)
+[2026-05-19 01:17:52] ITERATION 5 start (mode=build story=US-005)
+[2026-05-19 01:19:41] Start US-005 notebook parity proof
+[2026-05-19 01:21:01] Running US-005 smoke and Stage 2 precondition gates
+[2026-05-19 01:22:05] Running US-005 authoritative Stage 2 probe
+[2026-05-19 01:33:42] Running US-005 exact notebook execution gate
+[2026-05-19 02:25:11] Running US-005 notebook parity assertion
+[2026-05-19 02:28:07] Recorded US-005 notebook parity blocker and guardrail

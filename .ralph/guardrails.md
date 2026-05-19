@@ -57,3 +57,8 @@
 - **Trigger**: Before making Stage 3+ changes for downstream parity repair.
 - **Instruction**: Run the authoritative all-patch Stage 2 probe and `PATCH_*/pm1.mat` compare first; if any Stage 2 artifact/key still fails, stop and record the blocker instead of changing downstream stages.
 - **Added after**: Iteration 4 - US-004 was blocked because all 4 Stage 2 `pm1.mat` comparisons still failed `C_ps`, starting with PATCH_1 max_abs=0.0295872.
+
+### Sign: Prove Stage 2 Before Notebook Proof
+- **Trigger**: Before claiming `notebooks/03_stage_by_stage_oracle.ipynb` proves full parity.
+- **Instruction**: Run the authoritative all-patch Stage 2 probe and `PATCH_*/pm1.mat` compare first; if Stage 2 still fails, execute the notebook only to record the blocked proof and do not tune notebook outputs to hide downstream failures.
+- **Added after**: Iteration 5 - US-005 exact notebook execution completed, but the parity assertion failed for Stages 2-8 because Stage 2 `C_ps` drift still starts the failure chain.
