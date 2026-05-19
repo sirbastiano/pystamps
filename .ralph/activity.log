@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-19 19:55:11 | run=20260519-153232-3438769 | iter=2 | mode=build | story=US-009 | duration=12949s | status=success
 - 2026-05-19 16:19:20 | run=20260519-153232-3438769 | iter=1 | mode=build | story=US-008 | duration=2808s | status=success
 - 2026-05-19 15:30:34 | run=20260519-090457-3259084 | iter=5 | mode=build | story=US-010 | duration=1104s | status=success
 - 2026-05-19 15:12:07 | run=20260519-090457-3259084 | iter=4 | mode=build | story=US-008 | duration=2684s | status=success
@@ -289,3 +290,8 @@
 [2026-05-19 16:35:25] US-009 notebook oracle root switched to manifest-backed stage8diag
 [2026-05-19 19:51:29] US-009 verification run complete: pytest passed, notebook executed, Stage 2/notebook parity/audit failed on C_ps
 [2026-05-19 19:54:32] US-009 progress log updated with blocked notebook parity outcome
+[2026-05-19 19:55:11] ITERATION 2 end (duration=12949s)
+[2026-05-19 19:55:14] ITERATION 3 start (mode=build story=US-008)
+[2026-05-19 19:56:58] Start US-008 Stage 2 C_ps parity repair iteration 3
+[2026-05-19 21:21:13] US-008 diagnostic blocker: seed Nr and CLAP precision probes did not reduce manifest C_ps drift
+[2026-05-19 21:21:42] Recorded US-008 blocker in errors log and guardrails

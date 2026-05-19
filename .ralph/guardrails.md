@@ -77,3 +77,8 @@
 - **Trigger**: Before spending a long Stage 2 probe on a candidate C_ps fix.
 - **Instruction**: Confirm the changed branch is exercised by the manifest-backed failing patches, using debug counts or a focused probe. If the branch is not exercised, keep the change as diagnostic/correctness work only and continue root-cause analysis instead of expecting the all-patch compare to turn green.
 - **Added after**: Iteration 1 - US-008 aligned partial-zero row handling with StaMPS, but all manifest patches had full valid row counts and the all-patch `C_ps` compare stayed red.
+
+### Sign: Do Not Treat Seed Nr Drift As Causal
+- **Trigger**: When Stage 2 `C_ps` parity is failing and `Nr` differs by only one random sample bin or a saved seed `pm1.mat` has a tempting random histogram.
+- **Instruction**: Do not spend a full all-patch rerun on `Nr` reuse unless a focused probe first changes the failing `C_ps` magnitude. The manifest `C_ps` blocker persists even when PATCH_1 uses the seed `Nr` distribution; continue investigating CLAP/topofit prior-state drift instead.
+- **Added after**: Iteration 3 - US-008 seed-`Nr` PATCH_1 rerun completed but still failed `C_ps` with max_abs=0.0295872.
