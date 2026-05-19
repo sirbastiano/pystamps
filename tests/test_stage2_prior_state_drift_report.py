@@ -64,3 +64,52 @@ def test_classify_source_identifies_prior_k_and_combined_state() -> None:
         )
         == "combined_prior_K_and_weighting_state"
     )
+
+
+def test_first_mismatch_for_key_reports_first_row_and_values() -> None:
+    run_payload = {"C_ps": np.asarray([0.0, 2.5, 3.0], dtype=np.float64)}
+    golden_payload = {"C_ps": np.asarray([0.0, 1.0, 4.0], dtype=np.float64)}
+
+    mismatch = report._first_mismatch_for_key(
+        run_payload,
+        golden_payload,
+        "C_ps",
+        row_base=1,
+        rtol=1e-10,
+        atol=1e-10,
+        max_rows=2,
+    )
+
+    assert mismatch == {
+        "key": "C_ps",
+        "failure_kind": "value_mismatch",
+        "index": [1],
+        "row": 2,
+        "zero_based_row": 1,
+        "run_value": 2.5,
+        "golden_value": 1.0,
+        "abs_diff": 1.5,
+        "max_abs": 1.5,
+        "max_abs_index": [1],
+        "max_abs_row": 2,
+        "max_abs_zero_based_row": 1,
+        "max_abs_run_value": 2.5,
+        "max_abs_golden_value": 1.0,
+        "sample_rows": [2, 3],
+    }
+
+
+def test_first_divergent_intermediate_uses_pipeline_order() -> None:
+    row_diffs = {
+        key: {
+            "current_K_current_weight": 0.0,
+            "oracle_K_current_weight": 0.0,
+            "current_K_oracle_weight": 0.0,
+            "oracle_K_oracle_weight": 0.0,
+        }
+        for key in report.REPORT_KEYS
+    }
+    row_diffs["ph_grid"]["current_K_current_weight"] = 1e-5
+    row_diffs["C_ps"]["current_K_current_weight"] = 1.0
+
+    assert report._first_divergent_intermediate(row_diffs) == "ph_grid"

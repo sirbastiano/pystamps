@@ -1,383 +1,929 @@
 {
-  "aggregate_metrics": {
-    "C_ps": {
-      "current_K_current_weight": 0.00479021638737126,
-      "current_K_oracle_weight": 0.000546708389087297,
-      "oracle_K_current_weight": 0.004310550123752727,
-      "oracle_K_oracle_weight": 6.99639303158861e-08
-    },
-    "K_ps": {
-      "current_K_current_weight": 3.7503593031066457e-06,
-      "current_K_oracle_weight": 6.513535095786782e-06,
-      "oracle_K_current_weight": 3.3913721612780813e-06,
-      "oracle_K_oracle_weight": 9.78388791424839e-11
-    },
-    "coh_ps": {
-      "current_K_current_weight": 0.0037231652794886827,
-      "current_K_oracle_weight": 0.00010970605325222316,
-      "oracle_K_current_weight": 0.0037419254271096047,
-      "oracle_K_oracle_weight": 3.085031419214346e-08
-    },
-    "ph_grid": {
-      "current_K_current_weight": 0.11284320801496506,
-      "current_K_oracle_weight": 0.0822911337018013,
-      "oracle_K_current_weight": 0.0571555495262146,
-      "oracle_K_oracle_weight": 0.0
-    },
-    "ph_patch": {
-      "current_K_current_weight": 0.019493402913212776,
-      "current_K_oracle_weight": 0.016492687165737152,
-      "oracle_K_current_weight": 0.017542554065585136,
-      "oracle_K_oracle_weight": 1.6858739115832577e-07
-    },
-    "ph_weight": {
-      "current_K_current_weight": 0.006312865298241377,
-      "current_K_oracle_weight": 0.006312865298241377,
-      "oracle_K_current_weight": 2.1490760104825313e-07,
-      "oracle_K_oracle_weight": 0.0
-    }
-  },
-  "dominant_sources": {
-    "C_ps": "prior_weighting_state",
-    "K_ps": "combined_prior_K_and_weighting_state",
-    "coh_ps": "prior_weighting_state",
-    "ph_grid": "prior_K_state",
-    "ph_patch": "combined_prior_K_and_weighting_state",
-    "ph_weight": "prior_K_state"
-  },
-  "generated_at_utc": "2026-05-18T10:58:19Z",
-  "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
-  "interpretation": "Prior K is inferred from the saved ph_weight phase ramp; prior weighting is inferred from its scalar magnitude. Each scenario rebuilds ph_weight, ph_grid, localized ph_patch samples, and topofit outputs for the selected final-iteration rows.",
-  "kernel_backend": "python",
-  "localized_clap_windows": {
-    "current_K_current_weight": 60,
-    "current_K_oracle_weight": 60,
-    "oracle_K_current_weight": 60,
-    "oracle_K_oracle_weight": 60
-  },
-  "native_threads": 0,
-  "patch": "PATCH_1",
-  "replay_timings_sec": {
-    "current_K_current_weight": 0.7556799817830324,
-    "current_K_oracle_weight": 0.7725409781560302,
-    "oracle_K_current_weight": 0.7655399939976633,
-    "oracle_K_oracle_weight": 0.787782397121191
-  },
-  "row_base": 1,
-  "rows": [
-    22182,
-    22100,
-    12693,
-    22181,
-    22098
+  "atol": 1e-10,
+  "failed_patches": [
+    "PATCH_1",
+    "PATCH_2",
+    "PATCH_3",
+    "PATCH_4"
   ],
-  "rows_detail": [
-    {
-      "current_prior_K": 0.0011444801255497343,
-      "current_prior_weight": 1.000000005996979,
-      "delta_prior_K": -1.6354213282078738e-05,
-      "delta_prior_weight": -2.6075674952608097e-09,
-      "diffs": {
+  "failure_key": "C_ps",
+  "generated_at_utc": "2026-05-19T09:29:19Z",
+  "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+  "interpretation": "Each patch auto-selects the first failing C_ps row under the requested tolerance, then replays ph_weight, ph_grid, ph_patch, and topofit output at that row.",
+  "max_failing_rows": 1,
+  "patch_count": 4,
+  "patch_mode": "all_authoritative",
+  "patches": {
+    "PATCH_1": {
+      "aggregate_metrics": {
         "C_ps": {
-          "current_K_current_weight": 0.00479021638737126,
-          "current_K_oracle_weight": 0.00045750247106696174,
-          "oracle_K_current_weight": 0.004310550123752727,
-          "oracle_K_oracle_weight": 1.3298435741493364e-08
+          "current_K_current_weight": 0.029587159411539776,
+          "current_K_oracle_weight": 0.02825497252063558,
+          "oracle_K_current_weight": 0.028329282760413577,
+          "oracle_K_oracle_weight": 2.5215607046824573e-08
         },
         "K_ps": {
-          "current_K_current_weight": 2.9483335475752066e-06,
-          "current_K_oracle_weight": 6.503509102417926e-06,
-          "oracle_K_current_weight": 3.3913721612780813e-06,
-          "oracle_K_oracle_weight": 3.282237502622021e-11
+          "current_K_current_weight": 4.345419247624117e-05,
+          "current_K_oracle_weight": 0.0020016156660601463,
+          "oracle_K_current_weight": 0.002001615407726474,
+          "oracle_K_oracle_weight": 2.6237042226318064e-10
         },
         "coh_ps": {
-          "current_K_current_weight": 0.0037231652794886827,
-          "current_K_oracle_weight": 1.4711376624343409e-05,
-          "oracle_K_current_weight": 0.0037419254271096047,
-          "oracle_K_oracle_weight": 3.085031419214346e-08
+          "current_K_current_weight": 0.0017682283943821209,
+          "current_K_oracle_weight": 0.1395950689458575,
+          "oracle_K_current_weight": 0.1395950960454061,
+          "oracle_K_oracle_weight": 6.770051719229286e-08
         },
         "ph_grid": {
           "current_K_current_weight": 0.11284320801496506,
-          "current_K_oracle_weight": 0.0822911337018013,
-          "oracle_K_current_weight": 0.0571555495262146,
+          "current_K_oracle_weight": 3.8027501106262207,
+          "oracle_K_current_weight": 3.8027501106262207,
           "oracle_K_oracle_weight": 0.0
         },
         "ph_patch": {
           "current_K_current_weight": 0.019493402913212776,
-          "current_K_oracle_weight": 0.012269443832337856,
-          "oracle_K_current_weight": 0.017542554065585136,
-          "oracle_K_oracle_weight": 1.3328003944934608e-07
+          "current_K_oracle_weight": 1.2727344036102295,
+          "oracle_K_current_weight": 1.2727349996566772,
+          "oracle_K_oracle_weight": 1.812804413248159e-07
         },
         "ph_weight": {
-          "current_K_current_weight": 0.006312865298241377,
-          "current_K_oracle_weight": 0.006312865298241377,
-          "oracle_K_current_weight": 2.1490760104825313e-07,
+          "current_K_current_weight": 0.06167582795023918,
+          "current_K_oracle_weight": 1.997207522392273,
+          "oracle_K_current_weight": 1.9972074031829834,
           "oracle_K_oracle_weight": 0.0
         }
       },
       "dominant_sources": {
-        "C_ps": "prior_weighting_state",
-        "K_ps": "combined_prior_K_and_weighting_state",
-        "coh_ps": "prior_weighting_state",
-        "ph_grid": "prior_K_state",
-        "ph_patch": "prior_weighting_state",
-        "ph_weight": "prior_K_state"
-      },
-      "grid_ij": [
-        57,
-        795
-      ],
-      "oracle_prior_K": 0.001160834338831813,
-      "oracle_prior_weight": 1.0000000086045464,
-      "row": 22182,
-      "zero_based_row": 22181
-    },
-    {
-      "current_prior_K": 0.000966483656028248,
-      "current_prior_weight": 1.000000003646655,
-      "delta_prior_K": -1.5507509804349884e-05,
-      "delta_prior_weight": 1.6813482717203954e-08,
-      "diffs": {
-        "C_ps": {
-          "current_K_current_weight": 0.004357090423568549,
-          "current_K_oracle_weight": 0.0004541947746045244,
-          "oracle_K_current_weight": 0.003880497547879322,
-          "oracle_K_oracle_weight": 5.127638244561972e-09
-        },
-        "K_ps": {
-          "current_K_current_weight": 3.7503593031066457e-06,
-          "current_K_oracle_weight": 6.513535095786782e-06,
-          "oracle_K_current_weight": 2.599200397839863e-06,
-          "oracle_K_oracle_weight": 9.78388791424839e-11
-        },
-        "coh_ps": {
-          "current_K_current_weight": 0.002474960849520702,
-          "current_K_oracle_weight": 4.8245644794775444e-05,
-          "oracle_K_current_weight": 0.0024263888857286586,
-          "oracle_K_oracle_weight": 2.2505466379385553e-09
-        },
-        "ph_grid": {
-          "current_K_current_weight": 0.11284320801496506,
-          "current_K_oracle_weight": 0.0822911337018013,
-          "oracle_K_current_weight": 0.0571555495262146,
-          "oracle_K_oracle_weight": 0.0
-        },
-        "ph_patch": {
-          "current_K_current_weight": 0.019493402913212776,
-          "current_K_oracle_weight": 0.012269443832337856,
-          "oracle_K_current_weight": 0.017542554065585136,
-          "oracle_K_oracle_weight": 1.3328003944934608e-07
-        },
-        "ph_weight": {
-          "current_K_current_weight": 0.005986013449728489,
-          "current_K_oracle_weight": 0.005986020900309086,
-          "oracle_K_current_weight": 1.6858739115832577e-07,
-          "oracle_K_oracle_weight": 0.0
-        }
-      },
-      "dominant_sources": {
-        "C_ps": "prior_weighting_state",
-        "K_ps": "prior_K_state",
-        "coh_ps": "prior_weighting_state",
-        "ph_grid": "prior_K_state",
-        "ph_patch": "prior_weighting_state",
-        "ph_weight": "prior_K_state"
-      },
-      "grid_ij": [
-        57,
-        795
-      ],
-      "oracle_prior_K": 0.0009819911658325979,
-      "oracle_prior_weight": 0.9999999868331723,
-      "row": 22100,
-      "zero_based_row": 22099
-    },
-    {
-      "current_prior_K": 0.00019365538798626038,
-      "current_prior_weight": 1.0000000057412537,
-      "delta_prior_K": -1.5881297958566382e-10,
-      "delta_prior_weight": -7.936898249738533e-09,
-      "diffs": {
-        "C_ps": {
-          "current_K_current_weight": 6.727829376940164e-09,
-          "current_K_oracle_weight": 0.000546708389087297,
-          "oracle_K_current_weight": 0.0005467026342456938,
-          "oracle_K_oracle_weight": 9.132928330268797e-09
-        },
-        "K_ps": {
-          "current_K_current_weight": 9.131050212815572e-11,
-          "current_K_oracle_weight": 2.25966155529883e-06,
-          "oracle_K_current_weight": 2.2597804232454843e-06,
-          "oracle_K_oracle_weight": 1.2180763505047904e-11
-        },
-        "coh_ps": {
-          "current_K_current_weight": 2.353488059991804e-08,
-          "current_K_oracle_weight": 6.27387480856001e-08,
-          "oracle_K_current_weight": 6.256836670992527e-08,
-          "oracle_K_oracle_weight": 2.3269220772448307e-08
-        },
-        "ph_grid": {
-          "current_K_current_weight": 9.991558727051597e-07,
-          "current_K_oracle_weight": 9.991558727051597e-07,
-          "oracle_K_current_weight": 9.991558727051597e-07,
-          "oracle_K_oracle_weight": 0.0
-        },
-        "ph_patch": {
-          "current_K_current_weight": 1.3328003944934608e-07,
-          "current_K_oracle_weight": 0.0024473867379128933,
-          "oracle_K_current_weight": 0.0024474284145981073,
-          "oracle_K_oracle_weight": 1.6858739115832577e-07
-        },
-        "ph_weight": {
-          "current_K_current_weight": 1.8431717307976214e-07,
-          "current_K_oracle_weight": 1.8431717307976214e-07,
-          "oracle_K_current_weight": 1.7943375496543013e-07,
-          "oracle_K_oracle_weight": 0.0
-        }
-      },
-      "dominant_sources": {
-        "C_ps": "matched",
-        "K_ps": "matched",
-        "coh_ps": "topofit_output",
-        "ph_grid": "combined_prior_K_and_weighting_state",
-        "ph_patch": "matched",
-        "ph_weight": "matched"
-      },
-      "grid_ij": [
-        21,
-        501
-      ],
-      "oracle_prior_K": 0.00019365554679923996,
-      "oracle_prior_weight": 1.000000013678152,
-      "row": 12693,
-      "zero_based_row": 12692
-    },
-    {
-      "current_prior_K": 0.0017595545258142246,
-      "current_prior_weight": 1.0000000012098909,
-      "delta_prior_K": 2.7671162674365243e-08,
-      "delta_prior_weight": 2.005383747949452e-08,
-      "diffs": {
-        "C_ps": {
-          "current_K_current_weight": 4.757451909087607e-06,
-          "current_K_oracle_weight": 5.719746642984802e-08,
-          "oracle_K_current_weight": 4.618416752033561e-06,
-          "oracle_K_oracle_weight": 6.230419713482149e-08
-        },
-        "K_ps": {
-          "current_K_current_weight": 2.8882852379534182e-08,
-          "current_K_oracle_weight": 4.2542252512867834e-08,
-          "oracle_K_current_weight": 1.8114998345981903e-08,
-          "oracle_K_oracle_weight": 5.984428013902643e-12
-        },
-        "coh_ps": {
-          "current_K_current_weight": 4.934085265917432e-07,
-          "current_K_oracle_weight": 7.547778591021626e-08,
-          "oracle_K_current_weight": 5.861701841691769e-07,
-          "oracle_K_oracle_weight": 1.9306402143648427e-08
-        },
-        "ph_grid": {
-          "current_K_current_weight": 7.571056630695239e-05,
-          "current_K_oracle_weight": 7.571056630695239e-05,
-          "oracle_K_current_weight": 1.3486991292666062e-06,
-          "oracle_K_oracle_weight": 0.0
-        },
-        "ph_patch": {
-          "current_K_current_weight": 0.00010623264097375795,
-          "current_K_oracle_weight": 3.544493665685877e-05,
-          "oracle_K_current_weight": 0.00010503715020604432,
-          "oracle_K_oracle_weight": 1.6858739115832577e-07
-        },
-        "ph_weight": {
-          "current_K_current_weight": 1.0699822269089054e-05,
-          "current_K_oracle_weight": 1.0699822269089054e-05,
-          "oracle_K_current_weight": 1.884864389012364e-07,
-          "oracle_K_oracle_weight": 0.0
-        }
-      },
-      "dominant_sources": {
-        "C_ps": "prior_weighting_state",
-        "K_ps": "prior_K_state",
-        "coh_ps": "prior_weighting_state",
-        "ph_grid": "prior_K_state",
-        "ph_patch": "prior_weighting_state",
-        "ph_weight": "prior_K_state"
-      },
-      "grid_ij": [
-        57,
-        776
-      ],
-      "oracle_prior_K": 0.0017595268546515502,
-      "oracle_prior_weight": 0.9999999811560534,
-      "row": 22181,
-      "zero_based_row": 22180
-    },
-    {
-      "current_prior_K": 0.0003287173926399104,
-      "current_prior_weight": 0.9999999957609153,
-      "delta_prior_K": -8.256197920426464e-10,
-      "delta_prior_weight": 1.066871013755133e-08,
-      "diffs": {
-        "C_ps": {
-          "current_K_current_weight": 2.4773366913422024e-07,
-          "current_K_oracle_weight": 0.00044004694928234667,
-          "oracle_K_current_weight": 0.00043972107476708544,
-          "oracle_K_oracle_weight": 6.99639303158861e-08
-        },
-        "K_ps": {
-          "current_K_current_weight": 2.7172314702103573e-10,
-          "current_K_oracle_weight": 1.8273800592996051e-07,
-          "oracle_K_current_weight": 1.8291838934389546e-07,
-          "oracle_K_oracle_weight": 5.376588616597816e-11
-        },
-        "coh_ps": {
-          "current_K_current_weight": 1.4618137256228181e-08,
-          "current_K_oracle_weight": 0.00010970605325222316,
-          "oracle_K_current_weight": 0.0001097042214438515,
-          "oracle_K_oracle_weight": 6.471131075436176e-09
-        },
-        "ph_grid": {
-          "current_K_current_weight": 3.2098083124765253e-07,
-          "current_K_oracle_weight": 3.4882720001405687e-07,
-          "oracle_K_current_weight": 1.812804413248159e-07,
-          "oracle_K_oracle_weight": 0.0
-        },
-        "ph_patch": {
-          "current_K_current_weight": 6.59244642520207e-06,
-          "current_K_oracle_weight": 0.016492687165737152,
-          "oracle_K_current_weight": 0.016491491347551346,
-          "oracle_K_oracle_weight": 1.3328003944934608e-07
-        },
-        "ph_weight": {
-          "current_K_current_weight": 3.2098083124765253e-07,
-          "current_K_oracle_weight": 3.4882720001405687e-07,
-          "oracle_K_current_weight": 1.812804413248159e-07,
-          "oracle_K_oracle_weight": 0.0
-        }
-      },
-      "dominant_sources": {
-        "C_ps": "topofit_output",
+        "C_ps": "combined_prior_K_and_weighting_state",
         "K_ps": "combined_prior_K_and_weighting_state",
         "coh_ps": "combined_prior_K_and_weighting_state",
-        "ph_grid": "matched",
+        "ph_grid": "combined_prior_K_and_weighting_state",
         "ph_patch": "combined_prior_K_and_weighting_state",
-        "ph_weight": "matched"
+        "ph_weight": "combined_prior_K_and_weighting_state"
       },
-      "grid_ij": [
-        57,
-        110
+      "first_failure": {
+        "abs_diff": 3.4647919866515053e-08,
+        "failure_kind": "value_mismatch",
+        "golden_value": 0.5925717353820801,
+        "index": [
+          0
+        ],
+        "key": "C_ps",
+        "max_abs": 0.029587159411539776,
+        "max_abs_golden_value": -1.8473562002182007,
+        "max_abs_index": [
+          22182
+        ],
+        "max_abs_row": 22183,
+        "max_abs_run_value": -1.817769040806661,
+        "max_abs_zero_based_row": 22182,
+        "row": 1,
+        "run_value": 0.59257177003,
+        "sample_rows": [
+          1,
+          22183
+        ],
+        "zero_based_row": 0
+      },
+      "generated_at_utc": "2026-05-19T09:28:43Z",
+      "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+      "interpretation": "Prior K is inferred from the saved ph_weight phase ramp; prior weighting is inferred from its scalar magnitude. Each scenario rebuilds ph_weight, ph_grid, localized ph_patch samples, and topofit outputs for the selected final-iteration rows.",
+      "kernel_backend": "native",
+      "localized_clap_windows": {
+        "current_K_current_weight": 20,
+        "current_K_oracle_weight": 20,
+        "oracle_K_current_weight": 20,
+        "oracle_K_oracle_weight": 20
+      },
+      "native_threads": 8,
+      "patch": "PATCH_1",
+      "replay_timings_sec": {
+        "current_K_current_weight": 0.44053249387070537,
+        "current_K_oracle_weight": 0.4337015231139958,
+        "oracle_K_current_weight": 0.4347416181117296,
+        "oracle_K_oracle_weight": 0.42702993331477046
+      },
+      "row_base": 1,
+      "rows": [
+        1,
+        22183
       ],
-      "oracle_prior_K": 0.00032871821825970245,
-      "oracle_prior_weight": 0.9999999850922051,
-      "row": 22098,
-      "zero_based_row": 22097
+      "rows_detail": [
+        {
+          "current_prior_K": 0.001516828623156865,
+          "current_prior_weight": 1.0000000096427706,
+          "delta_prior_K": -1.865916362392417e-10,
+          "delta_prior_weight": 6.997460388902255e-10,
+          "diffs": {
+            "C_ps": {
+              "current_K_current_weight": 3.4647919866515053e-08,
+              "current_K_oracle_weight": 0.02825497252063558,
+              "oracle_K_current_weight": 0.028254980863011925,
+              "oracle_K_oracle_weight": 2.5215607046824573e-08
+            },
+            "K_ps": {
+              "current_K_current_weight": 1.8842809777763758e-10,
+              "current_K_oracle_weight": 0.0020016156660601463,
+              "oracle_K_current_weight": 0.002001615407726474,
+              "oracle_K_oracle_weight": 2.6237042226318064e-10
+            },
+            "coh_ps": {
+              "current_K_current_weight": 6.699382404384835e-08,
+              "current_K_oracle_weight": 0.1395950689458575,
+              "oracle_K_current_weight": 0.1395950960454061,
+              "oracle_K_oracle_weight": 6.770051719229286e-08
+            },
+            "ph_grid": {
+              "current_K_current_weight": 5.331201577973843e-07,
+              "current_K_oracle_weight": 3.8027501106262207,
+              "oracle_K_current_weight": 3.8027501106262207,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_patch": {
+              "current_K_current_weight": 1.884864389012364e-07,
+              "current_K_oracle_weight": 1.2727344036102295,
+              "oracle_K_current_weight": 1.2727349996566772,
+              "oracle_K_oracle_weight": 1.812804413248159e-07
+            },
+            "ph_weight": {
+              "current_K_current_weight": 2.4575624024691933e-07,
+              "current_K_oracle_weight": 1.997207522392273,
+              "oracle_K_current_weight": 1.9972074031829834,
+              "oracle_K_oracle_weight": 0.0
+            }
+          },
+          "dominant_sources": {
+            "C_ps": "topofit_output",
+            "K_ps": "topofit_output",
+            "coh_ps": "topofit_output",
+            "ph_grid": "combined_prior_K_and_weighting_state",
+            "ph_patch": "matched",
+            "ph_weight": "matched"
+          },
+          "first_divergent_intermediate": "ph_grid",
+          "grid_ij": [
+            1,
+            38
+          ],
+          "oracle_prior_K": 0.0015168288097485013,
+          "oracle_prior_weight": 1.0000000089430245,
+          "row": 1,
+          "zero_based_row": 0
+        },
+        {
+          "current_prior_K": -0.00048785256243983916,
+          "current_prior_weight": 0.9748305136492698,
+          "delta_prior_K": -9.901932772723212e-05,
+          "delta_prior_weight": 0.04986731569062808,
+          "diffs": {
+            "C_ps": {
+              "current_K_current_weight": 0.029587159411539776,
+              "current_K_oracle_weight": 0.0012302375505344187,
+              "oracle_K_current_weight": 0.028329282760413577,
+              "oracle_K_oracle_weight": 4.528554864435819e-09
+            },
+            "K_ps": {
+              "current_K_current_weight": 4.345419247624117e-05,
+              "current_K_oracle_weight": 5.601937883441309e-06,
+              "oracle_K_current_weight": 4.883665228363771e-05,
+              "oracle_K_oracle_weight": 2.5506584344636707e-10
+            },
+            "coh_ps": {
+              "current_K_current_weight": 0.0017682283943821209,
+              "current_K_oracle_weight": 0.0002850970762587335,
+              "oracle_K_current_weight": 0.0014859501987519175,
+              "oracle_K_oracle_weight": 5.508780820395742e-09
+            },
+            "ph_grid": {
+              "current_K_current_weight": 0.11284320801496506,
+              "current_K_oracle_weight": 0.0822911337018013,
+              "oracle_K_current_weight": 0.0571555495262146,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_patch": {
+              "current_K_current_weight": 0.019493402913212776,
+              "current_K_oracle_weight": 0.012269443832337856,
+              "oracle_K_current_weight": 0.017542554065585136,
+              "oracle_K_oracle_weight": 1.3328003944934608e-07
+            },
+            "ph_weight": {
+              "current_K_current_weight": 0.06167582795023918,
+              "current_K_oracle_weight": 0.035352177917957306,
+              "oracle_K_current_weight": 0.04986748471856117,
+              "oracle_K_oracle_weight": 0.0
+            }
+          },
+          "dominant_sources": {
+            "C_ps": "prior_weighting_state",
+            "K_ps": "prior_weighting_state",
+            "coh_ps": "prior_weighting_state",
+            "ph_grid": "prior_K_state",
+            "ph_patch": "prior_weighting_state",
+            "ph_weight": "prior_weighting_state"
+          },
+          "first_divergent_intermediate": "ph_weight",
+          "grid_ij": [
+            57,
+            795
+          ],
+          "oracle_prior_K": -0.00038883323471260704,
+          "oracle_prior_weight": 0.9249631979586417,
+          "row": 22183,
+          "zero_based_row": 22182
+        }
+      ],
+      "run_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/stage2_parity_probe",
+      "scenarios": [
+        "current_K_current_weight",
+        "oracle_K_current_weight",
+        "current_K_oracle_weight",
+        "oracle_K_oracle_weight"
+      ],
+      "status": "failed"
+    },
+    "PATCH_2": {
+      "aggregate_metrics": {
+        "C_ps": {
+          "current_K_current_weight": 2.501167922842546,
+          "current_K_oracle_weight": 0.07728341770561165,
+          "oracle_K_current_weight": 0.4060600013867594,
+          "oracle_K_oracle_weight": 0.0034867801220811317
+        },
+        "K_ps": {
+          "current_K_current_weight": 0.013374656488553658,
+          "current_K_oracle_weight": 0.003964298314308162,
+          "oracle_K_current_weight": 0.01448445796191547,
+          "oracle_K_oracle_weight": 0.0001250762490783569
+        },
+        "coh_ps": {
+          "current_K_current_weight": 0.16489459432696973,
+          "current_K_oracle_weight": 0.207239687750575,
+          "oracle_K_current_weight": 0.26956114185175334,
+          "oracle_K_oracle_weight": 0.000990920841196563
+        },
+        "ph_grid": {
+          "current_K_current_weight": 0.1544756144285202,
+          "current_K_oracle_weight": 1.9991074800491333,
+          "oracle_K_current_weight": 1.9965583086013794,
+          "oracle_K_oracle_weight": 0.0
+        },
+        "ph_patch": {
+          "current_K_current_weight": 1.704851508140564,
+          "current_K_oracle_weight": 1.9995973110198975,
+          "oracle_K_current_weight": 1.9978796243667603,
+          "oracle_K_oracle_weight": 0.0
+        },
+        "ph_weight": {
+          "current_K_current_weight": 0.1544756144285202,
+          "current_K_oracle_weight": 1.9991074800491333,
+          "oracle_K_current_weight": 1.9965583086013794,
+          "oracle_K_oracle_weight": 0.0
+        }
+      },
+      "dominant_sources": {
+        "C_ps": "prior_weighting_state",
+        "K_ps": "prior_weighting_state",
+        "coh_ps": "combined_prior_K_and_weighting_state",
+        "ph_grid": "combined_prior_K_and_weighting_state",
+        "ph_patch": "combined_prior_K_and_weighting_state",
+        "ph_weight": "combined_prior_K_and_weighting_state"
+      },
+      "first_failure": {
+        "abs_diff": 0.00021218894352745266,
+        "failure_kind": "value_mismatch",
+        "golden_value": -0.23817272795238867,
+        "index": [
+          0
+        ],
+        "key": "C_ps",
+        "max_abs": 2.501167922842546,
+        "max_abs_golden_value": 0.10107583073575727,
+        "max_abs_index": [
+          185140
+        ],
+        "max_abs_row": 185141,
+        "max_abs_run_value": 2.6022437535783034,
+        "max_abs_zero_based_row": 185140,
+        "row": 1,
+        "run_value": -0.23838491689591612,
+        "sample_rows": [
+          1,
+          185141
+        ],
+        "zero_based_row": 0
+      },
+      "generated_at_utc": "2026-05-19T09:28:57Z",
+      "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+      "interpretation": "Prior K is inferred from the saved ph_weight phase ramp; prior weighting is inferred from its scalar magnitude. Each scenario rebuilds ph_weight, ph_grid, localized ph_patch samples, and topofit outputs for the selected final-iteration rows.",
+      "kernel_backend": "native",
+      "localized_clap_windows": {
+        "current_K_current_weight": 20,
+        "current_K_oracle_weight": 20,
+        "oracle_K_current_weight": 20,
+        "oracle_K_oracle_weight": 20
+      },
+      "native_threads": 8,
+      "patch": "PATCH_2",
+      "replay_timings_sec": {
+        "current_K_current_weight": 0.7845829236321151,
+        "current_K_oracle_weight": 0.7613533949479461,
+        "oracle_K_current_weight": 0.7773846820928156,
+        "oracle_K_oracle_weight": 0.7717808987945318
+      },
+      "row_base": 1,
+      "rows": [
+        1,
+        185141
+      ],
+      "rows_detail": [
+        {
+          "current_prior_K": -0.003844266522899191,
+          "current_prior_weight": 1.0000000138093714,
+          "delta_prior_K": -1.0256562808091084e-05,
+          "delta_prior_weight": 6.448068745612545e-09,
+          "diffs": {
+            "C_ps": {
+              "current_K_current_weight": 0.00021218894352745266,
+              "current_K_oracle_weight": 0.003692801405819318,
+              "oracle_K_current_weight": 0.0036935877487677404,
+              "oracle_K_oracle_weight": 0.00015088032927770834
+            },
+            "K_ps": {
+              "current_K_current_weight": 5.112337284805899e-05,
+              "current_K_oracle_weight": 3.799717094658383e-05,
+              "oracle_K_current_weight": 3.8974608584771767e-05,
+              "oracle_K_oracle_weight": 5.203150899191385e-05
+            },
+            "coh_ps": {
+              "current_K_current_weight": 0.0006737792504653006,
+              "current_K_oracle_weight": 0.0006874117655759626,
+              "oracle_K_current_weight": 0.0006883320227798473,
+              "oracle_K_oracle_weight": 0.000681280706176679
+            },
+            "ph_grid": {
+              "current_K_current_weight": 0.00787921529263258,
+              "current_K_oracle_weight": 0.00787921529263258,
+              "oracle_K_current_weight": 0.004933418706059456,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_patch": {
+              "current_K_current_weight": 0.00040192867163568735,
+              "current_K_oracle_weight": 0.03132901340723038,
+              "oracle_K_current_weight": 0.03160707652568817,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_weight": {
+              "current_K_current_weight": 0.007803624961525202,
+              "current_K_oracle_weight": 0.007803651038557291,
+              "oracle_K_current_weight": 0.008065511472523212,
+              "oracle_K_oracle_weight": 0.0
+            }
+          },
+          "dominant_sources": {
+            "C_ps": "topofit_output",
+            "K_ps": "topofit_output",
+            "coh_ps": "topofit_output",
+            "ph_grid": "prior_K_state",
+            "ph_patch": "combined_prior_K_and_weighting_state",
+            "ph_weight": "combined_prior_K_and_weighting_state"
+          },
+          "first_divergent_intermediate": "ph_weight",
+          "grid_ij": [
+            1,
+            212
+          ],
+          "oracle_prior_K": -0.0038340099600910997,
+          "oracle_prior_weight": 1.0000000073613027,
+          "row": 1,
+          "zero_based_row": 0
+        },
+        {
+          "current_prior_K": 0.002433567701153341,
+          "current_prior_weight": 0.9999286367692589,
+          "delta_prior_K": 0.0004145878993301044,
+          "delta_prior_weight": 0.0003730409356290654,
+          "diffs": {
+            "C_ps": {
+              "current_K_current_weight": 2.501167922842546,
+              "current_K_oracle_weight": 0.07728341770561165,
+              "oracle_K_current_weight": 0.4060600013867594,
+              "oracle_K_oracle_weight": 0.0034867801220811317
+            },
+            "K_ps": {
+              "current_K_current_weight": 0.013374656488553658,
+              "current_K_oracle_weight": 0.003964298314308162,
+              "oracle_K_current_weight": 0.01448445796191547,
+              "oracle_K_oracle_weight": 0.0001250762490783569
+            },
+            "coh_ps": {
+              "current_K_current_weight": 0.16489459432696973,
+              "current_K_oracle_weight": 0.207239687750575,
+              "oracle_K_current_weight": 0.26956114185175334,
+              "oracle_K_oracle_weight": 0.000990920841196563
+            },
+            "ph_grid": {
+              "current_K_current_weight": 0.1544756144285202,
+              "current_K_oracle_weight": 1.9991074800491333,
+              "oracle_K_current_weight": 1.9965583086013794,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_patch": {
+              "current_K_current_weight": 1.704851508140564,
+              "current_K_oracle_weight": 1.9995973110198975,
+              "oracle_K_current_weight": 1.9978796243667603,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_weight": {
+              "current_K_current_weight": 0.1544756144285202,
+              "current_K_oracle_weight": 1.9991074800491333,
+              "oracle_K_current_weight": 1.9965583086013794,
+              "oracle_K_oracle_weight": 0.0
+            }
+          },
+          "dominant_sources": {
+            "C_ps": "prior_weighting_state",
+            "K_ps": "prior_weighting_state",
+            "coh_ps": "combined_prior_K_and_weighting_state",
+            "ph_grid": "combined_prior_K_and_weighting_state",
+            "ph_patch": "combined_prior_K_and_weighting_state",
+            "ph_weight": "combined_prior_K_and_weighting_state"
+          },
+          "first_divergent_intermediate": "ph_weight",
+          "grid_ij": [
+            145,
+            238
+          ],
+          "oracle_prior_K": 0.0020189798018232365,
+          "oracle_prior_weight": 0.9995555958336299,
+          "row": 185141,
+          "zero_based_row": 185140
+        }
+      ],
+      "run_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/stage2_parity_probe",
+      "scenarios": [
+        "current_K_current_weight",
+        "oracle_K_current_weight",
+        "current_K_oracle_weight",
+        "oracle_K_oracle_weight"
+      ],
+      "status": "failed"
+    },
+    "PATCH_3": {
+      "aggregate_metrics": {
+        "C_ps": {
+          "current_K_current_weight": 1.363798779356078,
+          "current_K_oracle_weight": 0.008592710287689043,
+          "oracle_K_current_weight": 0.9258899597246257,
+          "oracle_K_oracle_weight": 2.220446049250313e-16
+        },
+        "K_ps": {
+          "current_K_current_weight": 0.008774231819615152,
+          "current_K_oracle_weight": 2.6976959222243038e-05,
+          "oracle_K_current_weight": 0.0017358106256923393,
+          "oracle_K_oracle_weight": 8.673617379884035e-19
+        },
+        "coh_ps": {
+          "current_K_current_weight": 0.0770345974085645,
+          "current_K_oracle_weight": 0.002376367905116805,
+          "oracle_K_current_weight": 0.07177742811077631,
+          "oracle_K_oracle_weight": 2.220446049250313e-16
+        },
+        "ph_grid": {
+          "current_K_current_weight": 1.0162320137023926,
+          "current_K_oracle_weight": 0.04204099625349045,
+          "oracle_K_current_weight": 0.9741995334625244,
+          "oracle_K_oracle_weight": 0.0
+        },
+        "ph_patch": {
+          "current_K_current_weight": 1.4042110443115234,
+          "current_K_oracle_weight": 0.045705996453762054,
+          "oracle_K_current_weight": 1.838844895362854,
+          "oracle_K_oracle_weight": 0.0
+        },
+        "ph_weight": {
+          "current_K_current_weight": 1.0162320137023926,
+          "current_K_oracle_weight": 0.04204099625349045,
+          "oracle_K_current_weight": 0.9741995334625244,
+          "oracle_K_oracle_weight": 0.0
+        }
+      },
+      "dominant_sources": {
+        "C_ps": "prior_weighting_state",
+        "K_ps": "prior_weighting_state",
+        "coh_ps": "prior_weighting_state",
+        "ph_grid": "prior_weighting_state",
+        "ph_patch": "prior_weighting_state",
+        "ph_weight": "prior_weighting_state"
+      },
+      "first_failure": {
+        "abs_diff": 5.467446496376649e-07,
+        "failure_kind": "value_mismatch",
+        "golden_value": 0.09990415869449286,
+        "index": [
+          0
+        ],
+        "key": "C_ps",
+        "max_abs": 1.363798779356078,
+        "max_abs_golden_value": -1.628252207708494,
+        "max_abs_index": [
+          153477
+        ],
+        "max_abs_row": 153478,
+        "max_abs_run_value": -0.2644534283524159,
+        "max_abs_zero_based_row": 153477,
+        "row": 1,
+        "run_value": 0.0999047054391425,
+        "sample_rows": [
+          1,
+          153478
+        ],
+        "zero_based_row": 0
+      },
+      "generated_at_utc": "2026-05-19T09:29:08Z",
+      "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+      "interpretation": "Prior K is inferred from the saved ph_weight phase ramp; prior weighting is inferred from its scalar magnitude. Each scenario rebuilds ph_weight, ph_grid, localized ph_patch samples, and topofit outputs for the selected final-iteration rows.",
+      "kernel_backend": "native",
+      "localized_clap_windows": {
+        "current_K_current_weight": 18,
+        "current_K_oracle_weight": 18,
+        "oracle_K_current_weight": 18,
+        "oracle_K_oracle_weight": 18
+      },
+      "native_threads": 8,
+      "patch": "PATCH_3",
+      "replay_timings_sec": {
+        "current_K_current_weight": 0.6466891840100288,
+        "current_K_oracle_weight": 0.6068044137209654,
+        "oracle_K_current_weight": 0.6048075370490551,
+        "oracle_K_oracle_weight": 0.5994869861751795
+      },
+      "row_base": 1,
+      "rows": [
+        1,
+        153478
+      ],
+      "rows_detail": [
+        {
+          "current_prior_K": 0.004369326811902048,
+          "current_prior_weight": 0.9999999897871742,
+          "delta_prior_K": -2.389229513616656e-07,
+          "delta_prior_weight": -9.921760857345419e-09,
+          "diffs": {
+            "C_ps": {
+              "current_K_current_weight": 5.467446496376649e-07,
+              "current_K_oracle_weight": 4.875717327795792e-07,
+              "oracle_K_current_weight": 3.73653716162492e-08,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "K_ps": {
+              "current_K_current_weight": 1.7607060959472925e-07,
+              "current_K_oracle_weight": 1.7616906763506107e-07,
+              "oracle_K_current_weight": 1.2503584799483658e-10,
+              "oracle_K_oracle_weight": 8.673617379884035e-19
+            },
+            "coh_ps": {
+              "current_K_current_weight": 5.932220743520844e-07,
+              "current_K_oracle_weight": 4.7188374041606806e-07,
+              "oracle_K_current_weight": 1.1298500768308628e-07,
+              "oracle_K_oracle_weight": 2.220446049250313e-16
+            },
+            "ph_grid": {
+              "current_K_current_weight": 8.90880764927715e-05,
+              "current_K_oracle_weight": 8.90880764927715e-05,
+              "oracle_K_current_weight": 6.664001972467304e-08,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_patch": {
+              "current_K_current_weight": 6.6780747147277e-05,
+              "current_K_oracle_weight": 6.709365698043257e-05,
+              "oracle_K_current_weight": 1.3315502656041645e-06,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_weight": {
+              "current_K_current_weight": 8.90880764927715e-05,
+              "current_K_oracle_weight": 8.90880764927715e-05,
+              "oracle_K_current_weight": 6.664001972467304e-08,
+              "oracle_K_oracle_weight": 0.0
+            }
+          },
+          "dominant_sources": {
+            "C_ps": "prior_K_state",
+            "K_ps": "prior_K_state",
+            "coh_ps": "prior_K_state",
+            "ph_grid": "prior_K_state",
+            "ph_patch": "prior_K_state",
+            "ph_weight": "prior_K_state"
+          },
+          "first_divergent_intermediate": "ph_weight",
+          "grid_ij": [
+            1,
+            9
+          ],
+          "oracle_prior_K": 0.00436956573485341,
+          "oracle_prior_weight": 0.999999999708935,
+          "row": 1,
+          "zero_based_row": 0
+        },
+        {
+          "current_prior_K": -0.00536167380575522,
+          "current_prior_weight": 0.9952241859037976,
+          "delta_prior_K": -0.008529104170586582,
+          "delta_prior_weight": 0.9741993554216064,
+          "diffs": {
+            "C_ps": {
+              "current_K_current_weight": 1.363798779356078,
+              "current_K_oracle_weight": 0.008592710287689043,
+              "oracle_K_current_weight": 0.9258899597246257,
+              "oracle_K_oracle_weight": 2.220446049250313e-16
+            },
+            "K_ps": {
+              "current_K_current_weight": 0.008774231819615152,
+              "current_K_oracle_weight": 2.6976959222243038e-05,
+              "oracle_K_current_weight": 0.0017358106256923393,
+              "oracle_K_oracle_weight": 8.673617379884035e-19
+            },
+            "coh_ps": {
+              "current_K_current_weight": 0.0770345974085645,
+              "current_K_oracle_weight": 0.002376367905116805,
+              "oracle_K_current_weight": 0.07177742811077631,
+              "oracle_K_oracle_weight": 1.1102230246251565e-16
+            },
+            "ph_grid": {
+              "current_K_current_weight": 1.0162320137023926,
+              "current_K_oracle_weight": 0.04204099625349045,
+              "oracle_K_current_weight": 0.9741995334625244,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_patch": {
+              "current_K_current_weight": 1.4042110443115234,
+              "current_K_oracle_weight": 0.045705996453762054,
+              "oracle_K_current_weight": 1.838844895362854,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_weight": {
+              "current_K_current_weight": 1.0162320137023926,
+              "current_K_oracle_weight": 0.04204099625349045,
+              "oracle_K_current_weight": 0.9741995334625244,
+              "oracle_K_oracle_weight": 0.0
+            }
+          },
+          "dominant_sources": {
+            "C_ps": "prior_weighting_state",
+            "K_ps": "prior_weighting_state",
+            "coh_ps": "prior_weighting_state",
+            "ph_grid": "prior_weighting_state",
+            "ph_patch": "prior_weighting_state",
+            "ph_weight": "prior_weighting_state"
+          },
+          "first_divergent_intermediate": "ph_weight",
+          "grid_ij": [
+            183,
+            93
+          ],
+          "oracle_prior_K": 0.0031674303648313628,
+          "oracle_prior_weight": 0.021024830482191188,
+          "row": 153478,
+          "zero_based_row": 153477
+        }
+      ],
+      "run_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/stage2_parity_probe",
+      "scenarios": [
+        "current_K_current_weight",
+        "oracle_K_current_weight",
+        "current_K_oracle_weight",
+        "oracle_K_oracle_weight"
+      ],
+      "status": "failed"
+    },
+    "PATCH_4": {
+      "aggregate_metrics": {
+        "C_ps": {
+          "current_K_current_weight": 3.1097532524298694,
+          "current_K_oracle_weight": 0.14322957277052747,
+          "oracle_K_current_weight": 3.1088682974211608,
+          "oracle_K_oracle_weight": 2.0816681711721685e-17
+        },
+        "K_ps": {
+          "current_K_current_weight": 0.009657142510429968,
+          "current_K_oracle_weight": 0.006207800142815514,
+          "oracle_K_current_weight": 0.009707794326916866,
+          "oracle_K_oracle_weight": 0.0
+        },
+        "coh_ps": {
+          "current_K_current_weight": 0.2739276252741202,
+          "current_K_oracle_weight": 0.11893635831898319,
+          "oracle_K_current_weight": 0.2731690155266955,
+          "oracle_K_oracle_weight": 5.551115123125783e-16
+        },
+        "ph_grid": {
+          "current_K_current_weight": 0.9947524666786194,
+          "current_K_oracle_weight": 1.984844446182251,
+          "oracle_K_current_weight": 0.9947524666786194,
+          "oracle_K_oracle_weight": 0.0
+        },
+        "ph_patch": {
+          "current_K_current_weight": 1.8386815786361694,
+          "current_K_oracle_weight": 1.9957082271575928,
+          "oracle_K_current_weight": 1.8196760416030884,
+          "oracle_K_oracle_weight": 0.0
+        },
+        "ph_weight": {
+          "current_K_current_weight": 0.9947524666786194,
+          "current_K_oracle_weight": 1.984844446182251,
+          "oracle_K_current_weight": 0.9947524666786194,
+          "oracle_K_oracle_weight": 0.0
+        }
+      },
+      "dominant_sources": {
+        "C_ps": "prior_weighting_state",
+        "K_ps": "prior_weighting_state",
+        "coh_ps": "prior_weighting_state",
+        "ph_grid": "combined_prior_K_and_weighting_state",
+        "ph_patch": "combined_prior_K_and_weighting_state",
+        "ph_weight": "combined_prior_K_and_weighting_state"
+      },
+      "first_failure": {
+        "abs_diff": 1.2904783516093365e-06,
+        "failure_kind": "value_mismatch",
+        "golden_value": 0.046632743038836647,
+        "index": [
+          0
+        ],
+        "key": "C_ps",
+        "max_abs": 3.1097532524298694,
+        "max_abs_golden_value": 0.038017821667754526,
+        "max_abs_index": [
+          131566
+        ],
+        "max_abs_row": 131567,
+        "max_abs_run_value": -3.0717354307621147,
+        "max_abs_zero_based_row": 131566,
+        "row": 1,
+        "run_value": 0.046634033517188256,
+        "sample_rows": [
+          1,
+          131567
+        ],
+        "zero_based_row": 0
+      },
+      "generated_at_utc": "2026-05-19T09:29:19Z",
+      "golden_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/InSAR_dataset_test_stage8diag_hl",
+      "interpretation": "Prior K is inferred from the saved ph_weight phase ramp; prior weighting is inferred from its scalar magnitude. Each scenario rebuilds ph_weight, ph_grid, localized ph_patch samples, and topofit outputs for the selected final-iteration rows.",
+      "kernel_backend": "native",
+      "localized_clap_windows": {
+        "current_K_current_weight": 19,
+        "current_K_oracle_weight": 19,
+        "oracle_K_current_weight": 19,
+        "oracle_K_oracle_weight": 19
+      },
+      "native_threads": 8,
+      "patch": "PATCH_4",
+      "replay_timings_sec": {
+        "current_K_current_weight": 0.6504816059023142,
+        "current_K_oracle_weight": 0.6610069153830409,
+        "oracle_K_current_weight": 0.6555728688836098,
+        "oracle_K_oracle_weight": 0.65040213894099
+      },
+      "row_base": 1,
+      "rows": [
+        1,
+        131567
+      ],
+      "rows_detail": [
+        {
+          "current_prior_K": -0.0010835019569775995,
+          "current_prior_weight": 0.999999999767685,
+          "delta_prior_K": -6.390791106145217e-08,
+          "delta_prior_weight": 5.1362400999011015e-09,
+          "diffs": {
+            "C_ps": {
+              "current_K_current_weight": 1.2904783516093365e-06,
+              "current_K_oracle_weight": 0.0004233859338091117,
+              "oracle_K_current_weight": 0.0004226901972095576,
+              "oracle_K_oracle_weight": 2.0816681711721685e-17
+            },
+            "K_ps": {
+              "current_K_current_weight": 4.732912050296745e-08,
+              "current_K_oracle_weight": 5.471086421806291e-06,
+              "oracle_K_current_weight": 5.530914828591037e-06,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "coh_ps": {
+              "current_K_current_weight": 4.0584342686500463e-07,
+              "current_K_oracle_weight": 0.001110541882589966,
+              "oracle_K_current_weight": 0.0011107549603940337,
+              "oracle_K_oracle_weight": 5.551115123125783e-16
+            },
+            "ph_grid": {
+              "current_K_current_weight": 2.38139764405787e-05,
+              "current_K_oracle_weight": 2.38139764405787e-05,
+              "oracle_K_current_weight": 5.960464477539063e-08,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_patch": {
+              "current_K_current_weight": 0.00010375279816798866,
+              "current_K_oracle_weight": 0.0368587002158165,
+              "oracle_K_current_weight": 0.03687193617224693,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_weight": {
+              "current_K_current_weight": 2.38139764405787e-05,
+              "current_K_oracle_weight": 2.38139764405787e-05,
+              "oracle_K_current_weight": 5.960464477539063e-08,
+              "oracle_K_oracle_weight": 0.0
+            }
+          },
+          "dominant_sources": {
+            "C_ps": "combined_prior_K_and_weighting_state",
+            "K_ps": "combined_prior_K_and_weighting_state",
+            "coh_ps": "combined_prior_K_and_weighting_state",
+            "ph_grid": "prior_K_state",
+            "ph_patch": "combined_prior_K_and_weighting_state",
+            "ph_weight": "prior_K_state"
+          },
+          "first_divergent_intermediate": "ph_weight",
+          "grid_ij": [
+            1,
+            18
+          ],
+          "oracle_prior_K": -0.001083438049066538,
+          "oracle_prior_weight": 0.999999994631445,
+          "row": 1,
+          "zero_based_row": 0
+        },
+        {
+          "current_prior_K": -0.006940178088037249,
+          "current_prior_weight": 2.470296717961133e-08,
+          "delta_prior_K": -0.011425356615504447,
+          "delta_prior_weight": -0.9947522768946164,
+          "diffs": {
+            "C_ps": {
+              "current_K_current_weight": 3.1097532524298694,
+              "current_K_oracle_weight": 0.14322957277052747,
+              "oracle_K_current_weight": 3.1088682974211608,
+              "oracle_K_oracle_weight": 2.0816681711721685e-17
+            },
+            "K_ps": {
+              "current_K_current_weight": 0.009657142510429968,
+              "current_K_oracle_weight": 0.006207800142815514,
+              "oracle_K_current_weight": 0.009707794326916866,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "coh_ps": {
+              "current_K_current_weight": 0.2739276252741202,
+              "current_K_oracle_weight": 0.11893635831898319,
+              "oracle_K_current_weight": 0.2731690155266955,
+              "oracle_K_oracle_weight": 1.1102230246251565e-16
+            },
+            "ph_grid": {
+              "current_K_current_weight": 0.9947524666786194,
+              "current_K_oracle_weight": 1.984844446182251,
+              "oracle_K_current_weight": 0.9947524666786194,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_patch": {
+              "current_K_current_weight": 1.8386815786361694,
+              "current_K_oracle_weight": 1.9957082271575928,
+              "oracle_K_current_weight": 1.8196760416030884,
+              "oracle_K_oracle_weight": 0.0
+            },
+            "ph_weight": {
+              "current_K_current_weight": 0.9947524666786194,
+              "current_K_oracle_weight": 1.984844446182251,
+              "oracle_K_current_weight": 0.9947524666786194,
+              "oracle_K_oracle_weight": 0.0
+            }
+          },
+          "dominant_sources": {
+            "C_ps": "prior_weighting_state",
+            "K_ps": "prior_weighting_state",
+            "coh_ps": "prior_weighting_state",
+            "ph_grid": "combined_prior_K_and_weighting_state",
+            "ph_patch": "combined_prior_K_and_weighting_state",
+            "ph_weight": "combined_prior_K_and_weighting_state"
+          },
+          "first_divergent_intermediate": "ph_weight",
+          "grid_ij": [
+            163,
+            66
+          ],
+          "oracle_prior_K": 0.004485178527467198,
+          "oracle_prior_weight": 0.9947523015975837,
+          "row": 131567,
+          "zero_based_row": 131566
+        }
+      ],
+      "run_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/stage2_parity_probe",
+      "scenarios": [
+        "current_K_current_weight",
+        "oracle_K_current_weight",
+        "current_K_oracle_weight",
+        "oracle_K_oracle_weight"
+      ],
+      "status": "failed"
     }
-  ],
-  "run_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run",
-  "scenarios": [
-    "current_K_current_weight",
-    "oracle_K_current_weight",
-    "current_K_oracle_weight",
-    "oracle_K_oracle_weight"
-  ]
+  },
+  "row_base": 1,
+  "rtol": 1e-10,
+  "run_root": "/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/inputs_and_outputs/validation_runs/stage2_parity_probe"
 }

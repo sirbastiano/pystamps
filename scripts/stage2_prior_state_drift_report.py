@@ -11,6 +11,7 @@ from typing import Any
 import numpy as np
 from scipy import ndimage
 
+from pystamps.io.dataset import discover_authoritative_patch_paths
 from pystamps.io.mat import read_mat
 from pystamps.pipeline import ported
 
@@ -24,6 +25,7 @@ SCENARIOS = (
     "oracle_K_oracle_weight",
 )
 REPORT_KEYS = ("C_ps", "K_ps", "coh_ps", "ph_weight", "ph_patch", "ph_grid")
+PIPELINE_INTERMEDIATES = ("ph_weight", "ph_grid", "ph_patch", "C_ps")
 
 
 @dataclass(frozen=True)
@@ -258,6 +260,13 @@ def _key_tolerance(key: str) -> float:
     return 5e-7
 
 
+def _first_divergent_intermediate(row_diffs: dict[str, dict[str, float]]) -> str:
+    for key in PIPELINE_INTERMEDIATES:
+        if float(row_diffs[key]["current_K_current_weight"]) > _key_tolerance(key):
+            return key
+    return "matched"
+
+
 def _classify_source(key: str, diffs: dict[str, float]) -> str:
     baseline = float(diffs["current_K_current_weight"])
     oracle_k = float(diffs["oracle_K_current_weight"])
@@ -294,6 +303,64 @@ def _classify_source(key: str, diffs: dict[str, float]) -> str:
     return "mixed_or_unresolved_prior_state"
 
 
+def _first_mismatch_for_key(
+    run_payload: dict[str, Any],
+    golden_payload: dict[str, Any],
+    key: str,
+    *,
+    row_base: int,
+    rtol: float,
+    atol: float,
+    max_rows: int,
+) -> dict[str, Any] | None:
+    lhs = np.asarray(run_payload[key])
+    rhs = np.asarray(golden_payload[key])
+    if lhs.shape != rhs.shape:
+        return {
+            "key": key,
+            "failure_kind": "shape_mismatch",
+            "shape_run": list(lhs.shape),
+            "shape_oracle": list(rhs.shape),
+        }
+
+    close = np.isclose(lhs, rhs, rtol=float(rtol), atol=float(atol), equal_nan=True)
+    bad = np.flatnonzero(~close.reshape(-1))
+    if bad.size == 0:
+        return None
+
+    diff = np.abs(np.asarray(lhs) - np.asarray(rhs))
+    first_flat = int(bad[0])
+    first_index = tuple(int(v) for v in np.unravel_index(first_flat, lhs.shape))
+    row_zero_based = first_index[0] if first_index else first_flat
+    flat_diff = diff.reshape(-1)
+    max_flat = int(np.nanargmax(flat_diff))
+    max_index = tuple(int(v) for v in np.unravel_index(max_flat, lhs.shape))
+    max_row_zero_based = max_index[0] if max_index else max_flat
+    row_numbers = [int(np.unravel_index(int(ix), lhs.shape)[0]) + int(row_base) for ix in bad[:max_rows]]
+    max_row = int(max_row_zero_based + int(row_base))
+    if max_row not in row_numbers:
+        row_numbers.append(max_row)
+    return _jsonable(
+        {
+            "key": key,
+            "failure_kind": "value_mismatch",
+            "index": list(first_index),
+            "row": int(row_zero_based + int(row_base)),
+            "zero_based_row": int(row_zero_based),
+            "run_value": np.asarray(lhs).reshape(-1)[first_flat],
+            "golden_value": np.asarray(rhs).reshape(-1)[first_flat],
+            "abs_diff": diff.reshape(-1)[first_flat],
+            "max_abs": flat_diff[max_flat],
+            "max_abs_index": list(max_index),
+            "max_abs_row": max_row,
+            "max_abs_zero_based_row": int(max_row_zero_based),
+            "max_abs_run_value": np.asarray(lhs).reshape(-1)[max_flat],
+            "max_abs_golden_value": np.asarray(rhs).reshape(-1)[max_flat],
+            "sample_rows": row_numbers,
+        }
+    )
+
+
 def _jsonable(value: Any) -> Any:
     if isinstance(value, dict):
         return {str(k): _jsonable(v) for k, v in value.items()}
@@ -303,6 +370,8 @@ def _jsonable(value: Any) -> Any:
         return _jsonable(value.tolist())
     if isinstance(value, np.generic):
         return _jsonable(value.item())
+    if isinstance(value, complex):
+        return {"real": float(value.real), "imag": float(value.imag)}
     if isinstance(value, float):
         if np.isfinite(value):
             return value
@@ -414,6 +483,7 @@ def build_report(
                 "oracle_prior_weight": float(oracle_state.weighting[row_ix[pos]]),
                 "delta_prior_weight": float(current_state.weighting[row_ix[pos]] - oracle_state.weighting[row_ix[pos]]),
                 "diffs": row_diffs,
+                "first_divergent_intermediate": _first_divergent_intermediate(row_diffs),
                 "dominant_sources": {
                     key: _classify_source(key, row_diffs[key])
                     for key in REPORT_KEYS
@@ -449,6 +519,119 @@ def build_report(
     )
 
 
+def _patch_names_for_report(run_root: Path, golden_root: Path) -> list[str]:
+    names = [patch.name for patch in discover_authoritative_patch_paths(run_root)]
+    if names:
+        return names
+    return [patch.name for patch in discover_authoritative_patch_paths(golden_root)]
+
+
+def build_auto_report(
+    run_root: Path,
+    golden_root: Path,
+    *,
+    patch: str,
+    failure_key: str,
+    row_base: int,
+    rtol: float,
+    atol: float,
+    max_failing_rows: int,
+    kernel_backend: str,
+    native_threads: int,
+) -> dict[str, Any]:
+    run_patch = _as_patch_dir(run_root, patch)
+    golden_patch = _as_patch_dir(golden_root, patch)
+    current_pm = read_mat(run_patch / "pm1.mat")
+    oracle_pm = read_mat(golden_patch / "pm1.mat")
+    first_failure = _first_mismatch_for_key(
+        current_pm,
+        oracle_pm,
+        failure_key,
+        row_base=row_base,
+        rtol=rtol,
+        atol=atol,
+        max_rows=max_failing_rows,
+    )
+    if first_failure is None:
+        return {
+            "patch": patch,
+            "first_failure": None,
+            "status": "matched",
+        }
+    if first_failure["failure_kind"] != "value_mismatch":
+        return {
+            "patch": patch,
+            "first_failure": first_failure,
+            "status": "blocked",
+        }
+
+    report = build_report(
+        run_root,
+        golden_root,
+        patch=patch,
+        rows=tuple(int(row) for row in first_failure["sample_rows"]),
+        row_base=row_base,
+        kernel_backend=kernel_backend,
+        native_threads=native_threads,
+    )
+    report["first_failure"] = first_failure
+    report["status"] = "failed"
+    return report
+
+
+def build_all_patch_auto_report(
+    run_root: Path,
+    golden_root: Path,
+    *,
+    failure_key: str,
+    row_base: int,
+    rtol: float,
+    atol: float,
+    max_failing_rows: int,
+    kernel_backend: str,
+    native_threads: int,
+) -> dict[str, Any]:
+    patches: dict[str, Any] = {}
+    for patch_name in _patch_names_for_report(run_root, golden_root):
+        patches[patch_name] = build_auto_report(
+            run_root,
+            golden_root,
+            patch=patch_name,
+            failure_key=failure_key,
+            row_base=row_base,
+            rtol=rtol,
+            atol=atol,
+            max_failing_rows=max_failing_rows,
+            kernel_backend=kernel_backend,
+            native_threads=native_threads,
+        )
+
+    return _jsonable(
+        {
+            "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "run_root": str(run_root.resolve()),
+            "golden_root": str(golden_root.resolve()),
+            "patch_mode": "all_authoritative",
+            "failure_key": failure_key,
+            "row_base": int(row_base),
+            "rtol": float(rtol),
+            "atol": float(atol),
+            "max_failing_rows": int(max_failing_rows),
+            "patch_count": len(patches),
+            "failed_patches": [
+                patch_name
+                for patch_name, patch_report in patches.items()
+                if patch_report.get("first_failure") is not None
+            ],
+            "patches": patches,
+            "interpretation": (
+                "Each patch auto-selects the first failing C_ps row under the requested tolerance, "
+                "then replays ph_weight, ph_grid, ph_patch, and topofit output at that row."
+            ),
+        }
+    )
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Diagnose Stage 2 final-iteration prior-state drift.")
     parser.add_argument(
@@ -462,8 +645,14 @@ def _parse_args() -> argparse.Namespace:
         help="Oracle/golden run root or patch directory.",
     )
     parser.add_argument("--patch", default="PATCH_1")
+    parser.add_argument("--all-patches", action="store_true")
+    parser.add_argument("--auto-first-failing", action="store_true")
+    parser.add_argument("--failure-key", default="C_ps")
+    parser.add_argument("--max-failing-rows", type=int, default=1)
     parser.add_argument("--rows", nargs="+", type=int, default=list(DEFAULT_ROWS))
     parser.add_argument("--row-base", type=int, choices=(0, 1), default=1)
+    parser.add_argument("--rtol", type=float, default=1e-10)
+    parser.add_argument("--atol", type=float, default=1e-10)
     parser.add_argument("--kernel-backend", default="python")
     parser.add_argument("--native-threads", type=int, default=0)
     parser.add_argument("--output", default=DEFAULT_OUTPUT)
@@ -472,19 +661,88 @@ def _parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = _parse_args()
-    report = build_report(
-        Path(args.run).expanduser(),
-        Path(args.golden).expanduser(),
-        patch=str(args.patch),
-        rows=tuple(int(row) for row in args.rows),
-        row_base=int(args.row_base),
-        kernel_backend=str(args.kernel_backend),
-        native_threads=int(args.native_threads),
-    )
+    run_root = Path(args.run).expanduser()
+    golden_root = Path(args.golden).expanduser()
+    if bool(args.all_patches):
+        report = build_all_patch_auto_report(
+            run_root,
+            golden_root,
+            failure_key=str(args.failure_key),
+            row_base=int(args.row_base),
+            rtol=float(args.rtol),
+            atol=float(args.atol),
+            max_failing_rows=int(args.max_failing_rows),
+            kernel_backend=str(args.kernel_backend),
+            native_threads=int(args.native_threads),
+        )
+    elif bool(args.auto_first_failing):
+        report = build_auto_report(
+            run_root,
+            golden_root,
+            patch=str(args.patch),
+            failure_key=str(args.failure_key),
+            row_base=int(args.row_base),
+            rtol=float(args.rtol),
+            atol=float(args.atol),
+            max_failing_rows=int(args.max_failing_rows),
+            kernel_backend=str(args.kernel_backend),
+            native_threads=int(args.native_threads),
+        )
+    else:
+        report = build_report(
+            run_root,
+            golden_root,
+            patch=str(args.patch),
+            rows=tuple(int(row) for row in args.rows),
+            row_base=int(args.row_base),
+            kernel_backend=str(args.kernel_backend),
+            native_threads=int(args.native_threads),
+        )
     output = Path(args.output).expanduser()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     print(f"wrote {output}")
+    if bool(args.all_patches):
+        for patch_name, patch_report in report["patches"].items():
+            first_failure = patch_report.get("first_failure")
+            if first_failure is None:
+                print(f"{patch_name} matched {args.failure_key}")
+                continue
+            if patch_report.get("rows_detail"):
+                first_detail = patch_report["rows_detail"][0]
+                first_intermediate = first_detail["first_divergent_intermediate"]
+                source = first_detail["dominant_sources"].get(first_intermediate, "matched")
+            else:
+                first_intermediate = "unavailable"
+                source = "unavailable"
+            print(
+                f"{patch_name} key={first_failure['key']} row={first_failure.get('row')} "
+                f"zero_based={first_failure.get('zero_based_row')} "
+                f"run={first_failure.get('run_value')} golden={first_failure.get('golden_value')} "
+                f"abs_diff={first_failure.get('abs_diff')} max_abs={first_failure.get('max_abs')} "
+                f"max_abs_row={first_failure.get('max_abs_row')} "
+                f"first_divergent={first_intermediate} source={source}"
+            )
+        return 0
+    if bool(args.auto_first_failing):
+        first_failure = report.get("first_failure")
+        if first_failure is None:
+            print(f"{args.patch} matched {args.failure_key}")
+        elif report.get("rows_detail"):
+            first_detail = report["rows_detail"][0]
+            first_intermediate = first_detail["first_divergent_intermediate"]
+            source = first_detail["dominant_sources"].get(first_intermediate, "matched")
+            print(
+                f"{args.patch} key={first_failure['key']} row={first_failure.get('row')} "
+                f"zero_based={first_failure.get('zero_based_row')} "
+                f"run={first_failure.get('run_value')} golden={first_failure.get('golden_value')} "
+                f"abs_diff={first_failure.get('abs_diff')} max_abs={first_failure.get('max_abs')} "
+                f"max_abs_row={first_failure.get('max_abs_row')} "
+                f"first_divergent={first_intermediate} source={source}"
+            )
+        else:
+            print(f"{args.patch} key={first_failure['key']} failure_kind={first_failure['failure_kind']}")
+        return 0
     for key in REPORT_KEYS:
         metrics = report["aggregate_metrics"][key]
         print(
