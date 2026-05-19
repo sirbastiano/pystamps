@@ -97,7 +97,7 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context: positive routing check: a repeated notebook/audit no-progress failure should trigger the guardrail update path. Negative routing check: a docs-only routing path would be wrong here because tests and pipeline helper code changed.
 ---
 ## [2026-05-16 17:55:40 UTC] - US-007: Restore Stage 6 unwrap parity
-Thread: 
+Thread:
 Run: 20260515-151412-1547726 (iteration 7)
 Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-7.log
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-7.md
@@ -792,4 +792,46 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Patterns discovered: current source still produces `pm1_md5=5b61fe211aeb9ca815feb292819297cd` for the exact debug probe and fails with the same localized `C_ps` max_abs.
   - Gotchas encountered: broad historical `.mat` comparisons can stall in uninterruptible I/O; compare targeted candidate runs instead of scanning every validation artifact.
   - Useful context: mixed ph_weight evaluation (double ramp with single intermediate multiply) did not change the failure signature.
+---
+## [2026-05-19 00:53:14 UTC] - US-003: Verify Stage 2 all audited patches
+Thread:
+Run: 20260518-183448-2827459 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: a41e4c9 fix(verify): cover authoritative stage2 patches
+- Post-commit status: clean
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_verify.py tests/test_stage2_probe.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` mismatches in PATCH_1 through PATCH_4)
+  - Command: uv run python - <<'PY' ... C_ps argmax rows for PATCH_1..PATCH_4 ... PY -> PASS (PATCH_2 row 185140 reproduced; max_abs=2.50117)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: git diff --check -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (Stage 2 all-patch acceptance compare failed first)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (notebook execution was not refreshed after Stage 2 failure)
+  - Command: make audit -> SKIPPED (full audit remains blocked by Stage 2 `C_ps` parity failure)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - pystamps/io/dataset.py
+  - pystamps/verify.py
+  - scripts/stage2_patch1_probe.py
+  - tests/test_stage2_probe.py
+  - tests/test_verify.py
+- What was implemented
+  - Added authoritative patch-manifest expansion for PATCH wildcard verification, preferring `patch.list_old` before shortened `patch.list`.
+  - Updated the Stage 2 probe default to recompute every authoritative patch while preserving `--patch PATCH_N` for targeted diagnostics.
+  - Added focused tests for all-patch wildcard enumeration and the negative case where PATCH_1-only evidence must fail.
+  - Added the `Count Wildcard Patch Comparisons` guardrail. Positive routing check: all-patch `PATCH_*/pm1.mat` evidence must report checked count covering the authoritative patch list. Negative routing check: explicit `PATCH_1/pm1.mat` or checked=1 output is not all-patch evidence.
+  - Security/performance/regression review: no new external trust boundary or secrets; manifest reads stay local and bounded by patch count; `discover_dataset` still honors `patch.list` for normal pipeline layout, while verification/probe paths use the authoritative list by design.
+- **Learnings for future iterations:**
+  - Patterns discovered: `patch.list_old` is the authoritative patch source for the Stage 2 all-patch audit fixture; the shortened `patch.list` only lists PATCH_1.
+  - Gotchas encountered: the verification bug is fixed, but US-003 remains blocked because actual Stage 2 `C_ps` parity still fails for all four patches.
+  - Useful context: refreshed failures are PATCH_1 row 22182 max_abs=0.0295872, PATCH_2 row 185140 max_abs=2.50117, PATCH_3 row 153477 max_abs=1.3638, and PATCH_4 row 131566 max_abs=3.10975.
 ---
