@@ -63,6 +63,11 @@
 - **Instruction**: Run the authoritative all-patch Stage 2 probe and `PATCH_*/pm1.mat` compare first; if Stage 2 still fails, execute the notebook only to record the blocked proof and do not tune notebook outputs to hide downstream failures.
 - **Added after**: Iteration 5 - US-005 exact notebook execution completed, but the parity assertion failed for Stages 2-8 because Stage 2 `C_ps` drift still starts the failure chain.
 
+### Sign: Stop Notebook Audit On Red Stage 2
+- **Trigger**: When a US-009 notebook proof run has just failed the immediate manifest-backed `PATCH_*/pm1.mat` Stage 2 compare.
+- **Instruction**: Do not run the notebook, notebook parity assertion, or `make audit` as completion proof. Record the Stage 2 blocker, run only scoped regression checks for any local changes, and return to US-008.
+- **Added after**: Iteration 4 - US-009 was blocked again because the all-patch Stage 2 compare checked 4 files and failed `C_ps` for every patch.
+
 ### Sign: Block Push On Stage 2 Drift
 - **Trigger**: Before pushing `main` for a release/audit story.
 - **Instruction**: Confirm the manifest-backed all-patch Stage 2 compare passed in the same run. If it failed or was skipped, do not run `git push`; record the blocked push outcome instead.

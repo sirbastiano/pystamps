@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-19 21:23:29 | run=20260519-153232-3438769 | iter=3 | mode=build | story=US-008 | duration=5296s | status=success
 - 2026-05-19 19:55:11 | run=20260519-153232-3438769 | iter=2 | mode=build | story=US-009 | duration=12949s | status=success
 - 2026-05-19 16:19:20 | run=20260519-153232-3438769 | iter=1 | mode=build | story=US-008 | duration=2808s | status=success
 - 2026-05-19 15:30:34 | run=20260519-090457-3259084 | iter=5 | mode=build | story=US-010 | duration=1104s | status=success
@@ -296,3 +297,10 @@
 [2026-05-19 21:21:13] US-008 diagnostic blocker: seed Nr and CLAP precision probes did not reduce manifest C_ps drift
 [2026-05-19 21:21:42] Recorded US-008 blocker in errors log and guardrails
 [2026-05-19 21:23:09] US-008 progress log updated with iteration 3 blocker outcome
+[2026-05-19 21:23:29] ITERATION 3 end (duration=5296s)
+[2026-05-19 21:23:31] ITERATION 4 start (mode=build story=US-009)
+[2026-05-19 21:24:42] US-009 iteration 4: starting notebook parity precondition audit
+[2026-05-19 21:25:30] US-009 iteration 4: changed notebook scratch builder to copy oracle inputs instead of symlinking them
+[2026-05-19 21:40:06] US-009 iteration 4: Stage 2 precondition failed all-patch C_ps compare; notebook and audit proof blocked
+[2026-05-19 21:41:48] US-009 iteration 4: verification complete; full pytest passed and notebook/audit proof skipped after failed Stage 2 compare
+[2026-05-19 21:42:24] US-009 iteration 4: added guardrail sign to stop notebook/audit proof when immediate Stage 2 compare is red

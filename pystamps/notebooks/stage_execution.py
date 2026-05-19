@@ -286,7 +286,7 @@ def build_scratch_tree(context: StageNotebookContext, *, existing_scratch: str |
             destination.mkdir(parents=True, exist_ok=True)
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.symlink_to(source)
+        shutil.copy2(source, destination)
 
     patch_list = "\n".join(patch.name for patch in patch_paths(context.stamps_root)) + "\n"
     (context.scratch_root / "patch.list").write_text(patch_list, encoding="utf-8")

@@ -207,6 +207,33 @@ def test_build_scratch_tree_drops_stage4_triangle_intermediates(tmp_path: Path) 
     assert not (scratch / "PATCH_1" / "triangle_weed.log").exists()
 
 
+def test_build_scratch_tree_copies_inputs_without_oracle_write_through(tmp_path: Path) -> None:
+    dataset = tmp_path / "dataset"
+    scratch = tmp_path / "scratch"
+    patch = dataset / "PATCH_1"
+    patch.mkdir(parents=True)
+    (patch / "pscands.1.ij").write_text("oracle-input\n", encoding="utf-8")
+    (patch / "snaphu.log").write_text("oracle-log\n", encoding="utf-8")
+
+    context = build_stage_notebook_context(
+        stamps_root=dataset,
+        scratch_root=scratch,
+        run_config=RunConfig(),
+        replay_stages=(),
+    )
+
+    build_scratch_tree(context)
+    scratch_input = scratch / "PATCH_1" / "pscands.1.ij"
+    scratch_log = scratch / "PATCH_1" / "snaphu.log"
+    scratch_input.write_text("scratch-input\n", encoding="utf-8")
+    scratch_log.write_text("scratch-log\n", encoding="utf-8")
+
+    assert not scratch_input.is_symlink()
+    assert not scratch_log.is_symlink()
+    assert (patch / "pscands.1.ij").read_text(encoding="utf-8") == "oracle-input\n"
+    assert (patch / "snaphu.log").read_text(encoding="utf-8") == "oracle-log\n"
+
+
 def test_describe_stage1_snap2stamps_flow_mentions_export_step() -> None:
     rows = describe_stage1_snap2stamps_flow()
 
