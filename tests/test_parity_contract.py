@@ -87,6 +87,25 @@ def test_packaged_parity_manifests_are_valid_json() -> None:
     assert all(target["status"] == "present" for target in workflow_manifest["workflow_targets"])
 
 
+def test_single_master_diagnostic_manifest_uses_done_gate_oracle_not_hl() -> None:
+    workflow_manifest = json.loads(
+        importlib.resources.files("pystamps.data").joinpath("audited_workflow_manifest.json").read_text(encoding="utf-8")
+    )
+
+    single_master = next(target for target in workflow_manifest["workflow_targets"] if target["id"] == "single_master_diagnostic")
+    assert single_master["local_dataset_path"] == "inputs_and_outputs/InSAR_dataset_test_stage8diag"
+    assert single_master["golden_dataset_path"] == "inputs_and_outputs/InSAR_dataset_test_stage8diag"
+    assert single_master["run_seed_path"] == "inputs_and_outputs/InSAR_dataset_test_stage8diag"
+    assert single_master["required_for_done"] is True
+    assert single_master["status"] == "present"
+
+    supporting = {
+        dataset["local_dataset_path"]: dataset["status"]
+        for dataset in workflow_manifest.get("supporting_repo_datasets", [])
+    }
+    assert supporting["inputs_and_outputs/InSAR_dataset_test_stage8diag_hl"] == "present_not_done_gate"
+
+
 def test_collect_audit_evidence_summarizes_interrupted_artifact(tmp_path: Path) -> None:
     audit_path = tmp_path / "inputs_and_outputs" / "validation_runs" / "latest_audit.json"
     audit_path.parent.mkdir(parents=True)
