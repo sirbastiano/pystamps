@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-19 00:56:20 | run=20260518-183448-2827459 | iter=3 | mode=build | story=US-003 | duration=2116s | status=success
 - 2026-05-19 00:20:58 | run=20260518-183448-2827459 | iter=2 | mode=build | story=US-002 | duration=16273s | status=success
 - 2026-05-18 19:49:37 | run=20260518-183448-2827459 | iter=1 | mode=build | story=US-001 | duration=4477s | status=success
 - 2026-05-18 16:18:25 | run=20260518-083908-2624851 | iter=5 | mode=build | story=US-005 | duration=1201s | status=success
@@ -204,3 +205,8 @@
 [2026-05-19 00:49:03] Added guardrail for counting authoritative PATCH wildcard comparisons
 [2026-05-19 00:52:08] Reran full pytest after compare tightening; all-patch Stage 2 parity remains blocked
 [2026-05-19 00:53:40] Updated progress log for US-003 all-patch verification outcome
+[2026-05-19 00:56:18] ITERATION 3 end (duration=2116s)
+[2026-05-19 00:56:23] ITERATION 4 start (mode=build story=US-004)
+[2026-05-19 00:58:46] Start US-004 repair downstream parity after Stage 2
+[2026-05-19 01:14:10] Stage 2 all-patch precondition failed for US-004; downstream changes blocked
+[2026-05-19 01:14:40] Recorded US-004 Stage 2 blocker and guardrail

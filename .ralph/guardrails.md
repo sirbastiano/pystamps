@@ -52,3 +52,8 @@
 - **Trigger**: Before accepting a `PATCH_*` wildcard parity compare as all-patch evidence.
 - **Instruction**: Confirm the compare enumerated the authoritative patch list, such as `patch.list_old` or the audited manifest source, and that the reported checked file count covers every audited patch.
 - **Added after**: Iteration 3 - `narrow_compare --patterns 'PATCH_*/pm1.mat'` previously checked only `PATCH_1` because the golden `patch.list` was shortened, hiding PATCH_2+ Stage 2 drift.
+
+### Sign: Prove Stage 2 Before Downstream Repair
+- **Trigger**: Before making Stage 3+ changes for downstream parity repair.
+- **Instruction**: Run the authoritative all-patch Stage 2 probe and `PATCH_*/pm1.mat` compare first; if any Stage 2 artifact/key still fails, stop and record the blocker instead of changing downstream stages.
+- **Added after**: Iteration 4 - US-004 was blocked because all 4 Stage 2 `pm1.mat` comparisons still failed `C_ps`, starting with PATCH_1 max_abs=0.0295872.
