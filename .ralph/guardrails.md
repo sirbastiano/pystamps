@@ -47,3 +47,8 @@
 - **Trigger**: When an exact `uv run ...` verification command remains in `setuptools.build_meta` with a child process in `D` state before the target script or test starts.
 - **Instruction**: Capture the stalled process state, terminate the wrapper, record the exact command as failed, and use the repo `.venv/bin/python` fallback only to gather diagnostic evidence.
 - **Added after**: Iteration 4 - repeated `uv run` editable-build stalls blocked Stage 2 precondition commands before `stage2_patch1_probe.py` or `narrow_compare.py` executed.
+
+### Sign: Count Wildcard Patch Comparisons
+- **Trigger**: Before accepting a `PATCH_*` wildcard parity compare as all-patch evidence.
+- **Instruction**: Confirm the compare enumerated the authoritative patch list, such as `patch.list_old` or the audited manifest source, and that the reported checked file count covers every audited patch.
+- **Added after**: Iteration 3 - `narrow_compare --patterns 'PATCH_*/pm1.mat'` previously checked only `PATCH_1` because the golden `patch.list` was shortened, hiding PATCH_2+ Stage 2 drift.

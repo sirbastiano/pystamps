@@ -41,6 +41,29 @@ def _patch_sort_key(path: Path) -> tuple[int, str]:
         return (10**9, path.name)
 
 
+def read_patch_manifest(path: str | Path) -> list[str]:
+    manifest = Path(path)
+    if not manifest.exists():
+        return []
+    return [
+        line.strip()
+        for line in manifest.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def discover_authoritative_patch_paths(root: str | Path) -> list[Path]:
+    root_path = Path(root).expanduser().resolve()
+    if not root_path.exists():
+        raise DatasetError(f"Dataset root does not exist: {root_path}")
+    for manifest_name in ("patch.list_old", "patch.list"):
+        patch_names = read_patch_manifest(root_path / manifest_name)
+        patches = [root_path / name for name in patch_names if (root_path / name).is_dir()]
+        if patches:
+            return patches
+    return sorted([p for p in root_path.iterdir() if p.is_dir() and p.name.startswith(PATCH_PREFIX)], key=_patch_sort_key)
+
+
 def discover_dataset(root: str | Path) -> DatasetLayout:
     root_path = Path(root).expanduser().resolve()
     if not root_path.exists():
@@ -50,7 +73,7 @@ def discover_dataset(root: str | Path) -> DatasetLayout:
     patches: list[Path]
 
     if patch_list.exists():
-        names = [line.strip() for line in patch_list.read_text(encoding="utf-8").splitlines() if line.strip()]
+        names = read_patch_manifest(patch_list)
         patches = [root_path / name for name in names if (root_path / name).is_dir()]
     else:
         patches = sorted([p for p in root_path.iterdir() if p.is_dir() and p.name.startswith(PATCH_PREFIX)], key=_patch_sort_key)

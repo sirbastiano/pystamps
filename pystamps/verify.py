@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from glob import has_magic
 from pathlib import Path
 import re
 from typing import Any
@@ -9,7 +10,7 @@ import numpy as np
 from scipy import sparse
 
 from pystamps.config import ToleranceConfig
-from pystamps.io.dataset import discover_dataset
+from pystamps.io.dataset import discover_authoritative_patch_paths
 from pystamps.io.mat import read_mat
 
 DEFAULT_GLOBS: tuple[str, ...] = (
@@ -281,11 +282,13 @@ def _iter_pattern_files(root: Path, pattern: str) -> list[Path]:
     if not pattern.startswith("PATCH_*/"):
         return sorted(root.glob(pattern))
 
-    layout = discover_dataset(root)
     subpattern = pattern.split("/", 1)[1]
     files: list[Path] = []
-    for patch in layout.patches:
-        files.extend(sorted(patch.glob(subpattern)))
+    for patch in discover_authoritative_patch_paths(root):
+        if has_magic(subpattern):
+            files.extend(sorted(patch.glob(subpattern)))
+        else:
+            files.append(patch / subpattern)
     return files
 
 
@@ -452,6 +455,11 @@ def verify_run_against_golden(
 
     for golden_file in golden_files:
         rel = golden_file.relative_to(golden_path)
+        if not golden_file.exists():
+            report.comparisons.append(
+                FileComparison(str(rel), False, "Missing golden artifact", failure_kind="missing_oracle_artifact")
+            )
+            continue
         run_file = run_path / rel
         if not run_file.exists():
             report.comparisons.append(FileComparison(str(rel), False, "Missing run artifact", failure_kind="missing_run_artifact"))

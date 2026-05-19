@@ -1,4 +1,72 @@
-from pystamps.verify import FileComparison, VerificationReport, classify_failures, summarize_failures
+from pathlib import Path
+
+import numpy as np
+
+from pystamps.config import RunConfig
+from pystamps.io.mat import write_mat
+from pystamps.verify import (
+    FileComparison,
+    VerificationReport,
+    classify_failures,
+    summarize_failures,
+    verify_run_against_golden,
+)
+
+
+def _write_pm1(root: Path, patch_name: str, value: float) -> None:
+    patch = root / patch_name
+    patch.mkdir(parents=True, exist_ok=True)
+    write_mat(patch / "pm1.mat", {"C_ps": np.asarray([value], dtype=np.float64)})
+
+
+def test_patch_wildcard_prefers_patch_list_old_for_audited_patches(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    golden_root = tmp_path / "golden"
+    for root in (run_root, golden_root):
+        root.mkdir()
+        (root / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+        (root / "patch.list_old").write_text("PATCH_1\nPATCH_2\n", encoding="utf-8")
+        _write_pm1(root, "PATCH_1", 1.0)
+        _write_pm1(root, "PATCH_2", 2.0)
+
+    report = verify_run_against_golden(
+        run_root,
+        golden_root,
+        RunConfig().tolerance,
+        patterns=("PATCH_*/pm1.mat",),
+    )
+
+    assert report.ok
+    assert [comparison.relative_path for comparison in report.comparisons] == [
+        "PATCH_1/pm1.mat",
+        "PATCH_2/pm1.mat",
+    ]
+
+
+def test_patch_wildcard_fails_when_only_short_patch_list_was_compared(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    golden_root = tmp_path / "golden"
+    for root in (run_root, golden_root):
+        root.mkdir()
+        (root / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+        (root / "patch.list_old").write_text("PATCH_1\nPATCH_2\n", encoding="utf-8")
+    _write_pm1(run_root, "PATCH_1", 1.0)
+    _write_pm1(golden_root, "PATCH_1", 1.0)
+    _write_pm1(golden_root, "PATCH_2", 2.0)
+
+    report = verify_run_against_golden(
+        run_root,
+        golden_root,
+        RunConfig().tolerance,
+        patterns=("PATCH_*/pm1.mat",),
+    )
+
+    assert not report.ok
+    assert [comparison.relative_path for comparison in report.comparisons] == [
+        "PATCH_1/pm1.mat",
+        "PATCH_2/pm1.mat",
+    ]
+    assert report.comparisons[1].failure_kind == "missing_run_artifact"
 
 
 def test_classify_failures_groups_downstream_residuals() -> None:
