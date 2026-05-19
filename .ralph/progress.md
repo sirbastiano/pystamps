@@ -1079,3 +1079,41 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: wildcard compare now correctly checks four audited patches, but authoritative `C_ps` parity is still red at PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888.
   - Useful context: the prior-state drift report still points to prior K/weighting state before `ph_weight` as the root cause, with max-drift rows PATCH_1=22183, PATCH_2=93069, PATCH_3=136578, PATCH_4=28043 (1-based).
 ---
+## [2026-05-19 15:29:18 UTC] - US-010: Run audit and push verified main
+Thread:
+Run: 20260519-090457-3259084 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f2be7dd chore(ralph): record US-010 push blocker
+- Post-commit status: clean after progress commit; push skipped, so local `main` remains ahead of `origin/main`
+- Verification:
+  - Command: git status --short --branch -> PASS (`## main...origin/main [ahead 28]`; pre-push baseline had dirty Ralph logs)
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; PATCH_1 md5=079e884bb88c01ac257fbb467db58595, PATCH_2 md5=282c03a28ef55543a1ad44fa3658025e, PATCH_3 md5=a66e3e0fcc0fc884a3831a912d9d6f6e, PATCH_4 md5=e461fff0dcf5c80cab9820c68b02b3c6)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare; push forbidden)
+  - Command: git diff --check -> PASS
+  - Command: git status --short --branch -> PASS (`## main...origin/main [ahead 29]`; no push attempted because a required gate failed)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - Ran the US-010 release preconditions through the decisive manifest-backed Stage 2 all-patch compare.
+  - Did not push `main` because the exact wildcard compare checked every audited patch and failed `C_ps` for PATCH_1 through PATCH_4.
+  - Recorded the repeated push blocker in `.ralph/errors.log` and added a guardrail Sign to stop future release pushes when Stage 2 drift is still present.
+  - Security/performance/regression review: only Ralph logs/guardrails/progress changed; no source, notebook, dependency, oracle, credential, or runtime path changed. Focused pytest and full pytest passed; residual risk is unresolved Stage 2 `C_ps` parity, so notebook/audit/push remain blocked.
+  - Positive routing check: for release/audit push stories, run the manifest-backed all-patch Stage 2 compare first and continue only when it passes.
+  - Negative routing check: do not push, run audit as completion evidence, or mark US-010 complete when the Stage 2 compare fails or is skipped.
+- **Learnings for future iterations:**
+  - Patterns discovered: `stage2_patch1_probe.py` regenerates all four manifest patches successfully, but parity still fails only at `C_ps` with the same manifest-backed magnitudes seen in iteration 4.
+  - Gotchas encountered: the requested activity helper path `/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/ralph` is absent; manual Ralph log entries were added to `.ralph/activity.log`.
+  - Useful context: final push remains blocked until the root-cause Stage 2 `C_ps` drift is fixed and the same-run notebook parity plus `make audit` gates pass.
+---
