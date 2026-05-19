@@ -266,3 +266,4 @@
 [2026-05-19 14:45:01] US-008 exact manifest compare checked 4 patches but still failed C_ps; starting root-cause diagnosis
 [2026-05-19 15:06:40] US-008 manifest probe passed but exact wildcard compare failed C_ps on 4 patches; running regression gates before blocker handoff
 [2026-05-19 15:07:41] US-008 verification complete: smoke/story pytest/full pytest/probe passed; manifest narrow_compare failed C_ps for all 4 patches
+[2026-05-19 15:10:22] Updated US-008 progress log with manifest compare blocker

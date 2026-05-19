@@ -1041,3 +1041,41 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `make audit` must expose `.cache/pystamps-tools/bin` on `PATH`; it completes but reports `full_validation` failed with Stage 2 `C_ps` first-boundary failures.
   - Useful context: US-009 cannot be completed by refreshing notebook outputs while `narrow_compare --patterns 'PATCH_*/pm1.mat'` still fails all 4 audited patches.
 ---
+## [2026-05-19 15:09:43 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260519-090457-3259084 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 77bb821 test(validation): guard manifest oracle
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_parity_contract.py::test_single_master_diagnostic_manifest_uses_done_gate_oracle_not_hl -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; PATCH_1 md5=09721dcc3852888154acdb86bd593efd; PATCH_2 md5=5c7555b52672c37446e413e546857318; PATCH_3 md5=15e62c25f69d8984f3962e8da0b3228e; PATCH_4 md5=72b803c06d427ac16a1b9246ac52f50f)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: uv run python scripts/stage2_prior_state_drift_report.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --all-patches --auto-first-failing --failure-key C_ps --max-failing-rows 2 --kernel-backend native --native-threads 8 --output inputs_and_outputs/validation_runs/stage2_manifest_prior_state_drift_report.json -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (notebook execution skipped after failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - tests/test_parity_contract.py
+- What was implemented
+  - Added a regression test that reads `pystamps/data/audited_workflow_manifest.json` and proves `inputs_and_outputs/InSAR_dataset_test_stage8diag` is the `single_master_diagnostic` done-gate oracle/run seed while `inputs_and_outputs/InSAR_dataset_test_stage8diag_hl` is only `present_not_done_gate`.
+  - Re-ran the exact manifest-backed all-patch Stage 2 probe and compare required by US-008; probe generation passed, and wildcard compare checked all four `PATCH_*/pm1.mat` files against the manifest oracle.
+  - Did not use `_hl/PATCH_2` through `_hl/PATCH_4` as the authoritative oracle, loosen tolerances, skip `C_ps`, compare only PATCH_1, special-case rows, or replace oracle values.
+  - US-008 remains incomplete because the required manifest-backed compare still fails `C_ps` for all four audited patches.
+  - Security/performance/regression review: only a manifest-contract regression test and Ralph evidence logs were added; no external input handling, secrets, runtime kernels, compare tolerances, or oracle values changed. Focused and full pytest pass; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: the manifest-backed run seed is `inputs_and_outputs/InSAR_dataset_test_stage8diag`; `_hl` must remain supporting evidence only.
+  - Gotchas encountered: wildcard compare now correctly checks four audited patches, but authoritative `C_ps` parity is still red at PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888.
+  - Useful context: the prior-state drift report still points to prior K/weighting state before `ph_weight` as the root cause, with max-drift rows PATCH_1=22183, PATCH_2=93069, PATCH_3=136578, PATCH_4=28043 (1-based).
+---
