@@ -1265,3 +1265,40 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: scratch symlinks were a real oracle write-through risk for non-cleaned files and tool side-effect logs; copying fixes the guard without changing parity math.
   - Useful context: US-009 still cannot complete until US-008 makes the same-run `PATCH_*/pm1.mat` compare green.
 ---
+## [2026-05-19 23:50:19 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260519-153232-3438769 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 115f6a7 chore(ralph): record us008 parity blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; wrote PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295871, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961824, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (terminated after Stage 2 no-progress/kernel failure; DeadKernelError)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stages 2-8 failed parity)
+  - Command: PATH="$PWD/.cache/pystamps-tools/bin:$PATH" make audit -> FAIL (terminated at bound after no fresh `latest_audit.json`; Error 143)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, PRD, notebook, tolerance, or oracle changes were committed because the candidate fixes did not move the required manifest compare.
+  - Confirmed the manifest-backed oracle/run seed is `inputs_and_outputs/InSAR_dataset_test_stage8diag`; `_hl` remains `present_not_done_gate`.
+  - Tested and reverted topofit-state rounding and MATLAB operand-order alignment after focused probes still failed `PATCH_1/pm1.mat` `C_ps` at the known magnitude.
+  - Added guardrail Sign: Revert Non-Causal Stage 2 Numeric Tweaks.
+  - Security/performance/regression review: final diff is evidence/guardrail only; no secrets, external input handling, runtime loops, kernels, or compare tolerances changed. Focused and full pytest pass; residual risk is unresolved Stage 2 `C_ps` parity.
+  - Positive routing check: keep a future Stage 2 numeric candidate only after a focused probe changes the failing `C_ps` magnitude, then rerun the all-patch manifest compare.
+  - Negative routing check: do not commit non-causal numeric tweaks, use `_hl/PATCH_2..4`, loosen tolerances, skip `C_ps`, compare only PATCH_1, special-case rows, replace oracle values, or emit completion while wildcard compare is red.
+- **Learnings for future iterations:**
+  - Patterns discovered: oracle `ph_patch` replay still topofits to oracle values, but the generated prior K/weighting state before final `ph_weight` remains off enough to flip sensitive rows.
+  - Gotchas encountered: topofit-state rounding and operand-order alignment are plausible MATLAB parity details but do not change the manifest `C_ps` failure; revert them unless paired with a measurable compare improvement.
+  - Useful context: `make audit` can stay CPU-active without writing a fresh audit artifact; keep applying the bounded-audit guardrail.
+---
