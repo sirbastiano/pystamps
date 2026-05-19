@@ -87,3 +87,8 @@
 - **Trigger**: When Stage 2 `C_ps` parity is failing and `Nr` differs by only one random sample bin or a saved seed `pm1.mat` has a tempting random histogram.
 - **Instruction**: Do not spend a full all-patch rerun on `Nr` reuse unless a focused probe first changes the failing `C_ps` magnitude. The manifest `C_ps` blocker persists even when PATCH_1 uses the seed `Nr` distribution; continue investigating CLAP/topofit prior-state drift instead.
 - **Added after**: Iteration 3 - US-008 seed-`Nr` PATCH_1 rerun completed but still failed `C_ps` with max_abs=0.0295872.
+
+### Sign: Revert Non-Causal Stage 2 Numeric Tweaks
+- **Trigger**: When a tiny Stage 2 precision/order candidate is tested against the manifest `C_ps` blocker.
+- **Instruction**: Keep the candidate only if a focused probe changes the failing `C_ps` magnitude. If PATCH_1 remains at the known max_abs around 0.0295872, revert the source/test tweak and record it as diagnostic evidence instead of committing non-causal numeric churn.
+- **Added after**: Iteration 5 - US-008 tested topofit-state rounding and MATLAB operand-order alignment, but focused probes still failed `PATCH_1/pm1.mat` `C_ps` at the known magnitude.
