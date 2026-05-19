@@ -863,3 +863,38 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: a successful Stage 2 pipeline run is not enough for US-004; the all-patch oracle compare must pass before Stage 3+ repair is in scope.
   - Useful context: positive routing check: a Stage 3+ repair request with any failing Stage 2 `pm1.mat` compare triggers the guardrail and stops; negative routing check: if the all-patch Stage 2 compare passes, Stage 3+ mismatch repair can proceed under US-004.
 ---
+## [2026-05-19 02:29:30 UTC] - US-005: Execute single notebook parity proof
+Thread:
+Run: 20260518-183448-2827459 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: acaab80 chore(ralph): record US-005 notebook blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` mismatches in PATCH_1 through PATCH_4, starting with PATCH_1 max_abs=0.0295872)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stages 2-8 still fail; Stage 2 checked 4 artifacts and failed at `C_ps`)
+  - Command: make audit -> SKIPPED (notebook parity assertion and Stage 2 all-patch compare failed first)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - notebooks/03_stage_by_stage_oracle.ipynb
+- What was implemented
+  - Re-executed the single stage-by-stage notebook in place from a fresh scratch dataset and preserved the visible per-stage outputs, plots, and final parity summary.
+  - Recorded the US-005 blocker: Stage 1 passes, but Stages 2-8 fail because all-patch Stage 2 `C_ps` parity is still unresolved.
+  - Added the `Prove Stage 2 Before Notebook Proof` guardrail after the repeated notebook assertion failure.
+  - Security/performance/regression review: no runtime source or external input surface changed; the notebook run is expensive but bounded by artifact progress checks; focused and full pytest still pass, with residual risk limited to the known Stage 2 parity regression.
+- **Learnings for future iterations:**
+  - Patterns discovered: the notebook now executes through Stage 8, but the final summary reports Stage 2 checked=4 failed=1 and downstream Stages 3-8 failing.
+  - Gotchas encountered: a successful notebook execution is not a parity proof; `assert_notebook_parity.py` must pass before US-005 can complete.
+  - Useful context: positive routing check: a US-005 completion claim must first pass the authoritative all-patch Stage 2 compare and notebook parity assertion; negative routing check: modifying notebook outputs or standalone config to hide downstream failures is not valid US-005 work.
+---
