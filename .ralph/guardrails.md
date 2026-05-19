@@ -63,6 +63,11 @@
 - **Instruction**: Run the authoritative all-patch Stage 2 probe and `PATCH_*/pm1.mat` compare first; if Stage 2 still fails, execute the notebook only to record the blocked proof and do not tune notebook outputs to hide downstream failures.
 - **Added after**: Iteration 5 - US-005 exact notebook execution completed, but the parity assertion failed for Stages 2-8 because Stage 2 `C_ps` drift still starts the failure chain.
 
+### Sign: Block Push On Stage 2 Drift
+- **Trigger**: Before pushing `main` for a release/audit story.
+- **Instruction**: Confirm the manifest-backed all-patch Stage 2 compare passed in the same run. If it failed or was skipped, do not run `git push`; record the blocked push outcome instead.
+- **Added after**: Iteration 5 - US-010 release push was correctly blocked because `narrow_compare --patterns 'PATCH_*/pm1.mat'` checked 4 patches and still failed `C_ps`.
+
 ### Sign: Validate Notebook Oracle Provenance
 - **Trigger**: When a notebook/reference dataset fails all-patch Stage 2 parity after source-level Stage 2 diagnostics point back to the target artifact.
 - **Instruction**: Check `pm1.mat` file format/header provenance, `i_loop`, bundled `STAMPS.log`, and the audited workflow manifest before treating the reference as a source-code parity target. Record a fixture blocker if the target is hybrid; do not loosen tolerances, special-case rows, or overwrite oracle values to make the compare pass.

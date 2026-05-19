@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-19 15:12:07 | run=20260519-090457-3259084 | iter=4 | mode=build | story=US-008 | duration=2684s | status=success
 - 2026-05-19 14:27:21 | run=20260519-090457-3259084 | iter=3 | mode=build | story=US-009 | duration=7989s | status=success
 - 2026-05-19 12:14:10 | run=20260519-090457-3259084 | iter=2 | mode=build | story=US-008 | duration=9273s | status=success
 - 2026-05-19 09:39:35 | run=20260519-090457-3259084 | iter=1 | mode=build | story=US-007 | duration=2066s | status=success
@@ -267,3 +268,8 @@
 [2026-05-19 15:06:40] US-008 manifest probe passed but exact wildcard compare failed C_ps on 4 patches; running regression gates before blocker handoff
 [2026-05-19 15:07:41] US-008 verification complete: smoke/story pytest/full pytest/probe passed; manifest narrow_compare failed C_ps for all 4 patches
 [2026-05-19 15:10:22] Updated US-008 progress log with manifest compare blocker
+[2026-05-19 15:12:07] ITERATION 4 end (duration=2684s)
+[2026-05-19 15:12:10] ITERATION 5 start (mode=build story=US-010)
+[2026-05-19 15:13:21] US-010 verification started: exact smoke and focused Stage 2/native pytest gates
+[2026-05-19 15:26:47] US-010 blocked: manifest wildcard compare checked 4 patches and failed C_ps for PATCH_1 through PATCH_4; push skipped
+[2026-05-19 15:27:34] US-010 verification complete: full pytest passed; notebook/audit gates skipped after failed Stage 2 precondition
