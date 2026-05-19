@@ -1197,3 +1197,31 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the requested activity helper path `/shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/ralph` is absent; manual Ralph log entries were added to `.ralph/activity.log`.
   - Useful context: final push remains blocked until the root-cause Stage 2 `C_ps` drift is fixed and the same-run notebook parity plus `make audit` gates pass.
 ---
+## [2026-05-19 21:22:35 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260519-153232-3438769 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 47169cb chore(ralph): record us008 blocker signs
+- Post-commit status: `clean`
+- Verification:
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' --output inputs_and_outputs/validation_runs/stage2_manifest_probe_current_compare.json -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: uv run python - <<'PY' ... seed `Nr` PATCH_1 Stage 2 probe ... PY && uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/us008_seed_nr_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` still failed `C_ps` max_abs=0.0295872; PATCH_2-4 absent by design in the diagnostic run)
+  - Command: uv run python - <<'PY' ... localized PATCH_1 single-vs-double CLAP replay from oracle `ph_grid` ... PY -> PASS diagnostic (single precision did not improve oracle `ph_patch` max_abs; double 1.8128044e-07, single 2.3841858e-07)
+  - Command: git diff --check -> PASS
+  - Command: story/global gates -> SKIPPED (no verified source fix; running full notebook/audit gates would only reproduce the known Stage 2 `C_ps` blocker)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+Recorded the iteration 3 blocker and added a guardrail not to treat one-bin seed `Nr` drift as causal without a focused `C_ps` change. No runtime code was changed because the tested candidates did not reduce the manifest all-patch failure.
+- **Learnings for future iterations:**
+  - The manifest oracle is `inputs_and_outputs/InSAR_dataset_test_stage8diag`; `_hl` remains `present_not_done_gate`.
+  - Reusing the seed `Nr` distribution for PATCH_1 still leaves `C_ps` max_abs=0.0295872.
+  - Localized single-precision CLAP replay from oracle `ph_grid` does not move `ph_patch` closer to the oracle.
+  - With oracle `ph_patch`, topofit is only about 1e-8 from the oracle; the active drift remains tiny CLAP/prior-state differences before `ph_weight`, which can alter P-square weights and flip near-tied coarse topofit trials.
+---
