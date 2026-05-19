@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-18 19:49:37 | run=20260518-183448-2827459 | iter=1 | mode=build | story=US-001 | duration=4477s | status=success
 - 2026-05-18 16:18:25 | run=20260518-083908-2624851 | iter=5 | mode=build | story=US-005 | duration=1201s | status=success
 - 2026-05-18 15:58:09 | run=20260518-083908-2624851 | iter=4 | mode=build | story=US-004 | duration=4846s | status=success
 - 2026-05-18 14:37:01 | run=20260518-083908-2624851 | iter=3 | mode=build | story=US-003 | duration=4913s | status=success
@@ -180,3 +181,15 @@
 [2026-05-18 19:38:21] US-001 revalidated narrowed uv config with managed=false only
 [2026-05-18 19:42:27] US-001 updated AGENTS with uv run environment note
 [2026-05-18 19:45:02] Updated US-001 progress log with commit and verification details
+[2026-05-18 19:49:28] ITERATION 1 end (duration=4477s)
+[2026-05-18 19:49:47] ITERATION 2 start (mode=build story=US-002)
+[2026-05-18 19:58:17] Start US-002 Stage 2 PATCH_1 root-cause drift work
+[2026-05-18 20:28:48] Updated Stage 2 topofit path to preserve MATLAB single-precision inputs
+[2026-05-18 23:03:08] Running combined Stage 2 legacy-ramp diagnostic for US-002
+[2026-05-18 23:14:59] Combined Stage 2 legacy-ramp diagnostic failed with PATCH_1 C_ps max_abs=0.029587
+[2026-05-18 23:52:11] Running Stage 2 mixed ph_weight precision diagnostic for US-002
+[2026-05-19 00:03:44] Mixed ph_weight precision diagnostic failed with PATCH_1 C_ps max_abs=0.0295871
+[2026-05-19 00:04:57] Running exact US-002 Stage 2 PATCH_1 probe with current source
+[2026-05-19 00:16:44] Exact US-002 probe still failed narrow compare with PATCH_1 C_ps max_abs=0.0295871
+[2026-05-19 00:18:56] Verification for US-002 recorded exact probe PASS and narrow compare FAIL; lightweight checks passed
+[2026-05-19 00:20:04] Updated progress log for US-002 diagnostics-only outcome

@@ -764,3 +764,32 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `package = false` was broader than needed; `managed = false` alone fixed the exact gate while keeping the repo packaged.
   - Useful context: positive routing check: exact `uv run` commands that stall before the target process in project sync/build belong to US-001-style config repair; negative routing check: a command that reaches the target script and then fails `PATCH_1/pm1.mat` parity belongs to US-002, not this uv execution story.
 ---
+## [2026-05-19 00:19:04 UTC] - US-002: Fix Stage 2 PATCH_1 root-cause drift
+Thread: 
+Run: 20260518-183448-2827459 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no verified source fix; diagnostics-only outcome)
+- Post-commit status: clean
+- Verification:
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_1/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` key `C_ps`, max_abs=0.0295871)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe_mixed_phweight --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_1/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` key `C_ps`, max_abs=0.0295871)
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: git diff --check -> PASS
+  - Command: remaining global quality gates -> SKIPPED (exact US-002 acceptance compare failed, so full notebook/audit parity is non-actionable)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - No source fix was committed. The exact current-source PATCH_1 Stage 2 probe completed, but the required narrow compare still fails at the known `C_ps` boundary.
+  - Diagnostics ruled out the mixed ph_weight precision variant in addition to the combined legacy-ramp path captured during this run.
+  - Security/performance/regression review: no source code remains changed; residual risk is the unchanged Stage 2 PATCH_1 parity regression.
+- **Learnings for future iterations:**
+  - Patterns discovered: current source still produces `pm1_md5=5b61fe211aeb9ca815feb292819297cd` for the exact debug probe and fails with the same localized `C_ps` max_abs.
+  - Gotchas encountered: broad historical `.mat` comparisons can stall in uninterruptible I/O; compare targeted candidate runs instead of scanning every validation artifact.
+  - Useful context: mixed ph_weight evaluation (double ramp with single intermediate multiply) did not change the failure signature.
+---
