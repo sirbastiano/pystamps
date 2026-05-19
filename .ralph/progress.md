@@ -1007,3 +1007,37 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `stage8diag_hl` is not uniformly the same provenance as the manifest-backed `stage8diag` oracle; verify file headers, `i_loop`, `STAMPS.log`, and `bp1.mat` before chasing source changes against that target.
   - Useful context: positive routing check: a future source fix should first prove PATCH_1 against the December 2025 StaMPS artifact and separately resolve the hybrid `stage8diag_hl` target provenance; negative routing check: do not complete US-008 by loosening tolerances, skipping `C_ps`, comparing only PATCH_1, special-casing rows, or overwriting oracle values.
 ---
+## [2026-05-19 14:26:03 UTC] - US-009: Reprove single notebook parity
+Thread:
+Run: 20260519-090457-3259084 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 82c488b chore(validation): record US-009 parity blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (PATCH_1 md5=971b9fb9e75656fc2e39065191938b3e, PATCH_2 md5=d35f7d2c00fa4a1a4e5ef1a2628464d6, PATCH_3 md5=d37d8e8350a3002b238546c5b32ffd7a, PATCH_4 md5=127ec82b3f8b541f3d8f6ea916945b76)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 through PATCH_4, starting with PATCH_1 max_abs=0.0295872)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stages 2-8 failed parity)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: PATH="$PWD/.cache/pystamps-tools/bin:$PATH" make audit -> FAIL (completed; ok=false; full_validation failed; small-baseline stage-7 audits passed)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - notebooks/03_stage_by_stage_oracle.ipynb
+- What was implemented
+  - Re-executed the single stage-by-stage notebook in place from a fresh scratch run and preserved visible per-stage summaries, tables, and plots (9 image-output cells, 32 table/summary outputs).
+  - No source, tolerance, oracle, PRD, or standalone proof configuration changes were made because the Stage 2 all-patch precondition remains red.
+  - Recorded the US-009 blocker: notebook execution passes, but parity assertion fails Stages 2-8 from the Stage 2 `C_ps` failure chain; audit also fails at Stage 2 boundaries.
+  - Security/performance/regression review: no new external trust boundary, secrets, or runtime code paths changed; expensive notebook/audit work was bounded by artifact-progress guardrails; full pytest still passes.
+- **Learnings for future iterations:**
+  - Patterns discovered: the notebook can complete through Stage 8, but the final summary is Stage 1 pass, Stages 2-8 fail.
+  - Gotchas encountered: `make audit` must expose `.cache/pystamps-tools/bin` on `PATH`; it completes but reports `full_validation` failed with Stage 2 `C_ps` first-boundary failures.
+  - Useful context: US-009 cannot be completed by refreshing notebook outputs while `narrow_compare --patterns 'PATCH_*/pm1.mat'` still fails all 4 audited patches.
+---
