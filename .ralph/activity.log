@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-19 16:19:20 | run=20260519-153232-3438769 | iter=1 | mode=build | story=US-008 | duration=2808s | status=success
 - 2026-05-19 15:30:34 | run=20260519-090457-3259084 | iter=5 | mode=build | story=US-010 | duration=1104s | status=success
 - 2026-05-19 15:12:07 | run=20260519-090457-3259084 | iter=4 | mode=build | story=US-008 | duration=2684s | status=success
 - 2026-05-19 14:27:21 | run=20260519-090457-3259084 | iter=3 | mode=build | story=US-009 | duration=7989s | status=success
@@ -282,3 +283,8 @@
 [2026-05-19 16:02:33] US-008 verification: focused pytest passed; manifest all-patch narrow_compare still fails C_ps for 4 patches
 [2026-05-19 16:06:05] US-008 resumed; investigating remaining Stage 2 C_ps parity blocker
 [2026-05-19 16:18:37] US-008 progress log updated with blocker outcome
+[2026-05-19 16:19:20] ITERATION 1 end (duration=2808s)
+[2026-05-19 16:19:22] ITERATION 2 start (mode=build story=US-009)
+[2026-05-19 16:20:15] Start US-009 notebook parity reproval
+[2026-05-19 16:35:25] US-009 notebook oracle root switched to manifest-backed stage8diag
+[2026-05-19 19:51:29] US-009 verification run complete: pytest passed, notebook executed, Stage 2/notebook parity/audit failed on C_ps
