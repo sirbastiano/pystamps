@@ -134,6 +134,49 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the stage-by-stage notebook can stay CPU-bound in Stage 2 for over an hour before any downstream Stage 6 evidence is produced.
   - Useful context: positive guardrail routing check: a stage-by-stage notebook run stuck in Stage 2 with unchanged `PATCH_*/pm1.mat` mtimes should trigger `Bound Notebook Stage 2 Hangs`; negative check: a fast failing pytest command should not trigger that sign.
 ---
+## [2026-05-19 16:04:10 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260519-153232-3438769 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f687d54 fix(stage2): skip partial zero topofit rows
+- Post-commit status: clean after code commit; progress entry committed separately
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py::test_stage2_replay_iteration_skips_partially_zero_rows_like_stamps tests/test_stage2_ported.py::test_stage2_skips_partial_zero_rows_for_generic_topofit tests/test_stage2_prior_state_drift_report.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe_patch1_check --patch PATCH_1 --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; PATCH_1 md5=34acd3be2ef56105fed18765b9355485)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe_patch1_check --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295872)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: uv run python scripts/stage2_prior_state_drift_report.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --all-patches --auto-first-failing --failure-key C_ps --max-failing-rows 2 --kernel-backend native --native-threads 8 --output /tmp/us008_stage2_prior_state_report.json -> PASS (remaining drift still starts in prior `ph_weight`/`ph_grid`/`ph_patch` state, depending on patch)
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: git diff --check -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - pystamps/pipeline/ported.py
+  - scripts/stage2_prior_state_drift_report.py
+  - tests/test_stage2_ported.py
+- What was implemented
+  - Aligned live Stage 2, replay, and the prior-state diagnostic with the StaMPS `psdph` gate: topofit now runs only when every interferogram is nonzero.
+  - Updated focused tests that had encoded the old partial-zero reprocessing behavior.
+  - Recorded manifest provenance: `inputs_and_outputs/InSAR_dataset_test_stage8diag` is the manifest compact single-master diagnostic run seed/golden, while `_hl` is `present_not_done_gate`.
+  - US-008 remains incomplete: the manifest all-patch compare still fails `C_ps` for all four audited patches, and debug counts show the partial-zero branch is not exercised by these patches.
+  - Security/performance/regression review: no secrets, external input paths, tolerance changes, oracle rewrites, or row special-cases were introduced. The change can only reduce topofit work for partial-zero rows; focused Stage 2/native regression tests pass.
+  - Positive routing check: a future US-008 source fix should first prove the changed branch is exercised by the manifest-backed failing patches, then rerun the all-patch Stage 2 probe and compare.
+  - Negative routing check: do not complete US-008 by using `_hl/PATCH_2..4`, loosening tolerances, skipping `C_ps`, comparing only PATCH_1, special-casing rows, or copying oracle `pm1.mat`.
+- **Learnings for future iterations:**
+  - Patterns discovered: all manifest patches report full valid topofit counts, so partial-zero handling was a correctness fix but not the active `C_ps` root cause.
+  - Gotchas encountered: existing experiment outputs can be stale hardlinks/copies of golden `pm1.mat`; verify `pm1_written`, mtimes, and debug completion before treating an old run as source evidence.
+  - Useful context: current evidence still points to tiny iterative `ph_weight`/CLAP/topofit state drift that is amplified at sensitive rows; max-drift rows remain PATCH_1=22183, PATCH_2=93069, PATCH_3=136578, PATCH_4=28043 (1-based).
+---
 ## [2026-05-16 09:12:25 UTC] - US-004: Restore Stage 3 selection parity
 Thread: 
 Run: 20260515-151412-1547726 (iteration 4)

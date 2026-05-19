@@ -280,3 +280,5 @@
 [2026-05-19 15:33:40] Start US-008 Stage 2 C_ps parity repair
 [2026-05-19 15:35:40] US-008 code change: Stage 2 now skips partially zero psdph rows like StaMPS before topofit
 [2026-05-19 16:02:33] US-008 verification: focused pytest passed; manifest all-patch narrow_compare still fails C_ps for 4 patches
+[2026-05-19 16:06:05] US-008 resumed; investigating remaining Stage 2 C_ps parity blocker
+[2026-05-19 16:18:37] US-008 progress log updated with blocker outcome
