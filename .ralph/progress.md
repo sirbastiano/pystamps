@@ -898,3 +898,36 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: a successful notebook execution is not a parity proof; `assert_notebook_parity.py` must pass before US-005 can complete.
   - Useful context: positive routing check: a US-005 completion claim must first pass the authoritative all-patch Stage 2 compare and notebook parity assertion; negative routing check: modifying notebook outputs or standalone config to hide downstream failures is not valid US-005 work.
 ---
+## [2026-05-19 02:51:33 UTC] - US-006: Run full audit and push verified main
+Thread:
+Run: 20260518-183448-2827459 (iteration 6)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-6.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bd22a9f chore(ralph): record US-006 blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` mismatches in PATCH_1 through PATCH_4, starting with PATCH_1 max_abs=0.0295872)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> SKIPPED (blocked by failed Stage 2 parity precondition)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed Stage 2 parity precondition)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed Stage 2 parity precondition)
+  - Command: make audit -> SKIPPED (do not push when Stage 2 parity, notebook, or audit gates are failed or skipped)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - No source, test, notebook, PRD, or audit-output changes were made for US-006.
+  - Re-ran the required pre-audit smoke, focused tests, Stage 2 probe, and authoritative all-patch compare; the compare still blocks the full audit/push story.
+  - Did not run `make audit`, commit verified release changes, or push `main` because the negative case forbids push when prerequisite parity gates fail or are skipped.
+  - Security/performance/regression review: this iteration only changed Ralph text evidence; no secrets, external input handling, runtime loops, or user-facing behavior were introduced.
+- **Learnings for future iterations:**
+  - Patterns discovered: the Stage 2 probe now regenerates all authoritative patches, but wildcard compare is still the earliest failing US-006 gate.
+  - Gotchas encountered: US-006 cannot be completed by rerunning the audit chain while all-patch Stage 2 `C_ps` parity remains red.
+  - Useful context: next work should return to root-cause Stage 2 `C_ps` repair before attempting notebook parity, `make audit`, or push.
+---
