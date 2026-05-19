@@ -72,3 +72,8 @@
 - **Trigger**: When a notebook/reference dataset fails all-patch Stage 2 parity after source-level Stage 2 diagnostics point back to the target artifact.
 - **Instruction**: Check `pm1.mat` file format/header provenance, `i_loop`, bundled `STAMPS.log`, and the audited workflow manifest before treating the reference as a source-code parity target. Record a fixture blocker if the target is hybrid; do not loosen tolerances, special-case rows, or overwrite oracle values to make the compare pass.
 - **Added after**: Iteration 2 - US-008 found `stage8diag_hl/PATCH_2..4/pm1.mat` are March 2026 MATLAB 5 artifacts while the bundled logs and manifest oracle outputs are December 2025 MATLAB 7.3 artifacts.
+
+### Sign: Prove Candidate Fix Is Exercised
+- **Trigger**: Before spending a long Stage 2 probe on a candidate C_ps fix.
+- **Instruction**: Confirm the changed branch is exercised by the manifest-backed failing patches, using debug counts or a focused probe. If the branch is not exercised, keep the change as diagnostic/correctness work only and continue root-cause analysis instead of expecting the all-patch compare to turn green.
+- **Added after**: Iteration 1 - US-008 aligned partial-zero row handling with StaMPS, but all manifest patches had full valid row counts and the all-patch `C_ps` compare stayed red.

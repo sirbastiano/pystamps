@@ -3820,9 +3820,7 @@ def _stage2_replay_iteration_from_payload(
     ph_patch = ph_patch_all[selected_rows, :].copy()
     psdph = np.conjugate(ph_patch)
     psdph *= context.ph_nm[selected_rows, :].astype(np.complex128)
-    # Match the live stage-2 path: partially zero rows still go through the
-    # batch wrapper, which falls back to the single-row solve for those rows.
-    valid = np.any(psdph != 0, axis=1)
+    valid = np.all(psdph != 0, axis=1)
 
     K_ps = np.full(selected_rows.size, np.nan, dtype=np.float64)
     C_ps = np.zeros(selected_rows.size, dtype=np.float64)
@@ -4379,9 +4377,7 @@ def stage2_estimate_gamma(
             stop = min(start + stage2_row_chunk, n_ps)
             psdph_chunk = np.conjugate(ph_patch[start:stop, :]).astype(np.complex64)
             psdph_chunk *= ph_nm[start:stop, :]
-            # Preserve partially zero rows for `_ps_topofit_batch`, which
-            # mirrors MATLAB by recomputing those rows via the single-row path.
-            valid_chunk = np.any(psdph_chunk != 0, axis=1)
+            valid_chunk = np.all(psdph_chunk != 0, axis=1)
             valid_rows[start:stop] = valid_chunk
             if not np.any(valid_chunk):
                 continue

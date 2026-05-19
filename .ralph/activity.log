@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-19 15:30:34 | run=20260519-090457-3259084 | iter=5 | mode=build | story=US-010 | duration=1104s | status=success
 - 2026-05-19 15:12:07 | run=20260519-090457-3259084 | iter=4 | mode=build | story=US-008 | duration=2684s | status=success
 - 2026-05-19 14:27:21 | run=20260519-090457-3259084 | iter=3 | mode=build | story=US-009 | duration=7989s | status=success
 - 2026-05-19 12:14:10 | run=20260519-090457-3259084 | iter=2 | mode=build | story=US-008 | duration=9273s | status=success
@@ -274,3 +275,8 @@
 [2026-05-19 15:26:47] US-010 blocked: manifest wildcard compare checked 4 patches and failed C_ps for PATCH_1 through PATCH_4; push skipped
 [2026-05-19 15:27:34] US-010 verification complete: full pytest passed; notebook/audit gates skipped after failed Stage 2 precondition
 [2026-05-19 15:29:18] US-010 progress log updated with blocked push outcome
+[2026-05-19 15:30:34] ITERATION 5 end (duration=1104s)
+[2026-05-19 15:32:32] ITERATION 1 start (mode=build story=US-008)
+[2026-05-19 15:33:40] Start US-008 Stage 2 C_ps parity repair
+[2026-05-19 15:35:40] US-008 code change: Stage 2 now skips partially zero psdph rows like StaMPS before topofit
+[2026-05-19 16:02:33] US-008 verification: focused pytest passed; manifest all-patch narrow_compare still fails C_ps for 4 patches

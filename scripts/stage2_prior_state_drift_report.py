@@ -186,7 +186,7 @@ def _topofit_selected_rows(
     selected = np.asarray(row_ix, dtype=np.int64)
     psdph = np.conjugate(np.asarray(ph_patch, dtype=np.complex64))
     psdph *= np.asarray(context.ph_nm, dtype=np.complex64)[selected, :]
-    valid = np.any(psdph != 0, axis=1)
+    valid = np.all(psdph != 0, axis=1)
     k_ps = np.full(selected.size, np.nan, dtype=np.float64)
     c_ps = np.zeros(selected.size, dtype=np.float64)
     coh_ps = np.zeros(selected.size, dtype=np.float64)

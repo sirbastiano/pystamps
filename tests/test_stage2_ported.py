@@ -1907,7 +1907,7 @@ def test_stage2_replay_iteration_can_target_specific_rows(monkeypatch, tmp_path:
     np.testing.assert_allclose(replay["coh_ps"], np.asarray([0.5], dtype=np.float64), rtol=0.0, atol=0.0)
 
 
-def test_stage2_replay_iteration_keeps_partially_zero_rows(monkeypatch, tmp_path: Path) -> None:
+def test_stage2_replay_iteration_skips_partially_zero_rows_like_stamps(monkeypatch, tmp_path: Path) -> None:
     patch_dir = tmp_path / "PATCH_1"
     patch_dir.mkdir()
     (patch_dir / "bp1.mat").touch()
@@ -1981,11 +1981,10 @@ def test_stage2_replay_iteration_keeps_partially_zero_rows(monkeypatch, tmp_path
 
     replay = ported._stage2_replay_iteration_from_payload(context, pm_payload, compute_weighting=False)
 
-    assert len(calls) == 1
-    np.testing.assert_allclose(calls[0], np.asarray([[0.0 + 0.0j, 1.0 + 0.0j]], dtype=np.complex128))
-    np.testing.assert_allclose(replay["K_ps"], np.asarray([0.25], dtype=np.float64), rtol=0.0, atol=0.0)
-    np.testing.assert_allclose(replay["C_ps"], np.asarray([0.75], dtype=np.float64), rtol=0.0, atol=0.0)
-    np.testing.assert_allclose(replay["coh_ps"], np.asarray([0.5], dtype=np.float64), rtol=0.0, atol=0.0)
+    assert calls == []
+    assert np.isnan(replay["K_ps"][0])
+    np.testing.assert_allclose(replay["C_ps"], np.asarray([0.0], dtype=np.float64), rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(replay["coh_ps"], np.asarray([0.0], dtype=np.float64), rtol=0.0, atol=0.0)
 
 
 def test_stage2_random_hist_cache_reuses_deterministic_histogram(
@@ -2336,7 +2335,7 @@ def test_stage2_row_invariant_bperp_vector_prefers_invariant_bp1_rows() -> None:
     np.testing.assert_allclose(observed, bperp_mat[0])
 
 
-def test_stage2_reprocesses_partial_zero_rows_for_generic_topofit(monkeypatch, tmp_path: Path) -> None:
+def test_stage2_skips_partial_zero_rows_for_generic_topofit(monkeypatch, tmp_path: Path) -> None:
     patch_dir = tmp_path / "PATCH_1"
     patch_dir.mkdir()
     (patch_dir / "bp1.mat").touch()
@@ -2453,16 +2452,4 @@ def test_stage2_reprocesses_partial_zero_rows_for_generic_topofit(monkeypatch, t
     result = ported.stage2_estimate_gamma(patch_dir, debug=False)
 
     assert result == "Stage 2 computed coherence for 2 candidates in 1 iterations"
-    assert len(seen_cpxphase) == 1
-    np.testing.assert_allclose(
-        seen_cpxphase[0],
-        np.asarray(
-            [
-                [0.0 + 0.0j, 0.99513334 - 0.09853761j],
-                [0.0 + 0.0j, 0.99513328 + 0.09853766j],
-            ],
-            dtype=np.complex128,
-        ),
-        atol=1e-7,
-        rtol=0.0,
-    )
+    assert seen_cpxphase == []
