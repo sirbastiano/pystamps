@@ -134,6 +134,43 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the stage-by-stage notebook can stay CPU-bound in Stage 2 for over an hour before any downstream Stage 6 evidence is produced.
   - Useful context: positive guardrail routing check: a stage-by-stage notebook run stuck in Stage 2 with unchanged `PATCH_*/pm1.mat` mtimes should trigger `Bound Notebook Stage 2 Hangs`; negative check: a fast failing pytest command should not trigger that sign.
 ---
+## [2026-05-19 19:53:04 UTC] - US-009: Reprove single notebook parity
+Thread:
+Run: 20260519-153232-3438769 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 6df2c8d chore(notebook): record US-009 blocked proof
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; PATCH_1 md5=db87ba9714f71f8f095f7ef530e28ed9, PATCH_2 md5=b63f4be5956fa12e230e8ad405927f21, PATCH_3 md5=4f1b5e787c1b3e550581cf9ffad8e897, PATCH_4 md5=2953feacf0d81a23a1d1ca078f0f765c)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS (saved the same notebook with manifest-backed oracle root)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stages 2-8 failed parity)
+  - Command: PATH="$PWD/.cache/pystamps-tools/bin:$PATH" make audit -> FAIL (completed with `ok=false`; single-master audits failed first at Stage 2 `C_ps`, small-baseline Stage 7 audits passed)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7/triangle_scla.log
+  - inputs_and_outputs/InSAR_dataset_small_baseline_stage7diag/triangle_scla.log
+  - notebooks/03_stage_by_stage_oracle.ipynb
+- What was implemented
+  - Updated the single stage-by-stage notebook to use the manifest-backed `inputs_and_outputs/InSAR_dataset_test_stage8diag` oracle instead of the support-only `_hl` dataset.
+  - Executed the same notebook in place; visible outputs include stage summaries, comparison plots, and the final stage table. Stage 1 passed; Stages 2-8 failed from the upstream Stage 2 `C_ps` drift.
+  - Did not create another notebook, move proof into config files, use `_hl` as authoritative, loosen tolerances, skip keys, special-case rows, or edit outputs to hide the failed compare.
+  - US-009 remains incomplete because the required immediate Stage 2 compare is still red.
+  - Security/performance/regression review: no source runtime path, secrets, tolerance, oracle value, or dependency behavior changed. Pytest gates pass; residual risk is unresolved Stage 2 `C_ps`, which blocks notebook parity and audit.
+- **Learnings for future iterations:**
+  - Patterns discovered: with `ORACLE_ROOT` set to `InSAR_dataset_test_stage8diag`, the notebook runs all four manifest patches and exposes all-patch Stage 2 failures in the visible output.
+  - Gotchas encountered: `make audit` must run with `.cache/pystamps-tools/bin` on `PATH`; it also hard-links small-baseline seeds, so `triangle_scla.log` timing lines in the tracked source datasets can change during the audit.
+  - Useful context: `latest_audit.json` completed with `ok=false`; `InSAR_dataset_test_stage8diag` failed first at `PATCH_1/pm1.mat` `C_ps` max_abs=0.029587159411539776, `InSAR_dataset_test` failed first at `PATCH_1/pm1.mat` `C_ps` max_abs=1.9354101790076181, and both small-baseline Stage 7 audits passed.
+---
 ## [2026-05-19 16:04:10 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
 Thread:
 Run: 20260519-153232-3438769 (iteration 1)

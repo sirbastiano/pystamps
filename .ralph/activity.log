@@ -288,3 +288,4 @@
 [2026-05-19 16:20:15] Start US-009 notebook parity reproval
 [2026-05-19 16:35:25] US-009 notebook oracle root switched to manifest-backed stage8diag
 [2026-05-19 19:51:29] US-009 verification run complete: pytest passed, notebook executed, Stage 2/notebook parity/audit failed on C_ps
+[2026-05-19 19:54:32] US-009 progress log updated with blocked notebook parity outcome
