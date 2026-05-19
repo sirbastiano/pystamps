@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-19 09:39:35 | run=20260519-090457-3259084 | iter=1 | mode=build | story=US-007 | duration=2066s | status=success
 - 2026-05-19 02:52:51 | run=20260518-183448-2827459 | iter=6 | mode=build | story=US-006 | duration=1229s | status=success
 - 2026-05-19 02:32:19 | run=20260518-183448-2827459 | iter=5 | mode=build | story=US-005 | duration=4466s | status=success
 - 2026-05-19 01:17:48 | run=20260518-183448-2827459 | iter=4 | mode=build | story=US-004 | duration=1285s | status=success
@@ -236,3 +237,14 @@
 [2026-05-19 09:34:35] Verification for US-007: probe passed, wildcard compare failed as diagnostic evidence, diagnostic/full pytest passed
 [2026-05-19 09:36:03] Pre-commit review complete for US-007: local diagnostic file handling only, bounded replay rows, existing Stage 2 tests/full pytest green
 [2026-05-19 09:37:21] Updated progress log for US-007 diagnostic outcome
+[2026-05-19 09:39:24] ITERATION 1 end (duration=2066s)
+[2026-05-19 09:39:38] ITERATION 2 start (mode=build story=US-008)
+[2026-05-19 09:41:23] Start US-008 repair all-patch Stage 2 C_ps parity
+[2026-05-19 09:58:28] US-008 patching Stage 2 P-square histogram state to follow StaMPS loop semantics
+[2026-05-19 10:12:41] US-008 discarded P-square histogram state experiment after convergence regression
+[2026-05-19 11:55:43] US-008 verification: source reverted to baseline; running focused story tests before exact all-patch probe
+[2026-05-19 11:56:41] US-008 verification: focused story tests passed; running exact all-patch Stage 2 probe
+[2026-05-19 12:08:20] US-008 verification: exact all-patch Stage 2 probe passed; running wildcard narrow_compare
+[2026-05-19 12:08:59] US-008 blocked: wildcard compare checked 4 patches and still failed C_ps with known magnitudes
+[2026-05-19 12:10:18] US-008 verification complete: smoke and focused tests passed; all-patch compare failed and fixture provenance blocker recorded
+[2026-05-19 12:10:56] US-008 progress log updated with compare failure and fixture provenance blocker

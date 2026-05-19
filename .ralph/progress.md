@@ -968,3 +968,42 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: first-failure rows and max-absolute rows are not the same; recording both avoids chasing only tiny tolerance-edge differences.
   - Useful context: replacing current prior state with oracle `K` and weighting drives max-row `C_ps` replay near oracle (`oracle_K_oracle_weight` near zero), so US-008 should focus on the prior `K_ps`/weighting state that produces `ph_weight`.
 ---
+## [2026-05-19 12:16:43 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260519-090457-3259084 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 0a12efb chore(ralph): record US-008 blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (PATCH_1 md5=8cde5ad6a3866022db50abb819fda044; PATCH_2 md5=9b36958fd7ac1fba8a047fbacfaa4a28; PATCH_3 md5=6f5cea8247becdf7883e534381c6edd8; PATCH_4 md5=28ba57c05dc5f247b4e1148a71c3cb3a)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed with PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=2.50117, PATCH_3 max_abs=1.3638, PATCH_4 max_abs=3.10975)
+  - Command: uv run python - <<'PY' ... compare `stage8diag_hl` vs manifest `stage8diag` `pm1.mat`/`bp1.mat` provenance ... PY -> PASS (blocker evidence: `stage8diag_hl/PATCH_2..4/pm1.mat` differ from manifest oracle; PATCH_2 `bp1.bperp_mat` also differs from the values needed to reproduce its `pm1.mat`)
+  - Command: uv run python - <<'PY' ... print `pm1.mat` file headers ... PY -> PASS (`stage8diag_hl/PATCH_2..4/pm1.mat` are March 2026 MATLAB 5 files; manifest `stage8diag/PATCH_1..4/pm1.mat` and `stage8diag_hl/PATCH_1/pm1.mat` are December 2025 MATLAB 7.3 files)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> SKIPPED (blocked by failed all-patch Stage 2 compare)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed all-patch Stage 2 compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (notebook execution skipped after Stage 2 compare failure)
+  - Command: make audit -> SKIPPED (full audit remains blocked by Stage 2 `C_ps` parity failure)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, notebook, PRD, oracle, or comparison-tolerance changes were committed for US-008.
+  - Tried and discarded a P-square histogram-state experiment because it regressed convergence before final validation.
+  - Re-ran the required exact all-patch Stage 2 probe from fresh notebook inputs; probe generation passed, but the required wildcard compare still failed all four `C_ps` artifacts with the known magnitudes, so US-008 remains incomplete.
+  - Recorded the fixture-provenance blocker: `stage8diag_hl/PATCH_2..4/pm1.mat` are March 2026 MATLAB 5 artifacts, while the bundled logs and manifest oracle artifacts are December 2025 MATLAB 7.3 outputs; treating that hybrid target as all-patch StaMPS oracle would require replacing oracle values or special-casing behavior, which the story forbids.
+  - Added `.ralph/guardrails.md` Sign: Validate Notebook Oracle Provenance.
+  - Security/performance/regression review: only Ralph evidence/guardrail text changed; no secrets, external input handling, runtime loops, kernels, or compare tolerances were introduced. Existing focused Stage 2/native tests pass; residual risk is the unresolved Stage 2 `C_ps` parity blocker.
+- **Learnings for future iterations:**
+  - Patterns discovered: exact probe generation now consistently writes all four authoritative patches, but compare still fails at the same `C_ps` magnitudes.
+  - Gotchas encountered: `stage8diag_hl` is not uniformly the same provenance as the manifest-backed `stage8diag` oracle; verify file headers, `i_loop`, `STAMPS.log`, and `bp1.mat` before chasing source changes against that target.
+  - Useful context: positive routing check: a future source fix should first prove PATCH_1 against the December 2025 StaMPS artifact and separately resolve the hybrid `stage8diag_hl` target provenance; negative routing check: do not complete US-008 by loosening tolerances, skipping `C_ps`, comparing only PATCH_1, special-casing rows, or overwriting oracle values.
+---

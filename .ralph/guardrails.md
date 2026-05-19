@@ -62,3 +62,8 @@
 - **Trigger**: Before claiming `notebooks/03_stage_by_stage_oracle.ipynb` proves full parity.
 - **Instruction**: Run the authoritative all-patch Stage 2 probe and `PATCH_*/pm1.mat` compare first; if Stage 2 still fails, execute the notebook only to record the blocked proof and do not tune notebook outputs to hide downstream failures.
 - **Added after**: Iteration 5 - US-005 exact notebook execution completed, but the parity assertion failed for Stages 2-8 because Stage 2 `C_ps` drift still starts the failure chain.
+
+### Sign: Validate Notebook Oracle Provenance
+- **Trigger**: When a notebook/reference dataset fails all-patch Stage 2 parity after source-level Stage 2 diagnostics point back to the target artifact.
+- **Instruction**: Check `pm1.mat` file format/header provenance, `i_loop`, bundled `STAMPS.log`, and the audited workflow manifest before treating the reference as a source-code parity target. Record a fixture blocker if the target is hybrid; do not loosen tolerances, special-case rows, or overwrite oracle values to make the compare pass.
+- **Added after**: Iteration 2 - US-008 found `stage8diag_hl/PATCH_2..4/pm1.mat` are March 2026 MATLAB 5 artifacts while the bundled logs and manifest oracle outputs are December 2025 MATLAB 7.3 artifacts.
