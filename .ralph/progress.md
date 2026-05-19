@@ -1225,3 +1225,43 @@ Recorded the iteration 3 blocker and added a guardrail not to treat one-bin seed
   - Localized single-precision CLAP replay from oracle `ph_grid` does not move `ph_patch` closer to the oracle.
   - With oracle `ph_patch`, topofit is only about 1e-8 from the oracle; the active drift remains tiny CLAP/prior-state differences before `ph_weight`, which can alter P-square weights and flip near-tied coarse topofit trials.
 ---
+## [2026-05-19 21:43:30 UTC] - US-009: Reprove single notebook parity
+Thread:
+Run: 20260519-153232-3438769 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e243c47 fix(notebook): copy oracle inputs into scratch
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_notebooks_api.py::test_build_scratch_tree_drops_stage4_triangle_intermediates tests/test_notebooks_api.py::test_build_scratch_tree_copies_inputs_without_oracle_write_through -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; PATCH_1 md5=b5085e1a719b314848cc19534a44ed55, PATCH_2 md5=19593e59b21df72a9eb156838066f9fa, PATCH_3 md5=5bf753033859a200c96beb4131385dcd, PATCH_4 md5=a7bc917ec0be75f8e15790025260ee3d)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed immediate manifest-backed Stage 2 compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (notebook execution skipped after failed immediate manifest-backed Stage 2 compare)
+  - Command: make audit -> SKIPPED (blocked by failed immediate manifest-backed Stage 2 compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - pystamps/notebooks/stage_execution.py
+  - tests/test_notebooks_api.py
+- What was implemented
+  - Changed notebook scratch setup to copy oracle inputs into the scratch tree instead of symlinking them, so scratch-side overwrites of inputs or side-effect logs such as `snaphu.log` cannot write through to the oracle directory.
+  - Added a focused regression test proving scratch input/log overwrites leave the oracle files unchanged and are not symlinks.
+  - Re-ran the exact US-009 Stage 2 precondition; the probe generated all four patch outputs, but wildcard compare checked all four `PATCH_*/pm1.mat` files and failed `C_ps`, so notebook execution, parity assertion, and `make audit` were skipped per the negative case.
+  - Added a guardrail sign for stopping notebook/audit proof when the immediate manifest-backed Stage 2 compare is red.
+  - Security/performance/regression review: no secrets, external trust boundary, oracle values, or tolerance changes were introduced; copying notebook scratch inputs avoids unsafe write-through at the cost of extra local scratch I/O; focused, Stage 2/kernel, and full pytest passed. Residual risk is unresolved Stage 2 `C_ps` parity, so US-009 remains incomplete.
+  - Positive routing check: for US-009 proof runs, continue to notebook/audit only after the same-run manifest-backed all-patch Stage 2 compare passes.
+  - Negative routing check: do not run notebook execution, notebook parity assertion, `make audit`, or completion signaling when the immediate Stage 2 compare is red.
+- **Learnings for future iterations:**
+  - Patterns discovered: `stage2_patch1_probe.py` completed with `failures=0`, but `narrow_compare` still fails only `C_ps` across all four audited patches.
+  - Gotchas encountered: scratch symlinks were a real oracle write-through risk for non-cleaned files and tool side-effect logs; copying fixes the guard without changing parity math.
+  - Useful context: US-009 still cannot complete until US-008 makes the same-run `PATCH_*/pm1.mat` compare green.
+---
