@@ -485,3 +485,7 @@
 [2026-05-20 16:09:26] US-001: verification pass/fail updated. uv smoke/pass gates completed; pytest subset pass; tmp pytest pass. stage2 patch1 probe and make audit run were terminated after long runtime; jupyter execute also terminated after >23m with no output. narrow_compare fail remains due C_ps mismatches; assert_notebook_parity fail as residual parity mismatch.
 [2026-05-20 16:09:31] US-001: progress log updated for run 20260520-150910-3748988; awaiting commit + final status with verification and external blockers (stage2 probe/make audit/jupyter).
 [2026-05-20 16:09:50] US-001: progress entry finalized with command outcomes and commit metadata placeholder; preparing final commit update.
+[2026-05-20 16:10:12] US-001: final progress entry finalized with hash 88cfc62; story documentation/log updates committed; proceeding to final summary.
+[2026-05-20 16:10:39] US-001: completed run; final commit 3f2be9c applied for progress entry self-consistency; remaining git-local diffs were pre-existing/.ralph errors and prior staged source files.
+[2026-05-20 16:11:25] US-001 run finalized: commit ba7d6ac for progress entry hash field; remaining modified files are pre-existing and not part of this story scope.
+[2026-05-20 16:11:36] US-001 final: story progress entry hash updated (763e948) and no further story-scoped source changes; remaining workspace diffs are pre-existing.
