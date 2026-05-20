@@ -440,3 +440,7 @@
 [2026-05-20 11:01:20] ITERATION 1 start (mode=build story=US-008)
 [2026-05-20 11:02:37] US-008: guardrails, errors, PRD, AGENTS, and manifest context reviewed
 [2026-05-20 12:05:45] Run 20260520-110119-3694929 terminated during US-008 all-patch probe; orphaned Stage 2 workers completed artifacts, wildcard compare remained red, stale workers cleaned, PRD reopened US-008/US-009
+[2026-05-20 12:06:39] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 12:07:57] US-008 start: guardrails/errors/PRD/AGENTS/manifest reviewed; checking Stage 2 prior-state path
+[2026-05-20 12:42:12] US-008 diagnostics: manifest compare remains blocked by Stage 2 prior-state drift; no source fix kept
+[2026-05-20 12:44:40] US-008 verification: focused pytest passed; manifest wildcard compare checked 4 patches and remains red at C_ps
