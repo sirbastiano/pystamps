@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 05:42:35 | run=20260520-044443-3626575 | iter=1 | mode=build | story=US-008 | duration=3471s | status=success
 - 2026-05-20 04:43:15 | run=20260520-035231-3610793 | iter=5 | mode=build | story=US-008 | duration=16s | status=error
 - 2026-05-20 04:42:57 | run=20260520-035231-3610793 | iter=4 | mode=build | story=US-009 | duration=16s | status=error
 - 2026-05-20 04:42:39 | run=20260520-035231-3610793 | iter=3 | mode=build | story=US-009 | duration=79s | status=error
@@ -390,3 +391,6 @@
 [2026-05-20 05:25:32] US-008 focused regression pytest passed; running required manifest Stage 2 probe next
 [2026-05-20 05:38:32] US-008 exact manifest Stage 2 probe completed; wildcard compare checked 4 patches and remained red for C_ps
 [2026-05-20 05:41:56] US-008 progress log updated for run 20260520-044443-3626575
+[2026-05-20 05:42:34] ITERATION 1 end (duration=3471s)
+[2026-05-20 05:42:37] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 05:43:51] Stopped false-routed US-009 after run 20260520-044443-3626575 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
