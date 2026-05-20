@@ -1602,3 +1602,44 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the probe can pass with `failures=0` while the required wildcard golden compare still fails all four audited patches.
   - Useful context: the current root remains iterative prior K/weighting state before final `ph_weight`; do not emit completion until the exact wildcard compare is green.
 ---
+## [2026-05-20 09:22:25 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-075932-3662436 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-075932-3662436-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-075932-3662436-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 02875fc chore(ralph): record us008 grid blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_prior_state_drift_report.py --all-patches --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --failure-key C_ps --max-failing-rows 2 --kernel-backend native --native-threads 8 --output /tmp/us008_manifest_drift.json -> PASS diagnostic
+  - Command: uv run python - <<'PY' ... oracle ph_weight grid replay for PATCH_1 through PATCH_4 ... PY -> PASS diagnostic (oracle `ph_weight` reproduced oracle `ph_grid` exactly)
+  - Command: uv run python - <<'PY' ... single-precision CLAP final-transition replay ... PY -> PASS diagnostic (current prior stayed at known `C_ps` drift; oracle `ph_weight` stayed near oracle)
+  - Command: timeout 1200 uv run python - <<'PY' ... fresh random histogram PATCH_1 diagnostic ... PY && uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/us008_fresh_hist_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL diagnostic (`C_ps` max_abs=0.0295872)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; regenerated PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, notebook, PRD, tolerance, or oracle changes were kept because the required all-patch manifest compare stayed red.
+  - Confirmed `inputs_and_outputs/InSAR_dataset_test_stage8diag` is the manifest compact single-master diagnostic golden/run seed; `_hl` remains `present_not_done_gate`.
+  - Re-ran the exact manifest-backed all-patch Stage 2 probe; generation passed, but wildcard compare checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Added blocker evidence and a guardrail to avoid rechecking grid accumulation after oracle `ph_weight` reproduces oracle `ph_grid`; continue upstream in iterative prior K/weighting state.
+  - Security/performance/regression review: evidence/guardrail-only changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused and full pytest passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+  - Instruction routing checks: positive - future Stage 2 source changes should first move focused PATCH_1 `C_ps`, then rerun the all-patch manifest compare; negative - do not route completion from diagnostic blocker commits, `_hl` artifacts, grid-only replay evidence, tolerance changes, or a red wildcard compare.
+- **Learnings for future iterations:**
+  - Patterns discovered: oracle final `ph_weight` now rules out grid indexing/accumulation because it reproduces oracle `ph_grid` exactly across PATCH_1 through PATCH_4.
+  - Gotchas encountered: forcing a fresh random histogram cache and replaying single-precision CLAP at the final transition do not move the PATCH_1 blocker.
+  - Useful context: active root remains the iterative prior K/weighting state before final `ph_weight`; do not emit completion until the exact wildcard manifest compare is green for all four patches.
+---
