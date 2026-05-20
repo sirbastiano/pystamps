@@ -361,3 +361,9 @@
 [2026-05-20 03:49:53] ITERATION 1 end (duration=3545s)
 [2026-05-20 03:49:56] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 03:51:46] Stopped false-routed US-009 iteration 2; reopened US-008 and US-009 in PRD after run 20260520-025048-3596776 marked US-008 done despite red Stage 2 wildcard compare
+[2026-05-20 03:52:32] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 03:53:24] Start US-008 repair run 20260520-035231-3610793 iteration 1: guardrails and prior failures reviewed; beginning Stage 2 root-cause audit
+[2026-05-20 04:23:35] US-008 diagnostics: checked mixed ph_weight precision and oracle ph_weight replay; no focused candidate moved the manifest C_ps blocker
+[2026-05-20 04:37:20] US-008 verification: focused pytest and all-patch probe passed; required wildcard manifest compare remains red for C_ps across all four patches
+[2026-05-20 04:38:59] US-008 regression: repo-wide pytest passed; notebook/assert/audit gates remain skipped because the required Stage 2 wildcard compare is red
+[2026-05-20 04:40:01] US-008 progress updated: recorded red wildcard compare blocker, skipped notebook/audit gates, and added oracle-replay residual guardrail

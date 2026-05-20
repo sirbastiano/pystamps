@@ -102,3 +102,8 @@
 - **Trigger**: When testing whether the vectorized Stage 2 CLAP stack causes the US-008 `C_ps` blocker.
 - **Instruction**: First compare an early scalar per-IFG CLAP checkpoint with the vectorized checkpoint. If `pm1_iter_01.mat` matches for `ph_grid`, `ph_patch`, topofit outputs, `ph_weight`, `Nr`, and `gamma_change_save`, stop the long scalar run and continue investigating prior-state drift elsewhere.
 - **Added after**: Run 20260520-025048-3596776 iteration 1 - scalar per-IFG CLAP matched the vectorized iteration-1 checkpoint exactly, while the required all-patch manifest compare still failed `C_ps`.
+
+### Sign: Do Not Chase Oracle Replay Residual Before Prior State
+- **Trigger**: When oracle final `ph_weight` replay through the live Stage 2 grid/CLAP/topofit path leaves only sub-micro `C_ps` residuals while the fresh manifest compare still fails at the known all-patch magnitudes.
+- **Instruction**: Treat replay-only residuals as secondary diagnostics. First move the fresh regenerated `PATCH_*/pm1.mat` `C_ps` compare by changing the iterative prior K/weighting state that produces final `ph_weight`; do not claim completion from oracle-fed replay evidence.
+- **Added after**: Run 20260520-035231-3610793 iteration 1 - oracle final `ph_weight` replay showed only sub-micro current-path residuals, but the same-run manifest compare still failed `C_ps` for all four patches.

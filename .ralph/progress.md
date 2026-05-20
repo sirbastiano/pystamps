@@ -1453,3 +1453,40 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the probe command can pass with `failures=0` while the decisive wildcard compare still fails every audited patch.
   - Useful context: the current same-run compare still reports the known manifest failures: PATCH_1 0.0295872, PATCH_2 0.0038906, PATCH_3 0.00961822, PATCH_4 0.0528888.
 ---
+## [2026-05-20 04:37:42 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-035231-3610793 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no verified source fix; evidence-only blocker commit)
+- Post-commit status: clean
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; PATCH_1 md5=9172902c029e4a28840cf5a27da5e3a9, PATCH_2 md5=58586a115b40b0ed74624525c6bf3297, PATCH_3 md5=6c34ae6c6ef0cc2d4fdd96e4c99a81fb, PATCH_4 md5=c8afec5522d0cc764368306b10da4a24)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, notebook, PRD, tolerance, or oracle changes were kept because the required all-patch manifest compare stayed red.
+  - Confirmed the manifest oracle/run seed remains `inputs_and_outputs/InSAR_dataset_test_stage8diag`; `_hl` remains `present_not_done_gate`.
+  - Tested mixed final `ph_weight` precision and oracle final `ph_weight` replay. Neither produced a focused improvement in the live manifest `C_ps` blocker; the active root remains iterative prior K/weighting state before final `ph_weight`.
+  - Added a guardrail Sign to avoid treating oracle-fed replay residuals as completion evidence before the fresh regenerated manifest compare moves.
+  - Security/performance/regression review: evidence/guardrail-only changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused and full pytest passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+  - Positive routing check: keep future Stage 2 candidates only after a focused regenerated-run compare changes the known `C_ps` magnitudes, then rerun the all-patch manifest compare.
+  - Negative routing check: do not use oracle-fed replay, `_hl/PATCH_2..4`, tolerance/oracle edits, single-patch evidence, probe completion alone, or completion signaling while the wildcard manifest compare is red.
+- **Learnings for future iterations:**
+  - Patterns discovered: oracle final `ph_weight` replay through the live path leaves only sub-micro `C_ps` residuals, but the regenerated run still fails at the much larger prior-state magnitudes.
+  - Gotchas encountered: `stage2_patch1_probe.py` can regenerate all four artifacts with `failures=0` and still leave the decisive golden compare red.
+  - Useful context: the current same-run compare still reports the known manifest failures: PATCH_1 0.0295872, PATCH_2 0.0038906, PATCH_3 0.00961822, PATCH_4 0.0528888.
+---
