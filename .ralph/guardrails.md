@@ -112,3 +112,8 @@
 - **Trigger**: When US-008 `C_ps` drift is unchanged after a focused PATCH_1 probe.
 - **Instruction**: Do not keep or rerun legacy single `ph_weight`, all-single Stage 2 numeric path, preserve grid/CLAP/normalize precision, or final topofit rounding unless a focused compare first changes PATCH_1 away from max_abs around 0.029587. These toggles leave the same prior-state blocker.
 - **Added after**: Run 20260520-064459-3646911 iteration 1 - legacy `ph_weight` and preserve grid/CLAP/normalize candidates both regenerated PATCH_1 but the focused compare still failed `C_ps` at the known magnitude.
+
+### Sign: Do Not Recheck Oracle Ph Weight Grid Accumulation
+- **Trigger**: When US-008 `C_ps` drift persists after replaying oracle final `ph_weight`.
+- **Instruction**: If oracle final `ph_weight` reproduces oracle `ph_grid`, treat grid indexing and accumulation as non-causal. Continue upstream in the iterative prior K/weighting path that produces `ph_weight`; do not spend another candidate run on grid-only accumulation unless a focused compare first changes `C_ps`.
+- **Added after**: Run 20260520-075932-3662436 iteration 1 - oracle `ph_weight` replay reproduced oracle `ph_grid` exactly for PATCH_1 through PATCH_4, while the fresh manifest probe still failed `C_ps` for all four patches.

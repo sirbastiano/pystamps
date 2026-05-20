@@ -413,3 +413,8 @@
 [2026-05-20 07:56:38] ITERATION 1 end (duration=4297s)
 [2026-05-20 07:56:45] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 07:58:52] Stopped false-routed US-009 after run 20260520-064459-3646911 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
+[2026-05-20 07:59:33] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 08:00:46] Start US-008 Stage 2 C_ps parity investigation
+[2026-05-20 08:27:28] US-008 verification started: focused tests and manifest Stage 2 compare
+[2026-05-20 08:44:07] US-008 manifest wildcard compare remains red; continuing Stage 2 prior-state investigation
+[2026-05-20 09:21:53] US-008 verification complete: focused/full pytest passed, manifest wildcard compare remains red
