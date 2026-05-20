@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 12:48:59 | run=20260520-120638-3709970 | iter=1 | mode=build | story=US-008 | duration=2537s | status=success
 - 2026-05-20 10:58:36 | run=20260520-092732-3677601 | iter=1 | mode=build | story=US-008 | duration=5464s | status=success
 - 2026-05-20 09:24:41 | run=20260520-075932-3662436 | iter=1 | mode=build | story=US-008 | duration=5109s | status=success
 - 2026-05-20 07:56:40 | run=20260520-064459-3646911 | iter=1 | mode=build | story=US-008 | duration=4297s | status=success
@@ -445,3 +446,7 @@
 [2026-05-20 12:42:12] US-008 diagnostics: manifest compare remains blocked by Stage 2 prior-state drift; no source fix kept
 [2026-05-20 12:44:40] US-008 verification: focused pytest passed; manifest wildcard compare checked 4 patches and remains red at C_ps
 [2026-05-20 12:46:18] US-008 progress log updated: run recorded incomplete with red 4-patch C_ps compare
+[2026-05-20 12:48:55] ITERATION 1 end (duration=2537s)
+[2026-05-20 12:49:02] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 12:50:25] Start US-009 dependency check for run 20260520-120638-3709970 iteration 2
+[2026-05-20 12:51:30] Stopped false-routed US-009 after run 20260520-120638-3709970 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD with the latest false-completion guardrails
