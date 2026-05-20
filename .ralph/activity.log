@@ -455,3 +455,4 @@
 [2026-05-20 13:40:28] US-008 diagnostic stopped: combined single precision PATCH_1 run exceeded useful runtime without compare evidence
 [2026-05-20 13:51:29] US-008 diagnostic completed: oracle Nr-as-baseline PATCH_1 still failed C_ps at known magnitude
 [2026-05-20 13:53:15] US-008 verification: smoke and focused pytest passed; wildcard manifest compare checked 4 patches and remains red at known C_ps magnitudes
+[2026-05-20 13:54:15] US-008 progress updated: recorded incomplete status with commit 2626446 and red wildcard C_ps compare

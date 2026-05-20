@@ -1718,3 +1718,41 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: broad historical MAT scans are very I/O-heavy and should be bounded to named candidate artifacts.
   - Useful context: do not emit completion from this run; the manifest wildcard compare is still red for all four audited `PATCH_*/pm1.mat` files.
 ---
+## [2026-05-20 13:53:33 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-125242-3721459 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-125242-3721459-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-125242-3721459-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 2626446 chore(ralph): record us008 diagnostics
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: uv run python scripts/stage2_prior_state_drift_report.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --all-patches --auto-first-failing --failure-key C_ps --max-failing-rows 1 --kernel-backend native --native-threads 8 --output inputs_and_outputs/validation_runs/stage2_manifest_prior_state_drift_report.json -> PASS diagnostic
+  - Command: uv run python - <<'PY' ... PATCH_1 iteration trace for row 22182 ... PY -> PASS diagnostic
+  - Command: timeout 1200 uv run python - <<'PY' ... combined single ph_weight/topofit PATCH_1 diagnostic ... PY -> STOPPED (exceeded useful runtime before compare evidence; no source change kept)
+  - Command: timeout 900 uv run python - <<'PY' ... oracle Nr-as-baseline PATCH_1 diagnostic ... PY && uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/us008_oracle_nr_as_baseline_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' --label us008_oracle_nr_as_baseline_patch1 -> FAIL diagnostic (`C_ps` max_abs=0.0295872)
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> SKIPPED (no source fix kept; exact current manifest probe already red)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, tests, notebook, PRD, tolerance, dependency, or oracle changes were kept because no candidate moved the required manifest-backed `C_ps` compare.
+  - Confirmed from `pystamps/data/audited_workflow_manifest.json` that `inputs_and_outputs/InSAR_dataset_test_stage8diag` is the compact single-master diagnostic golden/run seed and `_hl` is `present_not_done_gate`.
+  - Reconfirmed final topofit and CLAP replay match the oracle when fed oracle final `ph_patch`/`ph_grid`; the blocker remains iterative prior K/weighting state before final `ph_weight`.
+  - Tested oracle `Nr` as the random baseline and it did not move PATCH_1 from the known `C_ps` failure.
+  - Re-ran the decisive wildcard compare; it checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Security/performance/regression review: only Ralph evidence changed; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused tests passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: final oracle-fed CLAP/topofit replay is green, but any regenerated run still diverges through prior K/weighting before final `ph_weight`.
+  - Gotchas encountered: long row-wise single diagnostics are too slow unless they can produce focused compare evidence; stop them early rather than carrying unverified source changes.
+  - Useful context: do not emit completion from this run; the manifest wildcard compare is still red for all four audited `PATCH_*/pm1.mat` files.
+---
