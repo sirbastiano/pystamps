@@ -1490,3 +1490,40 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `stage2_patch1_probe.py` can regenerate all four artifacts with `failures=0` and still leave the decisive golden compare red.
   - Useful context: the current same-run compare still reports the known manifest failures: PATCH_1 0.0295872, PATCH_2 0.0038906, PATCH_3 0.00961822, PATCH_4 0.0528888.
 ---
+## [2026-05-20 05:40:00 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-044443-3626575 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-044443-3626575-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-044443-3626575-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 92c73d7 chore(ralph): record us008 compare blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: .venv/bin/python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_candidate_single_topofit --patch PATCH_1 --kernel-backend native --native-threads 8 --checkpoint-mode final -> PASS diagnostic (candidate regenerated PATCH_1)
+  - Command: .venv/bin/python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_candidate_single_topofit --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL diagnostic (`C_ps` max_abs=0.0295871; candidate reverted)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; regenerated PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, notebook, PRD, tolerance, or oracle changes were kept because the required all-patch manifest compare stayed red.
+  - Confirmed `inputs_and_outputs/InSAR_dataset_test_stage8diag` is the manifest compact single-master diagnostic golden/run seed; `inputs_and_outputs/InSAR_dataset_test_stage8diag_hl` remains `present_not_done_gate`.
+  - Tested single-preserved Stage 2 topofit as a focused candidate and reverted it because PATCH_1 stayed at the known `C_ps` magnitude.
+  - Re-ran the exact manifest-backed all-patch Stage 2 probe; generation passed, but wildcard compare checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Security/performance/regression review: evidence-only committed changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused and full pytest passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: preserving single topofit inputs/state alone does not move the manifest `C_ps` blocker.
+  - Gotchas encountered: `uv run python - <<'PY' ...` can still stall before diagnostic code starts; exact script-form `uv run python scripts/stage2_patch1_probe.py ...` progressed normally.
+  - Useful context: the same-run required compare still reports the known all-patch failures, so continue investigating iterative prior K/weighting state before final `ph_weight`.
+---

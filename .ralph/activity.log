@@ -389,3 +389,4 @@
 [2026-05-20 05:21:15] US-008 tested single-preserved Stage 2 topofit candidate; focused PATCH_1 compare remained red at known C_ps magnitude
 [2026-05-20 05:25:32] US-008 focused regression pytest passed; running required manifest Stage 2 probe next
 [2026-05-20 05:38:32] US-008 exact manifest Stage 2 probe completed; wildcard compare checked 4 patches and remained red for C_ps
+[2026-05-20 05:41:56] US-008 progress log updated for run 20260520-044443-3626575
