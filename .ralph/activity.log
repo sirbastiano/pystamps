@@ -394,3 +394,7 @@
 [2026-05-20 05:42:34] ITERATION 1 end (duration=3471s)
 [2026-05-20 05:42:37] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 05:43:51] Stopped false-routed US-009 after run 20260520-044443-3626575 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
+[2026-05-20 05:44:26] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 05:45:54] US-008 active: reading Stage 2 implementation, manifest oracle, and diagnostics before edits.
+[2026-05-20 06:23:15] US-008 diagnostics: Python-kernel and cumulative-Nr PATCH_1 candidates both kept known C_ps failure; reverted non-causal code candidate.
+[2026-05-20 06:40:00] US-008 verification: exact manifest all-patch probe completed, wildcard compare checked 4 patches and remains red for C_ps; full pytest passed.
