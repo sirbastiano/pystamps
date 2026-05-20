@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 10:58:36 | run=20260520-092732-3677601 | iter=1 | mode=build | story=US-008 | duration=5464s | status=success
 - 2026-05-20 09:24:41 | run=20260520-075932-3662436 | iter=1 | mode=build | story=US-008 | duration=5109s | status=success
 - 2026-05-20 07:56:40 | run=20260520-064459-3646911 | iter=1 | mode=build | story=US-008 | duration=4297s | status=success
 - 2026-05-20 06:42:01 | run=20260520-054426-3636685 | iter=1 | mode=build | story=US-008 | duration=3455s | status=success
@@ -433,3 +434,6 @@
 [2026-05-20 10:54:50] US-008 diagnostics complete; manifest wildcard compare remains red, updating blocker logs
 [2026-05-20 10:55:33] US-008 recorded hardlink diagnostic guardrail and red compare blocker
 [2026-05-20 10:56:34] US-008 progress log updated with red wildcard compare and hardlink restoration evidence
+[2026-05-20 10:58:36] ITERATION 1 end (duration=5464s)
+[2026-05-20 10:58:38] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 11:00:28] Stopped false-routed US-009 after run 20260520-092732-3677601 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
