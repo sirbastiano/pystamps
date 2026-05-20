@@ -327,3 +327,5 @@
 [2026-05-20 00:10:02] ITERATION 7 start (mode=build story=US-010)
 [2026-05-20 00:11:35] US-010 iteration 7: guardrails/errors/PRD reviewed; starting release gate validation
 [2026-05-20 00:12:59] Stopped US-010 iteration 7 before release/push validation to repair PRD false-completion statuses
+[2026-05-20 00:27:26] US-010 iteration 7: smoke/focused pytest/full pytest passed; Stage 2 all-patch compare failed, so notebook/assert/audit/push are blocked
+[2026-05-20 00:28:48] US-010 iteration 7: recorded Stage 2 C_ps push blocker in errors log and run summary
