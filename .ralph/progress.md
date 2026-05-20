@@ -11,7 +11,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-10.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: cb9c8d5 perf(validation): unblock stage3 parity runs
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run python -m pip install --force-reinstall --no-deps -e . -> PASS
@@ -64,7 +64,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-8.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: d9708cb test(stage8): add post-processing parity regressions
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run pytest -q tests/test_stage8_ported.py tests/test_stage6_ported.py -> PASS
@@ -101,7 +101,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-7.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 81f6ae2 fix(stage6): resolve bundled unwrap tools
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run pytest -q tests/test_stage6_ported.py -> PASS
@@ -141,7 +141,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-064459-3646911-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 28517f8 chore(ralph): record us008 precision blockers
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -180,7 +180,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 6df2c8d chore(notebook): record US-009 blocked proof
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -217,7 +217,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: f687d54 fix(stage2): skip partial zero topofit rows
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after code commit; progress entry committed separately
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -260,7 +260,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 90ab4eb test(stage3): cover boundary keep selection
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: `clean`
 - Verification:
   - Command: uv run pytest -q tests/test_stage3_ported.py -> PASS
@@ -294,7 +294,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 3ff8dc1 chore(validation): record us-002 first drift
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage3_ported.py tests/test_stage4_ported.py tests/test_kernels_accelerated.py -> PASS
@@ -330,7 +330,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 39aabe6 docs(audit): align parity evidence docs
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean
 - Verification:
   - Command: TMPDIR="$PWD/.tmp" uv run pytest -q -> PASS
@@ -366,7 +366,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 3d4242c docs(audit): show inconclusive notebook proof
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean
 - Verification:
   - Command: uv run jupyter execute notebooks/02_backends_parity_speed.ipynb --inplace -> PASS
@@ -409,7 +409,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: ed946bb feat(audit): summarize audit evidence
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: remaining pre-existing files: README.md, docs/architecture.html, docs/architecture.md, docs/assets/pystamps-capabilities.svg, docs/configuration.html, docs/function-reference.html, docs/function_reference.md, docs/getting-started.html, docs/getting_started.md, docs/pipeline-science-guide.html, docs/pipeline_science_guide.md, docs/quickstart.html, docs/testing.html, docs/usage.html, howtorun.md, notebooks/02_backends_parity_speed.ipynb
 - Verification:
   - Command: uv run pytest -q tests/test_parity_contract.py -> PASS
@@ -436,7 +436,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 2e8ef55 test(docs): guard parity claims
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean
 - Verification:
   - Command: uv run pytest -q tests/test_standalone_validation_contract.py -> PASS
@@ -466,7 +466,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260513-094222-768318-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: e9d1102 chore(validation): record us-005 checks
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean
 - Verification:
   - Command: uv run pytest -q -> PASS
@@ -494,7 +494,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 334a14b feat(notebook): add parity output gate
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean
 - Verification:
   - Command: uv run pytest -q tests/test_assert_notebook_parity.py -> PASS
@@ -535,7 +535,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: c101de5 fix(stage2): keep coarse topofit candidates
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: `clean`
 - Verification:
   - Command: uv run python setup.py build_rust --inplace -> PASS
@@ -565,7 +565,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 148bc76 fix(stage4): preserve triangle weed edges
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run pytest -q tests/test_stage4_ported.py tests/test_kernels_accelerated.py::test_stage4_stage7_stage8_native_kernels_match_python_reference -> PASS
@@ -607,7 +607,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-6.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: f668a78 fix(stage5): align merge artifact ordering
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run pytest -q tests/test_stage5_ported.py -> PASS
@@ -648,7 +648,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-9.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: bda7b62 perf(audit): accelerate stage2 audit execution
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run pytest -q tests/test_stage2_trial_wraps.py::test_stage2_random_phase_chunks_are_chunk_size_invariant tests/test_kernels_accelerated.py::test_stage2_native_dispatch_uses_native_module tests/test_kernels_accelerated.py::test_stage2_native_kernels_match_python_reference tests/test_kernels_accelerated.py::test_stage2_native_matlab_v5_rng_matches_python_reference tests/test_kernels_accelerated.py::test_stage2_native_random_hist_matches_python_reference -> PASS
@@ -690,7 +690,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 3f09998 feat(stage2): add prior drift report
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: git diff --check -> PASS
@@ -727,7 +727,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: none (no verified source fix; diagnostics-only outcome)
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after diagnostics commit
 - Verification:
   - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe_single_topofit --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_*/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295871)
@@ -756,7 +756,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: none (no verified source fix; diagnostics-only outcome)
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after diagnostics commit
 - Verification:
   - Command: git diff --check -> PASS
@@ -787,7 +787,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 6b8c4c9 chore(ralph): record US-004 blocked precondition
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> FAIL (terminated; `uv` editable-build child stayed in `D` state before script execution)
@@ -818,7 +818,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-083908-2624851-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: none (US-005 blocked before a verified notebook/audit proof)
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: git diff --check -> PASS
@@ -854,7 +854,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: fe406b8 fix(config): prevent uv run rebuild stalls
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -888,7 +888,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: none (no verified source fix; diagnostics-only outcome)
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean
 - Verification:
   - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
@@ -917,7 +917,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: a41e4c9 fix(verify): cover authoritative stage2 patches
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -959,7 +959,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 3d84ab8 chore(ralph): record US-004 blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -988,7 +988,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: acaab80 chore(ralph): record US-005 notebook blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1023,7 +1023,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260518-183448-2827459-iter-6.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: bd22a9f chore(ralph): record US-006 blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1056,7 +1056,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 60c1885 test(stage2): add c-ps drift diagnosis
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1094,7 +1094,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 9277d56 chore(ralph): record US-008 blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1133,7 +1133,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 82c488b chore(validation): record US-009 parity blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1167,7 +1167,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 77bb821 test(validation): guard manifest oracle
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1205,7 +1205,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-090457-3259084-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: f2be7dd chore(ralph): record US-010 push blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit; push skipped, so local `main` remains ahead of `origin/main`
 - Verification:
   - Command: git status --short --branch -> PASS (`## main...origin/main [ahead 28]`; pre-push baseline had dirty Ralph logs)
@@ -1243,7 +1243,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 47169cb chore(ralph): record us008 blocker signs
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: `clean`
 - Verification:
   - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' --output inputs_and_outputs/validation_runs/stage2_manifest_probe_current_compare.json -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
@@ -1271,7 +1271,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: e243c47 fix(notebook): copy oracle inputs into scratch
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1311,7 +1311,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 115f6a7 chore(ralph): record us008 parity blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1348,7 +1348,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-6.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 1cbeb80 chore(ralph): record us009 stage2 blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1381,7 +1381,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-003026-3565085-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: f1440b0 chore(ralph): record us008 compare blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1418,7 +1418,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-014717-3582758-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: f0ea262 chore(ralph): record us008 tie interp blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1459,7 +1459,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-025048-3596776-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: none (no verified source fix; evidence-only blocker commit)
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after evidence commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1499,7 +1499,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: none (no verified source fix; evidence-only blocker commit)
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1536,7 +1536,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-044443-3626575-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 92c73d7 chore(ralph): record us008 compare blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1573,7 +1573,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-054426-3636685-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 624623a chore(ralph): record us008 blocker evidence
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1609,7 +1609,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-075932-3662436-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 02875fc chore(ralph): record us008 grid blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1650,7 +1650,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-092732-3677601-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 5257e3c chore(ralph): record us008 hardlink blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1691,7 +1691,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-120638-3709970-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 4bcd439 chore(ralph): record us008 prior-state blocker
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
@@ -1725,7 +1725,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-125242-3721459-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 2626446 chore(ralph): record us008 diagnostics
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run python scripts/stage2_prior_state_drift_report.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --all-patches --auto-first-failing --failure-key C_ps --max-failing-rows 1 --kernel-backend native --native-threads 8 --output inputs_and_outputs/validation_runs/stage2_manifest_prior_state_drift_report.json -> PASS diagnostic
@@ -1763,7 +1763,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 5d9351e chore(ralph): point us001 progress entry to final commit
+- Commit: 072c45d chore(ralph): point us001 progress entry to final commit
 - Post-commit status: clean for progress/log updates in this story commit chain
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
