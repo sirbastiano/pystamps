@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 02:47:46 | run=20260520-014717-3582758 | iter=1 | mode=build | story=US-008 | duration=3629s | status=success
 - 2026-05-20 01:44:13 | run=20260520-003026-3565085 | iter=1 | mode=build | story=US-008 | duration=4427s | status=success
 - 2026-05-20 00:10:00 | run=20260519-153232-3438769 | iter=6 | mode=build | story=US-009 | duration=1097s | status=success
 - 2026-05-19 23:51:40 | run=20260519-153232-3438769 | iter=5 | mode=build | story=US-008 | duration=7617s | status=success
@@ -347,3 +348,6 @@
 [2026-05-20 02:42:14] US-008 full pytest and diff check completed; notebook/audit gates blocked by red Stage 2 C_ps compare
 [2026-05-20 02:42:50] US-008 recorded repeated C_ps blocker in errors log and added ruled-out tie/interp guardrail sign
 [2026-05-20 02:43:47] US-008 progress log updated with blocker outcome and verification evidence
+[2026-05-20 02:47:46] ITERATION 1 end (duration=3629s)
+[2026-05-20 02:47:48] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 02:49:02] Stopped false-routed US-009 iteration 2; reopened US-008 and US-009 in PRD after red Stage 2 wildcard compare was falsely treated as complete
