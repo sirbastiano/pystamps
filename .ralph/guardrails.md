@@ -92,3 +92,8 @@
 - **Trigger**: When a tiny Stage 2 precision/order candidate is tested against the manifest `C_ps` blocker.
 - **Instruction**: Keep the candidate only if a focused probe changes the failing `C_ps` magnitude. If PATCH_1 remains at the known max_abs around 0.0295872, revert the source/test tweak and record it as diagnostic evidence instead of committing non-causal numeric churn.
 - **Added after**: Iteration 5 - US-008 tested topofit-state rounding and MATLAB operand-order alignment, but focused probes still failed `PATCH_1/pm1.mat` `C_ps` at the known magnitude.
+
+### Sign: Avoid Repeating Ruled-Out Stage 2 Tie/Interp Tweaks
+- **Trigger**: When investigating US-008 Stage 2 `C_ps` drift near the topofit candidate-selection or P-square interpolation paths.
+- **Instruction**: Do not keep refined topofit candidate selection or MATLAB `interp` filter-length changes unless a focused `PATCH_1/pm1.mat` compare first improves the known `C_ps` max_abs. Current evidence shows refined candidate selection worsens PATCH_1 to max_abs=1.93543, and `interp` filter-length variants barely change the suspect prior weight.
+- **Added after**: Run 20260520-014717-3582758 iteration 1 - candidate-selection and interpolation diagnostics did not reduce the manifest-backed `C_ps` failure.

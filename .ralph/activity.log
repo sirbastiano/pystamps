@@ -337,3 +337,13 @@
 [2026-05-20 01:44:13] ITERATION 1 end (duration=4427s)
 [2026-05-20 01:44:15] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 01:46:16] Stopped false-routed US-009 iteration 2 after red US-008 compare; repaired PRD statuses to reopen US-008/US-009
+[2026-05-20 01:47:18] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 01:48:21] Start US-008 Stage 2 C_ps parity repair run 20260520-014717-3582758
+[2026-05-20 01:57:51] Running US-008 PATCH_1 single-precision Stage 2 numeric-path diagnostic
+[2026-05-20 02:18:09] Running US-008 PATCH_1 topofit candidate-selection diagnostic
+[2026-05-20 02:27:20] Completed US-008 topofit candidate-selection diagnostic; PATCH_1 compare worsened, so no source change kept
+[2026-05-20 02:28:25] US-008 smoke and focused Stage 2/kernel pytest gates passed before fresh manifest probe
+[2026-05-20 02:41:23] US-008 fresh manifest probe passed generation but wildcard compare failed all four C_ps checks
+[2026-05-20 02:42:14] US-008 full pytest and diff check completed; notebook/audit gates blocked by red Stage 2 C_ps compare
+[2026-05-20 02:42:50] US-008 recorded repeated C_ps blocker in errors log and added ruled-out tie/interp guardrail sign
+[2026-05-20 02:43:47] US-008 progress log updated with blocker outcome and verification evidence

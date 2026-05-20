@@ -1372,3 +1372,44 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: row-level replay through native and Python topofit matches on the carried iteration state; another backend toggle is unlikely to fix the all-patch compare without a focused `C_ps` movement first.
   - Useful context: the decisive compare remains `narrow_compare --patterns 'PATCH_*/pm1.mat'` against `inputs_and_outputs/InSAR_dataset_test_stage8diag`; do not emit completion while it is red.
 ---
+## [2026-05-20 02:43:08 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-014717-3582758 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-014717-3582758-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-014717-3582758-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f0ea262 chore(ralph): record us008 tie interp blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python - <<'PY' ... PATCH_1 single-precision Stage 2 numeric-path diagnostic ... PY -> PASS diagnostic; `narrow_compare --patterns 'PATCH_1/pm1.mat'` still failed `C_ps` max_abs=0.0295870
+  - Command: uv run python - <<'PY' ... PATCH_1 refined topofit candidate-selection diagnostic ... PY -> PASS diagnostic; `narrow_compare --patterns 'PATCH_1/pm1.mat'` worsened `C_ps` to max_abs=1.93543
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; wrote PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, PRD, notebook, tolerance, or oracle changes were kept because no candidate moved the required manifest compare.
+  - Confirmed the manifest-backed oracle/run seed remains `inputs_and_outputs/InSAR_dataset_test_stage8diag`; `_hl` remains `present_not_done_gate`.
+  - Ruled out single-precision Stage 2 numeric-path replay, refined topofit candidate selection, and MATLAB `interp` filter-length variants as causal for the current `C_ps` blocker.
+  - Re-ran the exact manifest-backed all-patch Stage 2 probe; generation passed, but wildcard compare checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Added a guardrail sign to avoid repeating ruled-out topofit tie-selection and P-square interpolation tweaks without a focused `C_ps` improvement first.
+  - Security/performance/regression review: evidence/guardrail-only changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused and full pytest passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+  - Positive routing check: keep future Stage 2 candidate changes only after a focused `PATCH_1/pm1.mat` compare changes the known `C_ps` failure, then rerun the all-patch manifest compare.
+  - Negative routing check: do not keep refined topofit candidate selection, `interp` filter-length churn, `_hl/PATCH_2..4`, tolerance/oracle edits, single-patch evidence, or completion signaling while the wildcard manifest compare is red.
+- **Learnings for future iterations:**
+  - Patterns discovered: the official StaMPS topofit path selects the highest coarse trial; switching to refined candidate selection is harmful for this fixture.
+  - Gotchas encountered: the all-patch probe can pass with `failures=0` while the decisive wildcard compare still fails all four `C_ps` checks.
+  - Useful context: the active root remains iterative prior-state drift before final `ph_weight`/`ph_grid`/`ph_patch`, not final topofit replay, histogram backend, refined tie selection, or P-square interpolation filter length.
+---
