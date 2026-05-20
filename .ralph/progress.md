@@ -1302,3 +1302,36 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: topofit-state rounding and operand-order alignment are plausible MATLAB parity details but do not change the manifest `C_ps` failure; revert them unless paired with a measurable compare improvement.
   - Useful context: `make audit` can stay CPU-active without writing a fresh audit artifact; keep applying the bounded-audit guardrail.
 ---
+## [2026-05-20 00:09:30 UTC] - US-009: Reprove single notebook parity
+Thread:
+Run: 20260519-153232-3438769 (iteration 6)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-6.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260519-153232-3438769-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 1cbeb80 chore(ralph): record us009 stage2 blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; regenerated PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed Stage 2 precondition)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed Stage 2 precondition)
+  - Command: make audit -> SKIPPED (blocked by failed Stage 2 precondition)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - No source, notebook, oracle, tolerance, or PRD changes were made for US-009.
+  - Confirmed the notebook already uses manifest-backed `inputs_and_outputs/InSAR_dataset_test_stage8diag` instead of `_hl`.
+  - Reproved that US-009 is still blocked before notebook execution because the authoritative all-patch Stage 2 compare remains red.
+  - Security/performance/regression review: evidence-only changes; no secrets, runtime inputs, heavy loops, kernels, compare tolerances, notebook outputs, or oracle artifacts changed. Smoke, focused pytest, and full pytest passed.
+- **Learnings for future iterations:**
+  - Patterns discovered: PRD status alone is not sufficient; the same-run `PATCH_*/pm1.mat` compare must be checked before any notebook proof.
+  - Gotchas encountered: `stage2_patch1_probe.py` can pass with `failures=0` while the required golden compare still fails every patch.
+  - Useful context: US-009 must remain blocked and skip notebook/assert/audit proof until US-008 produces a green all-patch Stage 2 compare.
+---
