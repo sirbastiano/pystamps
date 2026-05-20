@@ -1643,3 +1643,44 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: forcing a fresh random histogram cache and replaying single-precision CLAP at the final transition do not move the PATCH_1 blocker.
   - Useful context: active root remains the iterative prior K/weighting state before final `ph_weight`; do not emit completion until the exact wildcard manifest compare is green for all four patches.
 ---
+## [2026-05-20 10:55:59 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-092732-3677601 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-092732-3677601-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-092732-3677601-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 5257e3c chore(ralph): record us008 hardlink blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run python - <<'PY' ... forced PATCH_1 gamma_max_iterations=9 diagnostic ... PY -> PASS generation; focused compare FAIL (`PATCH_1/pm1.mat` `C_ps` worsened to max_abs=5.4327); diagnostic invalidated because the run copy hardlinked `parms.mat`
+  - Command: cp --remove-destination inputs_and_outputs/validation_runs/20260402_stage2_parity_final/PATCH_1/parms.mat inputs_and_outputs/InSAR_dataset_test_stage8diag/PATCH_1/parms.mat -> PASS (restored seed and broke hardlink; restored `gamma_change_convergence=0.0001`, `gamma_max_iterations=25`)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; regenerated PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: uv run python scripts/stage2_prior_state_drift_report.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --all-patches --auto-first-failing --failure-key C_ps --max-failing-rows 3 --kernel-backend native --native-threads 8 --output inputs_and_outputs/validation_runs/stage2_manifest_probe/prior_state_report.json -> PASS diagnostic
+  - Command: uv run python - <<'PY' ... legacy single-precision ph_weight PATCH_1 diagnostic ... PY && uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/us008_legacy_ph_weight_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL diagnostic (`C_ps` max_abs=0.0295871)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, notebook, PRD, tolerance, or oracle changes were kept because the required all-patch manifest compare stayed red.
+  - Restored `inputs_and_outputs/InSAR_dataset_test_stage8diag/PATCH_1/parms.mat` after a hardlinked forced-iteration diagnostic mutated the seed, then reran the exact manifest-backed all-patch probe.
+  - Confirmed `inputs_and_outputs/InSAR_dataset_test_stage8diag` remains the manifest compact single-master diagnostic golden/run seed; `_hl` remains `present_not_done_gate`.
+  - Re-ran the decisive wildcard compare; it checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Added a guardrail Sign to break hardlinks before mutating copied diagnostic MAT/config files.
+  - Security/performance/regression review: evidence/guardrail-only changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused tests passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+  - Instruction routing checks: positive - break hardlinks before diagnostic mutation and require a focused `C_ps` movement before keeping source candidates; negative - do not emit completion from a probe pass, hardlink-restoration evidence, legacy precision rerun, `_hl` artifacts, tolerance/oracle edits, or a red wildcard compare.
+- **Learnings for future iterations:**
+  - Patterns discovered: forcing one extra PATCH_1 iteration worsens `C_ps`, so loop-count extension is not a fix.
+  - Gotchas encountered: `stage2_patch1_probe.py` copies datasets with hardlinks; mutating copied `parms.mat` can mutate the seed unless the hardlink is broken first.
+  - Useful context: the current same-run wildcard compare still reports the known failures: PATCH_1 0.0295872, PATCH_2 0.0038906, PATCH_3 0.00961822, PATCH_4 0.0528888.
+---

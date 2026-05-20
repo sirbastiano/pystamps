@@ -432,3 +432,4 @@
 [2026-05-20 10:29:52] US-008 clean all-patch Stage 2 probe completed; running wildcard manifest compare
 [2026-05-20 10:54:50] US-008 diagnostics complete; manifest wildcard compare remains red, updating blocker logs
 [2026-05-20 10:55:33] US-008 recorded hardlink diagnostic guardrail and red compare blocker
+[2026-05-20 10:56:34] US-008 progress log updated with red wildcard compare and hardlink restoration evidence
