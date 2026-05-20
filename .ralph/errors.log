@@ -78,3 +78,17 @@
 [2026-05-20 03:49:53] ITERATION 1 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-025048-3596776-iter-1.md
 [2026-05-20 03:51:43] Stopped false-routed US-009 iteration 2 because US-008 was marked done after run 20260520-025048-3596776 committed blocker evidence (`250de7f`) while the same-run wildcard Stage 2 compare was red; repaired `.agents/tasks/prd-full-parity-retry.json` working copy to reopen US-008 and US-009 and added this false-completion failure to beat.
 [2026-05-20 04:36:54] ITERATION 1 US-008 blocker: exact manifest-backed Stage 2 probe completed and regenerated PATCH_1 through PATCH_4, but `narrow_compare --patterns 'PATCH_*/pm1.mat'` checked 4 files and still failed `C_ps` for every patch (PATCH_1 0.0295872, PATCH_2 0.0038906, PATCH_3 0.00961822, PATCH_4 0.0528888). Diagnostics ruled out mixed final `ph_weight` precision as a mover and showed oracle final `ph_weight` replay leaves only sub-micro current-path `C_ps` residual, so the active blocker remains iterative prior K/weighting state before final `ph_weight`.
+[2026-05-20 04:40:47] ITERATION 1 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-1.md
+[2026-05-20 04:41:18] ITERATION 2 command failed (status=1)
+[2026-05-20 04:41:18] ITERATION 2 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-2.md
+[2026-05-20 04:41:18] ITERATION 2 exited non-zero; review /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-2.log
+[2026-05-20 04:42:39] ITERATION 3 command failed (status=1)
+[2026-05-20 04:42:39] ITERATION 3 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-3.md
+[2026-05-20 04:42:39] ITERATION 3 exited non-zero; review /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-3.log
+[2026-05-20 04:42:57] ITERATION 4 command failed (status=1)
+[2026-05-20 04:42:57] ITERATION 4 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-4.md
+[2026-05-20 04:42:57] ITERATION 4 exited non-zero; review /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-4.log
+[2026-05-20 04:43:15] ITERATION 5 command failed (status=1)
+[2026-05-20 04:43:15] ITERATION 5 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-5.md
+[2026-05-20 04:43:15] ITERATION 5 exited non-zero; review /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-035231-3610793-iter-5.log
+[2026-05-20 04:44:09] Stopped repeated false-routed US-009/US-008 retry loop after run 20260520-035231-3610793 marked US-008 done despite red wildcard Stage 2 compare and spawned later iterations; repaired `.agents/tasks/prd-full-parity-retry.json` working copy to reopen US-008 and US-009 and added commit `fe0847b` as the latest false-completion failure to beat.

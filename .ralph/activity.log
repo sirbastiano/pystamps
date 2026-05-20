@@ -1,6 +1,11 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 04:43:15 | run=20260520-035231-3610793 | iter=5 | mode=build | story=US-008 | duration=16s | status=error
+- 2026-05-20 04:42:57 | run=20260520-035231-3610793 | iter=4 | mode=build | story=US-009 | duration=16s | status=error
+- 2026-05-20 04:42:39 | run=20260520-035231-3610793 | iter=3 | mode=build | story=US-009 | duration=79s | status=error
+- 2026-05-20 04:41:18 | run=20260520-035231-3610793 | iter=2 | mode=build | story=US-009 | duration=29s | status=error
+- 2026-05-20 04:40:47 | run=20260520-035231-3610793 | iter=1 | mode=build | story=US-008 | duration=2895s | status=success
 - 2026-05-20 03:49:53 | run=20260520-025048-3596776 | iter=1 | mode=build | story=US-008 | duration=3545s | status=success
 - 2026-05-20 02:47:46 | run=20260520-014717-3582758 | iter=1 | mode=build | story=US-008 | duration=3629s | status=success
 - 2026-05-20 01:44:13 | run=20260520-003026-3565085 | iter=1 | mode=build | story=US-008 | duration=4427s | status=success
@@ -367,3 +372,15 @@
 [2026-05-20 04:37:20] US-008 verification: focused pytest and all-patch probe passed; required wildcard manifest compare remains red for C_ps across all four patches
 [2026-05-20 04:38:59] US-008 regression: repo-wide pytest passed; notebook/assert/audit gates remain skipped because the required Stage 2 wildcard compare is red
 [2026-05-20 04:40:01] US-008 progress updated: recorded red wildcard compare blocker, skipped notebook/audit gates, and added oracle-replay residual guardrail
+[2026-05-20 04:40:47] ITERATION 1 end (duration=2895s)
+[2026-05-20 04:40:49] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 04:41:18] ITERATION 2 end (duration=29s)
+[2026-05-20 04:41:20] ITERATION 3 start (mode=build story=US-009)
+[2026-05-20 04:42:30] Start US-009 iteration 3: guardrails/errors/PRD reviewed; checking manifest Stage 2 precondition before notebook proof
+[2026-05-20 04:42:39] ITERATION 3 end (duration=79s)
+[2026-05-20 04:42:41] ITERATION 4 start (mode=build story=US-009)
+[2026-05-20 04:42:57] ITERATION 4 end (duration=16s)
+[2026-05-20 04:43:00] ITERATION 5 start (mode=build story=US-008)
+[2026-05-20 04:43:15] ITERATION 5 end (duration=16s)
+[2026-05-20 04:43:17] ITERATION 6 start (mode=build story=US-008)
+[2026-05-20 04:44:05] Stopped false-routed US-009 after run 20260520-035231-3610793 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
