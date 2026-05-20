@@ -424,3 +424,11 @@
 [2026-05-20 09:24:43] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 09:25:59] US-009 iteration 2: read guardrails/errors/PRD and verifying dependency gate
 [2026-05-20 09:26:53] Stopped false-routed US-009 after run 20260520-075932-3662436 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
+[2026-05-20 09:27:33] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 09:29:04] US-008 start: guardrails/errors/PRD reviewed; using log-activity.sh because repo-root ralph helper is absent
+[2026-05-20 10:00:56] US-008 diagnostics: forced extra PATCH_1 iteration worsened C_ps; old zero-diff validation dirs are oracle copies, not source fixes
+[2026-05-20 10:15:51] US-008 resumed; invalid probe not running, restoring hardlinked diagnostic seed parms before validation
+[2026-05-20 10:16:24] US-008 restored PATCH_1 parms.mat from known-good copy and broke diagnostic hardlink
+[2026-05-20 10:29:52] US-008 clean all-patch Stage 2 probe completed; running wildcard manifest compare
+[2026-05-20 10:54:50] US-008 diagnostics complete; manifest wildcard compare remains red, updating blocker logs
+[2026-05-20 10:55:33] US-008 recorded hardlink diagnostic guardrail and red compare blocker

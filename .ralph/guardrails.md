@@ -117,3 +117,8 @@
 - **Trigger**: When US-008 `C_ps` drift persists after replaying oracle final `ph_weight`.
 - **Instruction**: If oracle final `ph_weight` reproduces oracle `ph_grid`, treat grid indexing and accumulation as non-causal. Continue upstream in the iterative prior K/weighting path that produces `ph_weight`; do not spend another candidate run on grid-only accumulation unless a focused compare first changes `C_ps`.
 - **Added after**: Run 20260520-075932-3662436 iteration 1 - oracle `ph_weight` replay reproduced oracle `ph_grid` exactly for PATCH_1 through PATCH_4, while the fresh manifest probe still failed `C_ps` for all four patches.
+
+### Sign: Break Hardlinks Before Diagnostic Mutation
+- **Trigger**: Before editing MAT/config files inside a validation run copied from an oracle or seed dataset with hardlinks.
+- **Instruction**: Check inode/link count first or make a non-hardlinked copy. If a diagnostic must change `parms.mat`, `pm*.mat`, or similar seed files, break the hardlink before writing so the authoritative dataset is not mutated.
+- **Added after**: Run 20260520-092732-3677601 iteration 1 - a forced-iteration PATCH_1 diagnostic rewrote hardlinked `parms.mat` and temporarily changed the manifest seed until it was restored from a known-good copy.
