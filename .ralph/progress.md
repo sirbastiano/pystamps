@@ -1763,8 +1763,8 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-1.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 6876a86 docs(ralph): finalize us001 execution verification log
-- Post-commit status: clean for this story's tracked logs
+- Commit: 88cfc62 chore(ralph): align us001 progress metadata hash
+- Post-commit status: clean for .ralph/progress.md and .ralph/activity.log
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
   - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
