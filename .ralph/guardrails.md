@@ -107,3 +107,8 @@
 - **Trigger**: When oracle final `ph_weight` replay through the live Stage 2 grid/CLAP/topofit path leaves only sub-micro `C_ps` residuals while the fresh manifest compare still fails at the known all-patch magnitudes.
 - **Instruction**: Treat replay-only residuals as secondary diagnostics. First move the fresh regenerated `PATCH_*/pm1.mat` `C_ps` compare by changing the iterative prior K/weighting state that produces final `ph_weight`; do not claim completion from oracle-fed replay evidence.
 - **Added after**: Run 20260520-035231-3610793 iteration 1 - oracle final `ph_weight` replay showed only sub-micro current-path residuals, but the same-run manifest compare still failed `C_ps` for all four patches.
+
+### Sign: Do Not Repeat Stage 2 Precision Toggles
+- **Trigger**: When US-008 `C_ps` drift is unchanged after a focused PATCH_1 probe.
+- **Instruction**: Do not keep or rerun legacy single `ph_weight`, all-single Stage 2 numeric path, preserve grid/CLAP/normalize precision, or final topofit rounding unless a focused compare first changes PATCH_1 away from max_abs around 0.029587. These toggles leave the same prior-state blocker.
+- **Added after**: Run 20260520-064459-3646911 iteration 1 - legacy `ph_weight` and preserve grid/CLAP/normalize candidates both regenerated PATCH_1 but the focused compare still failed `C_ps` at the known magnitude.

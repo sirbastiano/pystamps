@@ -403,3 +403,8 @@
 [2026-05-20 06:42:01] ITERATION 1 end (duration=3455s)
 [2026-05-20 06:42:03] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 06:43:39] Stopped false-routed US-009 after run 20260520-054426-3636685 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
+[2026-05-20 06:45:00] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 06:45:47] US-008 active: read guardrails/errors/PRD/manifest; investigating Stage 2 C_ps prior weighting path.
+[2026-05-20 07:36:37] US-008 diagnostics: legacy ph_weight and preserve grid/CLAP precision candidates completed; PATCH_1 compare stayed at known C_ps failure.
+[2026-05-20 07:38:51] US-008 guardrails updated with non-causal precision toggle evidence.
+[2026-05-20 07:54:27] US-008 verification: focused/full pytest passed; exact manifest probe passed generation; wildcard compare checked 4 patches and failed C_ps, so notebook/audit gates were skipped.
