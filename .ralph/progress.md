@@ -134,6 +134,45 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the stage-by-stage notebook can stay CPU-bound in Stage 2 for over an hour before any downstream Stage 6 evidence is produced.
   - Useful context: positive guardrail routing check: a stage-by-stage notebook run stuck in Stage 2 with unchanged `PATCH_*/pm1.mat` mtimes should trigger `Bound Notebook Stage 2 Hangs`; negative check: a fast failing pytest command should not trigger that sign.
 ---
+## [2026-05-20 07:55:18 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-064459-3646911 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-064459-3646911-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-064459-3646911-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 28517f8 chore(ralph): record us008 precision blockers
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: .venv/bin/python legacy single ph_weight PATCH_1 diagnostic followed by scripts/narrow_compare.py --patterns 'PATCH_1/pm1.mat' -> FAIL diagnostic (`C_ps` max_abs=0.0295871)
+  - Command: .venv/bin/python preserve grid/CLAP/normalize precision PATCH_1 diagnostic followed by scripts/narrow_compare.py --patterns 'PATCH_1/pm1.mat' -> FAIL diagnostic (`C_ps` max_abs=0.0295872)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; PATCH_1 md5=308e088a44e97619a9415e689bb99bd8, PATCH_2 md5=1915e2504978d2694dc274a29db585c9, PATCH_3 md5=22697d99c06f821db957eba44ba29988, PATCH_4 md5=63dcf709e308f2fa72130300aac5e8ee)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, notebook, PRD, tolerance, or oracle changes were kept because the required all-patch manifest compare stayed red.
+  - Confirmed `inputs_and_outputs/InSAR_dataset_test_stage8diag` is the manifest compact single-master diagnostic golden/run seed; `inputs_and_outputs/InSAR_dataset_test_stage8diag_hl` remains `present_not_done_gate`.
+  - Ruled out legacy single `ph_weight` and preserve grid/CLAP/normalize live-loop precision candidates; neither moved the focused PATCH_1 `C_ps` failure.
+  - Added a guardrail and error-log entry to avoid repeating non-causal Stage 2 precision toggles without focused `C_ps` movement.
+  - Re-ran the exact manifest-backed all-patch Stage 2 probe; generation passed, but wildcard compare checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Security/performance/regression review: evidence-only committed changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused and full pytest passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+  - Instruction routing checks: positive - future Stage 2 source changes must first move focused PATCH_1 `C_ps`, then rerun the all-patch manifest compare; negative - do not route completion from diagnostic blocker commits, `_hl` artifacts, tolerance changes, or a red wildcard compare.
+- **Learnings for future iterations:**
+  - Patterns discovered: oracle final `ph_weight` replay leaves only sub-micro `C_ps` residual, but fresh regenerated state still fails; the active root remains iterative prior K/weighting state before final `ph_weight`.
+  - Gotchas encountered: global gamma traces and probe `failures=0` can look healthy while strict wildcard `C_ps` parity still fails every audited patch.
+  - Useful context: do not emit completion until the exact wildcard manifest compare is green for PATCH_1 through PATCH_4.
+---
 ## [2026-05-19 19:53:04 UTC] - US-009: Reprove single notebook parity
 Thread:
 Run: 20260519-153232-3438769 (iteration 2)

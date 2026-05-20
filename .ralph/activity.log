@@ -408,3 +408,4 @@
 [2026-05-20 07:36:37] US-008 diagnostics: legacy ph_weight and preserve grid/CLAP precision candidates completed; PATCH_1 compare stayed at known C_ps failure.
 [2026-05-20 07:38:51] US-008 guardrails updated with non-causal precision toggle evidence.
 [2026-05-20 07:54:27] US-008 verification: focused/full pytest passed; exact manifest probe passed generation; wildcard compare checked 4 patches and failed C_ps, so notebook/audit gates were skipped.
+[2026-05-20 07:55:52] US-008 progress updated with red wildcard compare outcome and skipped notebook/audit gates.
