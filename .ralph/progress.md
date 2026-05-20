@@ -1684,3 +1684,37 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `stage2_patch1_probe.py` copies datasets with hardlinks; mutating copied `parms.mat` can mutate the seed unless the hardlink is broken first.
   - Useful context: the current same-run wildcard compare still reports the known failures: PATCH_1 0.0295872, PATCH_2 0.0038906, PATCH_3 0.00961822, PATCH_4 0.0528888.
 ---
+## [2026-05-20 12:45:40 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-120638-3709970 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-120638-3709970-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-120638-3709970-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 4bcd439 chore(ralph): record us008 prior-state blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> SKIPPED (no source fix was kept; rerunning the hour-long all-patch probe would regenerate the same prior-state blocker)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, notebook, PRD, tolerance, dependency, or oracle changes were kept because no candidate moved the required manifest-backed `C_ps` compare.
+  - Confirmed from `pystamps/data/audited_workflow_manifest.json` that `inputs_and_outputs/InSAR_dataset_test_stage8diag` is the compact single-master diagnostic golden/run seed and `_hl` is `present_not_done_gate`.
+  - Confirmed no stale Stage 2 worker processes were active before investigation.
+  - Replayed current PATCH_1 iteration state against the oracle and reconfirmed the blocker is prior-state drift before final `ph_weight`; max row 22183 has current prior weight 0.9748305 vs oracle 0.9249632 and current prior K -0.0004878526 vs oracle -0.0003888332.
+  - Re-ran the decisive wildcard compare; it checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Security/performance/regression review: only Ralph evidence changed; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused tests passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: oracle final `ph_weight` encodes a different row-7 K/weighting state; replacing only `Nr` or final topofit behavior cannot explain the current max-row drift.
+  - Gotchas encountered: broad historical MAT scans are very I/O-heavy and should be bounded to named candidate artifacts.
+  - Useful context: do not emit completion from this run; the manifest wildcard compare is still red for all four audited `PATCH_*/pm1.mat` files.
+---
