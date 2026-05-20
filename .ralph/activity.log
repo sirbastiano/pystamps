@@ -332,3 +332,4 @@
 [2026-05-20 00:30:26] ITERATION 1 start (mode=build story=US-008)
 [2026-05-20 00:31:20] start US-008 all-patch Stage 2 C_ps parity repair
 [2026-05-20 01:40:32] US-008 verification: manifest Stage 2 probe regenerated four patches but wildcard compare still fails C_ps
+[2026-05-20 01:42:18] US-008 progress log updated with blocker evidence and skipped downstream gates

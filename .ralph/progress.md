@@ -1335,3 +1335,40 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `stage2_patch1_probe.py` can pass with `failures=0` while the required golden compare still fails every patch.
   - Useful context: US-009 must remain blocked and skip notebook/assert/audit proof until US-008 produces a green all-patch Stage 2 compare.
 ---
+## [2026-05-20 01:40:42 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-003026-3565085 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-003026-3565085-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-003026-3565085-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f1440b0 chore(ralph): record us008 compare blocker
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run python - <<'PY' ... stage2_histogram=python PATCH_1 diagnostic probe ... PY -> PASS (probe completed; diagnostic only)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/us008_hist_python_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL (`PATCH_1/pm1.mat` `C_ps`, max_abs=0.0295872)
+  - Command: uv run python - <<'PY' ... native-vs-python topofit replay from `pm1_iter_07.mat` row 22182 ... PY -> PASS diagnostic (native and python replay matched)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; regenerated PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, PRD, notebook, tolerance, or oracle changes were kept because no candidate moved the required manifest compare.
+  - Confirmed the manifest-backed oracle/run seed remains `inputs_and_outputs/InSAR_dataset_test_stage8diag`; `_hl` remains `present_not_done_gate`.
+  - Ruled out `stage2_histogram=python` for PATCH_1 and native-vs-python topofit replay from the carried iteration state as causal.
+  - Re-ran the exact manifest-backed all-patch Stage 2 probe; generation passed, but wildcard compare still failed `C_ps` for all four audited patches, so US-008 remains incomplete and no completion signal was emitted.
+  - Security/performance/regression review: evidence-only changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused tests passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: overriding only the Stage 2 histogram to Python preserves the known PATCH_1 `C_ps` failure, so the active root is still upstream iterative `ph_weight`/CLAP/topofit state rather than histogram backend binning.
+  - Gotchas encountered: row-level replay through native and Python topofit matches on the carried iteration state; another backend toggle is unlikely to fix the all-patch compare without a focused `C_ps` movement first.
+  - Useful context: the decisive compare remains `narrow_compare --patterns 'PATCH_*/pm1.mat'` against `inputs_and_outputs/InSAR_dataset_test_stage8diag`; do not emit completion while it is red.
+---
