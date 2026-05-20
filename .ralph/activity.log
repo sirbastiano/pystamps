@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 06:42:01 | run=20260520-054426-3636685 | iter=1 | mode=build | story=US-008 | duration=3455s | status=success
 - 2026-05-20 05:42:35 | run=20260520-044443-3626575 | iter=1 | mode=build | story=US-008 | duration=3471s | status=success
 - 2026-05-20 04:43:15 | run=20260520-035231-3610793 | iter=5 | mode=build | story=US-008 | duration=16s | status=error
 - 2026-05-20 04:42:57 | run=20260520-035231-3610793 | iter=4 | mode=build | story=US-009 | duration=16s | status=error
@@ -399,3 +400,6 @@
 [2026-05-20 06:23:15] US-008 diagnostics: Python-kernel and cumulative-Nr PATCH_1 candidates both kept known C_ps failure; reverted non-causal code candidate.
 [2026-05-20 06:40:00] US-008 verification: exact manifest all-patch probe completed, wildcard compare checked 4 patches and remains red for C_ps; full pytest passed.
 [2026-05-20 06:41:29] US-008 progress log updated for run 20260520-054426-3636685; story remains incomplete because wildcard C_ps compare is red.
+[2026-05-20 06:42:01] ITERATION 1 end (duration=3455s)
+[2026-05-20 06:42:03] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 06:43:39] Stopped false-routed US-009 after run 20260520-054426-3636685 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
