@@ -1,6 +1,11 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 13:55:24 | run=20260520-125242-3721459 | iter=5 | mode=build | story=US-009 | duration=5s | status=error
+- 2026-05-20 13:55:16 | run=20260520-125242-3721459 | iter=4 | mode=build | story=US-009 | duration=7s | status=error
+- 2026-05-20 13:55:07 | run=20260520-125242-3721459 | iter=3 | mode=build | story=US-009 | duration=7s | status=error
+- 2026-05-20 13:54:57 | run=20260520-125242-3721459 | iter=2 | mode=build | story=US-009 | duration=7s | status=error
+- 2026-05-20 13:54:48 | run=20260520-125242-3721459 | iter=1 | mode=build | story=US-008 | duration=3725s | status=success
 - 2026-05-20 12:48:59 | run=20260520-120638-3709970 | iter=1 | mode=build | story=US-008 | duration=2537s | status=success
 - 2026-05-20 10:58:36 | run=20260520-092732-3677601 | iter=1 | mode=build | story=US-008 | duration=5464s | status=success
 - 2026-05-20 09:24:41 | run=20260520-075932-3662436 | iter=1 | mode=build | story=US-008 | duration=5109s | status=success
@@ -456,3 +461,14 @@
 [2026-05-20 13:51:29] US-008 diagnostic completed: oracle Nr-as-baseline PATCH_1 still failed C_ps at known magnitude
 [2026-05-20 13:53:15] US-008 verification: smoke and focused pytest passed; wildcard manifest compare checked 4 patches and remains red at known C_ps magnitudes
 [2026-05-20 13:54:15] US-008 progress updated: recorded incomplete status with commit 2626446 and red wildcard C_ps compare
+[2026-05-20 13:54:47] ITERATION 1 end (duration=3725s)
+[2026-05-20 13:54:50] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 13:54:57] ITERATION 2 end (duration=7s)
+[2026-05-20 13:55:00] ITERATION 3 start (mode=build story=US-009)
+[2026-05-20 13:55:06] ITERATION 3 end (duration=7s)
+[2026-05-20 13:55:10] ITERATION 4 start (mode=build story=US-009)
+[2026-05-20 13:55:16] ITERATION 4 end (duration=7s)
+[2026-05-20 13:55:19] ITERATION 5 start (mode=build story=US-009)
+[2026-05-20 13:55:23] ITERATION 5 end (duration=5s)
+[2026-05-20 13:55:26] ITERATION 6 start (mode=build story=US-009)
+[2026-05-20 13:56:12] Stopped false-routed US-009 after run 20260520-125242-3721459 marked US-008 done despite red wildcard Stage 2 compare; reopened US-008 and US-009 in PRD with usage-limit retry guardrails
