@@ -1527,3 +1527,39 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `uv run python - <<'PY' ...` can still stall before diagnostic code starts; exact script-form `uv run python scripts/stage2_patch1_probe.py ...` progressed normally.
   - Useful context: the same-run required compare still reports the known all-patch failures, so continue investigating iterative prior K/weighting state before final `ph_weight`.
 ---
+## [2026-05-20 06:40:49 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-054426-3636685 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-054426-3636685-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-054426-3636685-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 624623a chore(ralph): record us008 blocker evidence
+- Post-commit status: clean after progress commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run python scripts/stage2_prior_state_drift_report.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --all-patches --auto-first-failing --failure-key C_ps --max-failing-rows 2 --kernel-backend native --native-threads 8 --output inputs_and_outputs/validation_runs/us008_current_drift_report.json -> PASS diagnostic
+  - Command: timeout 1200 uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/us008_python_kernel_patch1 --patch PATCH_1 --kernel-backend python --native-threads 0 --debug --checkpoint-mode final && uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/us008_python_kernel_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL diagnostic (`C_ps` max_abs=0.0295872)
+  - Command: timeout 900 uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/us008_cumulative_nr_patch1 --patch PATCH_1 --kernel-backend native --native-threads 8 --debug --checkpoint-mode final && uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/us008_cumulative_nr_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL diagnostic (`C_ps` max_abs=0.0295872; candidate reverted)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; PATCH_1 md5=2ee70430ca4ad21a1b3d00ea39321b48, PATCH_2 md5=bd5b8c35d57921f5461ce9e8fe1e8133, PATCH_3 md5=777e077844dd80e2ad2b122ce31c77c5, PATCH_4 md5=7c31ba92c3460d1b2512413c90516e59)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, notebook, PRD, tolerance, or oracle changes were kept because the required all-patch manifest compare stayed red.
+  - Confirmed `inputs_and_outputs/InSAR_dataset_test_stage8diag` is the manifest compact single-master diagnostic golden/run seed; `inputs_and_outputs/InSAR_dataset_test_stage8diag_hl` remains `present_not_done_gate`.
+  - Ruled out full Python-kernel PATCH_1 execution and MATLAB-style cumulative `Nr` rescaling as movers; the non-causal cumulative-`Nr` source candidate was reverted.
+  - Re-ran the exact manifest-backed all-patch Stage 2 probe; generation passed, but wildcard compare checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Security/performance/regression review: evidence-only committed changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused and full pytest passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: switching the full PATCH_1 run to Python kernels does not move the blocker, and cumulative `Nr` reuse also leaves PATCH_1 at the known `C_ps` magnitude.
+  - Gotchas encountered: the probe can pass with `failures=0` while the required wildcard golden compare still fails all four audited patches.
+  - Useful context: the current root remains iterative prior K/weighting state before final `ph_weight`; do not emit completion until the exact wildcard compare is green.
+---
