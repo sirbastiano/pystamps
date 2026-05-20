@@ -450,3 +450,8 @@
 [2026-05-20 12:49:02] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 12:50:25] Start US-009 dependency check for run 20260520-120638-3709970 iteration 2
 [2026-05-20 12:51:30] Stopped false-routed US-009 after run 20260520-120638-3709970 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD with the latest false-completion guardrails
+[2026-05-20 12:52:43] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 12:53:57] Start US-008 repair: reviewed guardrails, prior failures, PRD, manifest, and Stage 2 scope before changes
+[2026-05-20 13:40:28] US-008 diagnostic stopped: combined single precision PATCH_1 run exceeded useful runtime without compare evidence
+[2026-05-20 13:51:29] US-008 diagnostic completed: oracle Nr-as-baseline PATCH_1 still failed C_ps at known magnitude
+[2026-05-20 13:53:15] US-008 verification: smoke and focused pytest passed; wildcard manifest compare checked 4 patches and remains red at known C_ps magnitudes
