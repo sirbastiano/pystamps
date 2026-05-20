@@ -1756,3 +1756,33 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: long row-wise single diagnostics are too slow unless they can produce focused compare evidence; stop them early rather than carrying unverified source changes.
   - Useful context: do not emit completion from this run; the manifest wildcard compare is still red for all four audited `PATCH_*/pm1.mat` files.
 ---
+## [2026-05-20 16:10:18 UTC] - US-001: Repair exact uv project execution
+Thread:
+Run: 20260520-150910-3748988 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: pending
+- Post-commit status: pending
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (clean run completed with zero failures before a later manual re-run was terminated after long runtime)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4, max_abs failures in PATCH_1..PATCH_4 `C_ps`)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (stalled >23m, terminated)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (matched=False)
+  - Command: make audit -> FAIL (killed; long-running process terminated)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Confirmed `uv run` project execution works for Python smoke and targeted pytest gates without direct `.venv/bin/python` usage.
+  - Recorded exact command-level outcomes for required verification gates and blockers.
+  - Identified that Stage-2 manifest parity remains blocked by residual `C_ps` mismatches independent of `uv run` bootstrap path.
+- **Learnings for future iterations:**
+  - Patterns discovered: `uv run` invocations can appear to run slowly for full gates but still complete successfully; long-running manifest probes/audit commands are expectedly CPU heavy.
+  - Gotchas encountered: long multiprocess jobs (`stage2_patch1_probe`, `make audit`) may require external timeout policies in automation to avoid indefinite waits.
+  - Useful context: when `uv run` succeeds but downstream Stage-2 parity fails, keep scope on artifact/algorithm parity, not executable bootstrap.
+---

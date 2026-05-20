@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 14:24:08 | run=20260520-141658-3737835 | iter=1 | mode=build | story=US-008 | duration=428s | status=error
 - 2026-05-20 13:55:24 | run=20260520-125242-3721459 | iter=5 | mode=build | story=US-009 | duration=5s | status=error
 - 2026-05-20 13:55:16 | run=20260520-125242-3721459 | iter=4 | mode=build | story=US-009 | duration=7s | status=error
 - 2026-05-20 13:55:07 | run=20260520-125242-3721459 | iter=3 | mode=build | story=US-009 | duration=7s | status=error
@@ -472,3 +473,14 @@
 [2026-05-20 13:55:23] ITERATION 5 end (duration=5s)
 [2026-05-20 13:55:26] ITERATION 6 start (mode=build story=US-009)
 [2026-05-20 13:56:12] Stopped false-routed US-009 after run 20260520-125242-3721459 marked US-008 done despite red wildcard Stage 2 compare; reopened US-008 and US-009 in PRD with usage-limit retry guardrails
+[2026-05-20 14:16:59] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 14:24:07] ITERATION 1 end (duration=428s)
+[2026-05-20 14:24:11] ITERATION 2 start (mode=build story=US-008)
+[2026-05-20 14:24:47] Starting US-008 implementation run; discovering cause of Stage 2 C_ps parity and completion gating
+[2026-05-20 14:28:12] US-008 continuation: continuing Stage2 source fix attempt
+[2026-05-20 14:28:16] US-008 continuation: entering implementation phase after root-cause narrowing around topofit-row invariants
+[2026-05-20 14:28:38] Implemented US-008 row-invariant topofit fallback hardening for zero/non-finite rows + added focused regression test
+[2026-05-20 15:09:11] ITERATION 1 start (mode=build story=US-001)
+[2026-05-20 15:09:37] US-001: started run 20260520-150910-3748988 iteration 1; inspecting uv execution metadata and package config
+[2026-05-20 16:09:26] US-001: verification pass/fail updated. uv smoke/pass gates completed; pytest subset pass; tmp pytest pass. stage2 patch1 probe and make audit run were terminated after long runtime; jupyter execute also terminated after >23m with no output. narrow_compare fail remains due C_ps mismatches; assert_notebook_parity fail as residual parity mismatch.
+[2026-05-20 16:09:31] US-001: progress log updated for run 20260520-150910-3748988; awaiting commit + final status with verification and external blockers (stage2 probe/make audit/jupyter).
