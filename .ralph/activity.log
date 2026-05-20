@@ -329,3 +329,6 @@
 [2026-05-20 00:12:59] Stopped US-010 iteration 7 before release/push validation to repair PRD false-completion statuses
 [2026-05-20 00:27:26] US-010 iteration 7: smoke/focused pytest/full pytest passed; Stage 2 all-patch compare failed, so notebook/assert/audit/push are blocked
 [2026-05-20 00:28:48] US-010 iteration 7: recorded Stage 2 C_ps push blocker in errors log and run summary
+[2026-05-20 00:30:26] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 00:31:20] start US-008 all-patch Stage 2 C_ps parity repair
+[2026-05-20 01:40:32] US-008 verification: manifest Stage 2 probe regenerated four patches but wildcard compare still fails C_ps
