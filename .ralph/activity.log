@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 09:24:41 | run=20260520-075932-3662436 | iter=1 | mode=build | story=US-008 | duration=5109s | status=success
 - 2026-05-20 07:56:40 | run=20260520-064459-3646911 | iter=1 | mode=build | story=US-008 | duration=4297s | status=success
 - 2026-05-20 06:42:01 | run=20260520-054426-3636685 | iter=1 | mode=build | story=US-008 | duration=3455s | status=success
 - 2026-05-20 05:42:35 | run=20260520-044443-3626575 | iter=1 | mode=build | story=US-008 | duration=3471s | status=success
@@ -419,3 +420,7 @@
 [2026-05-20 08:44:07] US-008 manifest wildcard compare remains red; continuing Stage 2 prior-state investigation
 [2026-05-20 09:21:53] US-008 verification complete: focused/full pytest passed, manifest wildcard compare remains red
 [2026-05-20 09:24:04] US-008 progress log updated for run 20260520-075932-3662436; story remains incomplete because wildcard C_ps compare is red
+[2026-05-20 09:24:41] ITERATION 1 end (duration=5109s)
+[2026-05-20 09:24:43] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 09:25:59] US-009 iteration 2: read guardrails/errors/PRD and verifying dependency gate
+[2026-05-20 09:26:53] Stopped false-routed US-009 after run 20260520-075932-3662436 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
