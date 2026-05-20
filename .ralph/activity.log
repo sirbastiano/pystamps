@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 03:49:53 | run=20260520-025048-3596776 | iter=1 | mode=build | story=US-008 | duration=3545s | status=success
 - 2026-05-20 02:47:46 | run=20260520-014717-3582758 | iter=1 | mode=build | story=US-008 | duration=3629s | status=success
 - 2026-05-20 01:44:13 | run=20260520-003026-3565085 | iter=1 | mode=build | story=US-008 | duration=4427s | status=success
 - 2026-05-20 00:10:00 | run=20260519-153232-3438769 | iter=6 | mode=build | story=US-009 | duration=1097s | status=success
@@ -357,3 +358,6 @@
 [2026-05-20 03:44:43] US-008 verification: focused pytest and full pytest passed; manifest wildcard compare remains red for all four C_ps patches
 [2026-05-20 03:46:32] US-008 evidence update: recorded repeated manifest C_ps blocker after exact all-patch probe and compare
 [2026-05-20 03:48:36] US-008 progress log updated for run 20260520-025048-3596776
+[2026-05-20 03:49:53] ITERATION 1 end (duration=3545s)
+[2026-05-20 03:49:56] ITERATION 2 start (mode=build story=US-009)
+[2026-05-20 03:51:46] Stopped false-routed US-009 iteration 2; reopened US-008 and US-009 in PRD after run 20260520-025048-3596776 marked US-008 done despite red Stage 2 wildcard compare
