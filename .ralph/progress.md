@@ -1413,3 +1413,43 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the all-patch probe can pass with `failures=0` while the decisive wildcard compare still fails all four `C_ps` checks.
   - Useful context: the active root remains iterative prior-state drift before final `ph_weight`/`ph_grid`/`ph_patch`, not final topofit replay, histogram backend, refined tie selection, or P-square interpolation filter length.
 ---
+## [2026-05-20 03:47:15 UTC] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread:
+Run: 20260520-025048-3596776 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-025048-3596776-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-025048-3596776-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none (no verified source fix; evidence-only blocker commit)
+- Post-commit status: clean after evidence commit
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python - <<'PY' ... PATCH_1 scalar per-IFG CLAP diagnostic ... PY -> PASS diagnostic; stopped after `pm1_iter_01.mat` matched the vectorized checkpoint exactly
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS (failures=0; regenerated PATCH_1 through PATCH_4)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` failed in PATCH_1 max_abs=0.0295872, PATCH_2 max_abs=0.0038906, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=0.0528888)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: make audit -> SKIPPED (blocked by failed required Stage 2 manifest compare)
+  - Command: git diff --check -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+- What was implemented
+  - No runtime source, test, PRD, notebook, tolerance, or oracle changes were kept because the required all-patch manifest compare stayed red.
+  - Confirmed the manifest-backed oracle/run seed remains `inputs_and_outputs/InSAR_dataset_test_stage8diag`; `_hl` remains `present_not_done_gate`.
+  - Tested the remaining scalar CLAP hypothesis only to an early checkpoint; `pm1_iter_01.mat` matched the vectorized run exactly for `ph_grid`, `ph_patch`, `K_ps`, `C_ps`, `coh_ps`, `ph_weight`, `Nr`, and `gamma_change_save`, so the long scalar run was stopped as non-causal.
+  - Re-ran the exact manifest-backed all-patch Stage 2 probe; generation passed, but wildcard compare checked all four audited patches and still failed `C_ps`, so US-008 remains incomplete and no completion signal was emitted.
+  - Added a guardrail Sign to avoid repeating long scalar CLAP reruns after an identical early checkpoint.
+  - Security/performance/regression review: evidence/guardrail-only changes; no secrets, external input handling, runtime loops, kernels, dependencies, compare tolerances, or oracle values changed. Focused and full pytest passed; residual risk is the unresolved Stage 2 `C_ps` parity failure.
+  - Positive routing check: use the scalar CLAP diagnostic only as a bounded early-checkpoint test before considering a full Stage 2 rerun.
+  - Negative routing check: do not spend another long scalar CLAP rerun when the first checkpoint matches vectorized output and the manifest wildcard compare remains red.
+- **Learnings for future iterations:**
+  - Patterns discovered: scalar per-IFG CLAP and vectorized CLAP are identical at iteration 1 on PATCH_1, so the active root remains prior-state drift before final `ph_weight`, not the vectorized stack branch itself.
+  - Gotchas encountered: the probe command can pass with `failures=0` while the decisive wildcard compare still fails every audited patch.
+  - Useful context: the current same-run compare still reports the known manifest failures: PATCH_1 0.0295872, PATCH_2 0.0038906, PATCH_3 0.00961822, PATCH_4 0.0528888.
+---

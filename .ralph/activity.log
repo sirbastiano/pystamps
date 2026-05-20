@@ -351,3 +351,9 @@
 [2026-05-20 02:47:46] ITERATION 1 end (duration=3629s)
 [2026-05-20 02:47:48] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 02:49:02] Stopped false-routed US-009 iteration 2; reopened US-008 and US-009 in PRD after red Stage 2 wildcard compare was falsely treated as complete
+[2026-05-20 02:50:48] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 02:51:44] Start US-008 Stage 2 C_ps parity repair run 20260520-025048-3596776
+[2026-05-20 03:28:57] US-008 diagnostic: scalar per-IFG CLAP checkpoint matched vectorized Stage 2 iteration 1; continuing required manifest verification
+[2026-05-20 03:44:43] US-008 verification: focused pytest and full pytest passed; manifest wildcard compare remains red for all four C_ps patches
+[2026-05-20 03:46:32] US-008 evidence update: recorded repeated manifest C_ps blocker after exact all-patch probe and compare
+[2026-05-20 03:48:36] US-008 progress log updated for run 20260520-025048-3596776

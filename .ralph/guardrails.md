@@ -97,3 +97,8 @@
 - **Trigger**: When investigating US-008 Stage 2 `C_ps` drift near the topofit candidate-selection or P-square interpolation paths.
 - **Instruction**: Do not keep refined topofit candidate selection or MATLAB `interp` filter-length changes unless a focused `PATCH_1/pm1.mat` compare first improves the known `C_ps` max_abs. Current evidence shows refined candidate selection worsens PATCH_1 to max_abs=1.93543, and `interp` filter-length variants barely change the suspect prior weight.
 - **Added after**: Run 20260520-014717-3582758 iteration 1 - candidate-selection and interpolation diagnostics did not reduce the manifest-backed `C_ps` failure.
+
+### Sign: Stop Scalar CLAP If Checkpoint Matches
+- **Trigger**: When testing whether the vectorized Stage 2 CLAP stack causes the US-008 `C_ps` blocker.
+- **Instruction**: First compare an early scalar per-IFG CLAP checkpoint with the vectorized checkpoint. If `pm1_iter_01.mat` matches for `ph_grid`, `ph_patch`, topofit outputs, `ph_weight`, `Nr`, and `gamma_change_save`, stop the long scalar run and continue investigating prior-state drift elsewhere.
+- **Added after**: Run 20260520-025048-3596776 iteration 1 - scalar per-IFG CLAP matched the vectorized iteration-1 checkpoint exactly, while the required all-patch manifest compare still failed `C_ps`.
