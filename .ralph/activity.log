@@ -437,3 +437,6 @@
 [2026-05-20 10:58:36] ITERATION 1 end (duration=5464s)
 [2026-05-20 10:58:38] ITERATION 2 start (mode=build story=US-009)
 [2026-05-20 11:00:28] Stopped false-routed US-009 after run 20260520-092732-3677601 marked US-008 done despite red Stage 2 wildcard compare; reopened US-008 and US-009 in PRD
+[2026-05-20 11:01:20] ITERATION 1 start (mode=build story=US-008)
+[2026-05-20 11:02:37] US-008: guardrails, errors, PRD, AGENTS, and manifest context reviewed
+[2026-05-20 12:05:45] Run 20260520-110119-3694929 terminated during US-008 all-patch probe; orphaned Stage 2 workers completed artifacts, wildcard compare remained red, stale workers cleaned, PRD reopened US-008/US-009
