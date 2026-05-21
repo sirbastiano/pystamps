@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-21 06:19:10 | run=20260520-150910-3748988 | iter=34 | mode=build | story=US-005 | duration=5338s | status=success
 - 2026-05-21 04:50:10 | run=20260520-150910-3748988 | iter=33 | mode=build | story=US-005 | duration=214s | status=error
 - 2026-05-21 04:46:34 | run=20260520-150910-3748988 | iter=32 | mode=build | story=US-005 | duration=11s | status=error
 - 2026-05-21 04:46:21 | run=20260520-150910-3748988 | iter=31 | mode=build | story=US-005 | duration=32s | status=error
@@ -645,3 +646,9 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-21 05:06:19] US-005 after required tests/probes: running notebook in-place execution
 [2026-05-21 05:38:15] US-005 verification blocked: uv run jupyter execute --inplace timed out in-session at ~31m with no completion output; continuing with required remaining gates
 [2026-05-21 06:17:49] US-005 progress entry added to .ralph/progress.md with full verification outcomes
+[2026-05-21 06:19:10] ITERATION 34 end (duration=5338s)
+[2026-05-21 06:19:13] ITERATION 35 start (mode=build story=US-006)
+[2026-05-21 06:19:21] US-006 run started: begin mandatory guardrail-referenced validation and audit-completion workflow
+[2026-05-21 07:02:04] US-006 gate 3 blocked: uv jupyter execution for notebooks/03_stage_by_stage_oracle.ipynb was killed after long silent stall; proceeding with remaining gates and capturing exact failures
+[2026-05-21 07:25:16] US-006 verification complete: uv-smoke/pass, stage2 tests pass, manifest narrow compare fail (C_ps all patches), notebook execute stalled then killed, notebook parity fail, make audit manually bounded and terminated
+[2026-05-21 07:25:33] US-006 progress appended with command outcomes and blockers; staging progress/audit logs for commit

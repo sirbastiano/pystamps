@@ -1936,3 +1936,37 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context:
     - Current run remains blocked on Stage 2 `C_ps` evidence; no notebook success signal was emitted.
 ---
+## [2026-05-21 07:25 UTC] - US-006: Run full audit and push verified main
+Thread: 
+Run: 20260520-150910-3748988 (iteration 35)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-35.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-35.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: TBA
+- Post-commit status: TBA
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4, first_failure PATCH_1/pm1.mat key 'C_ps' max_abs=2.95493)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (stalled >30m, manually terminated)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stage 2 failed parity)
+  - Command: make audit -> FAIL (long-running with no output, manually terminated)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - Ran all required US-006 gates and global verification commands, recorded exact pass/fail outcomes.
+  - Confirmed release preconditions remain blocked by manifest Stage 2 `C_ps` mismatch and stale notebook/audit execution.
+- **Learnings for future iterations:**
+  - Patterns discovered:
+    - `narrow_compare` checks all 4 manifest patches and now reports larger `C_ps` drifts than previous attempts, indicating Stage 2 remains non-causal blocker.
+    - `uv run jupyter execute --inplace ...` and `make audit` can become silent for long periods while consuming CPU.
+  - Gotchas encountered:
+    - Long-running gates should be terminated and documented when no output/progress appears for an extended period.
+  - Useful context:
+    - Current gate state remains unsuitable for push because Stage 2 and notebook parity both fail and full audit was not completed.
+---
