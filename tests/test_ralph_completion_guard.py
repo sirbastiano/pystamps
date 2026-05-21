@@ -33,6 +33,25 @@ def test_ralph_completion_guard_accepts_green_stage2_manifest_compare(story_id: 
     assert module.completion_is_allowed(story_id, log_text)
 
 
+def test_ralph_completion_guard_accepts_green_stage2_manifest_compare_for_us010() -> None:
+    module = _load_guard_module()
+    log_text = "\n".join(
+        [
+            '{"label":"narrow_compare","run_root":"/tmp/inputs_and_outputs/validation_runs/stage2_manifest_probe","golden_root":"/tmp/inputs_and_outputs/InSAR_dataset_test_stage8diag","patterns":["PATCH_*/pm1.mat"],"ok":true,"checked":4,"failures":[]}',
+            "  - Command: timeout 180 uv run python -c \"print('uv-smoke-ok')\" -> PASS",
+            "  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS",
+            "  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS",
+            "  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> PASS",
+            "  - Command: TMPDIR=\"$PWD/.tmp_pytest\" uv run pytest -q -> PASS",
+            "  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS",
+            "  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> PASS",
+            "  - Command: make audit -> PASS",
+            "",
+        ]
+    )
+    assert module.completion_is_allowed("US-010", log_text)
+
+
 @pytest.mark.parametrize("story_id", ["US-008", "US-009"])
 def test_ralph_completion_guard_rejects_green_compare_with_wrong_artifacts(story_id: str) -> None:
     module = _load_guard_module()
@@ -58,3 +77,22 @@ def test_ralph_completion_guard_rejects_short_stage2_manifest_compare(story_id: 
         '{"label":"narrow_compare","run_root":"/tmp/inputs_and_outputs/validation_runs/stage2_manifest_probe","golden_root":"/tmp/inputs_and_outputs/InSAR_dataset_test_stage8diag","patterns":["PATCH_*/pm1.mat"],"ok":true,"checked":2,"failures":[]}'
     )
     assert not module.completion_is_allowed(story_id, log_text)
+
+
+def test_ralph_completion_guard_rejects_us010_when_required_commands_fail() -> None:
+    module = _load_guard_module()
+    log_text = "\n".join(
+        [
+            '{"label":"narrow_compare","run_root":"/tmp/inputs_and_outputs/validation_runs/stage2_manifest_probe","golden_root":"/tmp/inputs_and_outputs/InSAR_dataset_test_stage8diag","patterns":["PATCH_*/pm1.mat"],"ok":true,"checked":4,"failures":[]}',
+            "  - Command: timeout 180 uv run python -c \"print('uv-smoke-ok')\" -> PASS",
+            "  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS",
+            "  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS",
+            "  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> PASS",
+            "  - Command: TMPDIR=\"$PWD/.tmp_pytest\" uv run pytest -q -> PASS",
+            "  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> PASS",
+            "  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> PASS",
+            "  - Command: make audit -> FAIL",
+            "",
+        ]
+    )
+    assert not module.completion_is_allowed("US-010", log_text)

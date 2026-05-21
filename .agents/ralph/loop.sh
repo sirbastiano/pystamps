@@ -623,7 +623,7 @@ PY
 can_mark_story_done() {
   local story_id="$1"
   local log_file="$2"
-  if [ "${story_id}" != "US-008" ] && [ "${story_id}" != "US-009" ]; then
+  if [ "${story_id}" != "US-008" ] && [ "${story_id}" != "US-009" ] && [ "${story_id}" != "US-010" ]; then
     return 0
   fi
   python3 "$ROOT_DIR/scripts/ralph_completion_guard.py" "$log_file" --story-id "${story_id}" >/dev/null

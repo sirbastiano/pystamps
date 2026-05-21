@@ -2040,3 +2040,38 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `scripts/narrow_compare.py --patterns 'PATCH_*/pm1.mat'` can hit transient read issues on first invocation after a new probe run and should be re-run for stable results.
   - Useful context: `make audit` and full notebook execution are still long-running under current data footprint and may require additional timeout strategy.
 ---
+
+## [2026-05-21 10:44:33] - US-010: Run audit and push verified main
+Thread: 019e49fb-8202-7a82-ab3b-46d214ccfeb0
+Run: 20260520-150910-3748988 (iteration 38)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-38.log
+Run summary: /shared/home/rdelprete/PythonProjects/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-38.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 28e9941 feat(ralph): gate US-010 on manifest compare and audit gate results
+- Post-commit status: `clean`
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (PATCH_2/pm1.mat max_abs=5.93788, PATCH_3 max_abs=0.00961822, PATCH_4 max_abs=6.22712)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (manual termination after hang)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL
+  - Command: make audit -> FAIL (manually terminated while running)
+- Files changed:
+  - .agents/ralph/loop.sh
+  - scripts/ralph_completion_guard.py
+  - tests/test_ralph_completion_guard.py
+  - .ralph/activity.log
+  - .ralph/errors.log
+- What was implemented
+  - Extended US-010 completion gating in `scripts/ralph_completion_guard.py` to require a successful manifest-backed all-patch Stage-2 compare plus PASS status for the US-010 parity/audit workflow commands, including `make audit`.
+  - Added the same guard path in `.agents/ralph/loop.sh` so release story completion is blocked unless US-010 guard requirements are satisfied.
+  - Added/updated `tests/test_ralph_completion_guard.py` coverage for US-010 pass/fail command-sequence conditions.
+  - Logged progress/activity updates and recorded staged runtime blockers in `.ralph/activity.log` and `.ralph/errors.log`.
+- **Learnings for future iterations:**
+  - Patterns discovered: command-line evidence in run logs must be treated as a pass/fail signal if completion is allowed for release/audit stories.
+  - Gotchas encountered: long-running notebook execution and `make audit` can hang under current Stage-2 mismatch conditions without producing frequent output.
+  - Useful context: all patches currently still fail Stage-2 `C_ps` parity in the manifest compare, so US-010 must remain open/no-push until red gates clear.
+---

@@ -6,6 +6,18 @@ import json
 from pathlib import Path
 
 
+MANDATORY_COMMAND_FRAGMENTS_FOR_US010 = [
+    "timeout 180 uv run python -c \"print('uv-smoke-ok')\"",
+    "uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py",
+    "uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe",
+    "uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag",
+    "TMPDIR=\"$PWD/.tmp_pytest\" uv run pytest -q",
+    "uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb",
+    "uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb",
+    "make audit",
+]
+
+
 def _iter_json_payloads(log_text: str):
     decoder = json.JSONDecoder()
     index = 0
@@ -62,10 +74,41 @@ def has_successful_stage2_manifest_compare(
     return False
 
 
-def completion_is_allowed(story_id: str, log_text: str) -> bool:
-    if story_id not in {"US-008", "US-009"}:
+def _line_has_passed_command(log_line: str, command_fragment: str) -> bool:
+    if not log_line.lstrip().startswith("- Command: "):
+        return False
+    if command_fragment not in log_line:
+        return False
+    if "-> PASS" in log_line:
         return True
-    return has_successful_stage2_manifest_compare(log_text)
+    return False
+
+
+def _line_has_failed_or_skipped_command(log_line: str, command_fragment: str) -> bool:
+    if not log_line.lstrip().startswith("- Command: "):
+        return False
+    if command_fragment not in log_line:
+        return False
+    return "-> FAIL" in log_line or "-> SKIPPED" in log_line
+
+
+def completion_is_allowed_for_us010(log_text: str) -> bool:
+    for command_fragment in MANDATORY_COMMAND_FRAGMENTS_FOR_US010:
+        if not any(_line_has_passed_command(line, command_fragment) for line in log_text.splitlines()):
+            return False
+        if any(_line_has_failed_or_skipped_command(line, command_fragment) for line in log_text.splitlines()):
+            return False
+    return True
+
+
+def completion_is_allowed(story_id: str, log_text: str) -> bool:
+    if story_id not in {"US-008", "US-009", "US-010"}:
+        return True
+    if not has_successful_stage2_manifest_compare(log_text):
+        return False
+    if story_id == "US-010":
+        return completion_is_allowed_for_us010(log_text)
+    return True
 
 
 def _load_log(path: str) -> str:
