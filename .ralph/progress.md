@@ -2170,3 +2170,38 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `stage2_patch1_probe.py` execution intermittently stalls with uninterruptible I/O wait in this environment; `narrow_compare` will fail with missing `pm1.mat` when probe doesn’t complete.
   - Useful context: `--run-root` under `/tmp` can fail due cross-device link errors during `shutil.copytree` hardlink phase.
 ---
+
+## [2026-05-21 22:29:00] - US-001: Stabilize Stage 2 probe setup
+Thread: 
+Run: 20260521-221809-4058922 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-221809-4058922-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-221809-4058922-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 71f2d62 fix(stage2-probe): reset run root before hardlink copy fallback
+- Post-commit status: clean
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_probe.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe_patch1 --kernel-backend native --native-threads 8 --debug --checkpoint-mode always --patch PATCH_1 -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+- Files changed:
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/scripts/stage2_patch1_probe.py
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/tests/test_stage2_probe.py
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/activity.log
+- What was implemented
+  - Added `_copy_dataset_for_probe` to always remove a preexisting destination before attempting hardlink copy and to remove partial destination before fallback copy.
+  - Added a focused fallback recovery test that forces a simulated hardlink-tree failure with a partially created destination and verifies the rerun fallback leaves a complete patch tree.
+- **Learnings for future iterations:**
+  - Patterns discovered:
+    - Any pre-existing `run_root` must be removed before hardlink attempts to prevent false file-not-empty failures.
+    - Running compare commands concurrently with probe generation can create misleading missing-artifact false negatives.
+  - Gotchas encountered:
+    - `shutil.copytree` with `copy_function=os.link` can fail with `FileExistsError` if stale destination exists before first copy attempt.
+  - Useful context:
+    - Focused `PATCH_1` probe now regenerates consistently, but parity check still fails on `ph_grid/C_ps` values; this remains outside US-001 scope.
+---

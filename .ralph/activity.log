@@ -714,3 +714,4 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-21 22:18:23] Start US-001 Stabilize Stage 2 probe setup
 [2026-05-21 22:18:34] US-001 code changes applied for hardlink fallback cleanup and added focused test
 [2026-05-21 22:30:04] US-001 fixed run_root pre-cleanup before hardlink copy
+[2026-05-21 22:57:59] US-001 progress log updated with verification matrix and commit/hash
