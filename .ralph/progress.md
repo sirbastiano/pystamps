@@ -1943,7 +1943,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-35.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: f304d49 chore(ralph): log US-006 final status and blocker state
+- Commit: 307d4c8 docs(ralph): reference final US-006 log commit in progress entry
 - Post-commit status: clean
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
