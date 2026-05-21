@@ -2075,3 +2075,40 @@ Run summary: /shared/home/rdelprete/PythonProjects/pySTAMPS/.ralph/runs/run-2026
   - Gotchas encountered: long-running notebook execution and `make audit` can hang under current Stage-2 mismatch conditions without producing frequent output.
   - Useful context: all patches currently still fail Stage-2 `C_ps` parity in the manifest compare, so US-010 must remain open/no-push until red gates clear.
 ---
+
+## [2026-05-21 14:29:11 UTC] - US-001: Lock final checkpoint state ownership
+Thread: 
+Run: 20260521-135359-4008139 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-135359-4008139-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-135359-4008139-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: ca28ba6 fix(stage2): preserve final checkpoint state
+- Post-commit status: clean after code commit; progress entry committed separately
+- Verification:
+  - Command: `timeout 180 uv run python -c "print('uv-smoke-ok')"` -> PASS
+  - Command: `uv run pytest -q tests/test_stage2_ported.py -k 'final_checkpoint_saves_one_loop_state or saved_ph_weight_matches_saved_ph_grid'` -> PASS
+  - Command: `uv run pytest -q tests/test_stage2_ported.py` -> PASS
+  - Command: `uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_probe.py tests/test_verify.py` -> PASS
+  - Command: `uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always` -> PASS
+  - Command: `uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat'` -> FAIL (checked 4; first failure PATCH_1 `ph_grid` max_abs=3.84284; PATCH_2/PATCH_3/PATCH_4 still fail `C_ps`)
+  - Command: `TMPDIR="$PWD/.tmp_pytest" uv run pytest -q` -> PASS
+- Files changed:
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/pystamps/pipeline/ported.py
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/tests/test_stage2_ported.py
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/activity.log
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/errors.log
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/progress.md
+- What was implemented
+  - Removed the Stage 2 final `should_stop` checkpoint rebuild so `pm1.mat` cannot save phase arrays rebuilt after the final topofit outputs.
+  - Updated the focused Stage 2 regression to assert saved `ph_weight`, `ph_grid`, `ph_patch`, `K_ps`, `C_ps`, `coh_ps`, and `ph_res` all come from the same final loop state, with no modulo comparison and no extra final topofit pass.
+  - Recorded the remaining manifest parity blocker after the exact all-patch probe and compare.
+- **Learnings for future iterations:**
+  - Patterns discovered:
+    - The final-only rebuild was the only code path mutating `ph_weight`, `ph_grid`, and `ph_patch` after topofit on convergence.
+    - Removing it makes the checkpoint internally coherent but the manifest compare is still red, now first failing PATCH_1 `ph_grid` and later patches on `C_ps`.
+  - Gotchas encountered:
+    - Existing tests counted the final rebuild as a second precision-path call; that assertion needed to reflect the intended single-pass final save.
+  - Useful context:
+    - The exact manifest Stage 2 probe completed with `failures=0` and wrote all four `pm1.mat` files before `narrow_compare` failed.
+---
