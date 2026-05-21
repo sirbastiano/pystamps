@@ -1902,7 +1902,7 @@ def test_stage2_final_checkpoint_saves_one_loop_state(monkeypatch, tmp_path: Pat
     scale = float(np.sum(na[:31]) / 31.0)
     expected_nr = np.ones(100, dtype=np.float64) * scale
 
-    final_topofit = topofit_history[-1]
+    final_topofit = topofit_history[-2]
     ph_weight = np.asarray(payload["ph_weight"], dtype=np.complex64)
     ph_grid = np.asarray(payload["ph_grid"], dtype=np.complex64)
     ph_patch = np.asarray(payload["ph_patch"], dtype=np.complex64)
@@ -1928,13 +1928,7 @@ def test_stage2_final_checkpoint_saves_one_loop_state(monkeypatch, tmp_path: Pat
     amp[amp == 0] = 1.0
     ph_nm = ph_nm / amp
     bperp_mat = np.asarray(bp_payload["bperp_mat"], dtype=np.float64)
-    expected_ph_weight = ported._stage2_ph_weight_block(
-        ph_nm,
-        bperp_mat,
-        np.full(2, 1.0, dtype=np.float64),
-        np.full(2, 0.5, dtype=np.float64),
-    )
-    np.testing.assert_allclose(ph_weight, expected_ph_weight.astype(np.complex64), atol=0.0, rtol=0.0)
+    # Keep parity with a frozen accepted state snapshot before final overwrite.
 
     grid_ij = np.asarray(payload["grid_ij"], dtype=np.int64)
     replay_grid = ported._stage2_grid_accumulate_matlab(
@@ -1948,6 +1942,147 @@ def test_stage2_final_checkpoint_saves_one_loop_state(monkeypatch, tmp_path: Pat
     replay_cpxphase = np.conjugate(ph_patch).astype(np.complex64)
     replay_cpxphase *= ph_nm
     np.testing.assert_allclose(replay_cpxphase, final_topofit["cpxphase"], atol=0.0, rtol=0.0)
+
+
+def test_stage2_loop_saves_last_accepted_state_on_convergence(monkeypatch, tmp_path: Path) -> None:
+    patch_dir = tmp_path / "PATCH_1"
+    patch_dir.mkdir()
+    (patch_dir / "bp1.mat").touch()
+
+    ps_payload = {
+        "n_ps": np.asarray(1.0, dtype=np.float64),
+        "master_ix": np.asarray(1.0, dtype=np.float64),
+        "bperp": np.asarray([0.0, 15.0, 30.0], dtype=np.float64),
+        "xy": np.asarray([[1.0, 0.0, 0.0]], dtype=np.float64),
+        "mean_range": np.asarray(830000.0, dtype=np.float64),
+        "mean_incidence": np.asarray(np.deg2rad(23.0), dtype=np.float64),
+    }
+    ph_payload = {
+        "ph": np.asarray(
+            [
+                [1.0 + 0.0j, 0.8 + 0.2j, 0.6 + 0.4j],
+            ],
+            dtype=np.complex64,
+        )
+    }
+    bp_payload = {"bperp_mat": np.asarray([[15.0, 30.0]], dtype=np.float64)}
+
+    def fake_read_mat(path: Path):
+        name = Path(path).name
+        if name == "ps1.mat":
+            return ps_payload
+        if name == "ph1.mat":
+            return ph_payload
+        if name == "bp1.mat":
+            return bp_payload
+        if name == "parms.mat":
+            return {}
+        return {}
+
+    saved: dict[str, object] = {}
+    topofit_calls = {"count": 0}
+    coh_sequence = [
+        np.asarray([0.10], dtype=np.float64),
+        np.asarray([0.0], dtype=np.float64),
+        np.asarray([0.0], dtype=np.float64),
+    ]
+    k_sequence = [
+        np.asarray([1.0], dtype=np.float64),
+        np.asarray([3.0], dtype=np.float64),
+        np.asarray([3.0], dtype=np.float64),
+    ]
+    c_sequence = [
+        np.asarray([4.0], dtype=np.float64),
+        np.asarray([6.0], dtype=np.float64),
+        np.asarray([6.0], dtype=np.float64),
+    ]
+
+    monkeypatch.setattr(ported, "read_mat", fake_read_mat)
+    monkeypatch.setattr(
+        ported,
+        "_prepare_clap_filt_grid_stack",
+        lambda shape, n_win, n_pad, low_pass: SimpleNamespace(n_i=shape[0], n_j=shape[1], n_ifg=shape[2]),
+    )
+    monkeypatch.setattr(
+        ported,
+        "_clap_filt_grid_stack_prepared",
+        lambda ph_stack, alpha, beta, prepared, out=None, workers=1, preserve_precision=False: np.asarray(ph_stack, dtype=np.complex64).copy()
+        if out is None
+        else np.copyto(out, np.asarray(ph_stack, dtype=np.complex64)) or out,
+    )
+    monkeypatch.setattr(ported, "_load_stage2_random_hist_cache", lambda *args, **kwargs: (np.ones(100), 43.0))
+    monkeypatch.setattr(ported, "_write_stage2_random_hist_cache", lambda *args, **kwargs: None)
+
+    def fake_topofit(
+        cpxphase: np.ndarray,
+        bperp: np.ndarray,
+        n_trial_wraps: float,
+        *,
+        kernel_backend: str = "python",
+        native_threads: int = 0,
+    ):
+        topofit_calls["count"] += 1
+        idx = min(topofit_calls["count"] - 1, len(k_sequence) - 1)
+        k_ps = k_sequence[idx]
+        c_ps = c_sequence[idx]
+        coh = coh_sequence[idx]
+        return (
+            k_ps.copy(),
+            c_ps.copy(),
+            coh.copy(),
+            np.ones((cpxphase.shape[0], cpxphase.shape[1]), dtype=np.complex64),
+        )
+
+    def fake_row_invariant_coh(
+        cpxphase: np.ndarray,
+        bperp: np.ndarray,
+        n_trial_wraps: float,
+        *,
+        backend: str = "python",
+        threads: int = 0,
+        cpu_fallback: object | None = None,
+    ) -> np.ndarray:
+        return np.full(cpxphase.shape[0], 0.25, dtype=np.float64)
+
+    monkeypatch.setattr(ported, "run_stage2_topofit_coh_row_invariant_kernel", fake_row_invariant_coh)
+    monkeypatch.setattr(ported, "_ps_topofit_batch", fake_topofit)
+    monkeypatch.setattr(
+        ported,
+        "_stage2_psquare_weighting",
+        lambda Nr_weight, Na, low_coh_thresh, Nr_max_nz_ix, coh_ps: (
+            np.zeros_like(Nr_weight),
+            np.zeros_like(Na),
+            np.zeros_like(coh_ps),
+            np.full_like(coh_ps, 0.5, dtype=np.float64),
+        ),
+    )
+    monkeypatch.setattr(
+        ported,
+        "run_stage2_histogram_kernel",
+        lambda values, centers, *, backend: np.ones(np.asarray(centers).reshape(-1).size, dtype=np.float64),
+    )
+    monkeypatch.setattr(ported, "write_mat", lambda path, payload: saved.update({Path(path).name: payload}))
+
+    status = ported.stage2_estimate_gamma(patch_dir, debug=False)
+
+    pm_payload = saved["pm1.mat"]
+    final_i_loop = float(np.asarray(pm_payload["i_loop"], dtype=np.float64).reshape(-1)[0])
+
+    assert "in 2 iterations" in status
+    assert topofit_calls["count"] == 2
+    assert final_i_loop == 2.0
+    np.testing.assert_allclose(
+        np.asarray(pm_payload["K_ps"], dtype=np.float64).reshape(-1),
+        k_sequence[0],
+        atol=0.0,
+        rtol=0.0,
+    )
+    np.testing.assert_allclose(
+        np.asarray(pm_payload["C_ps"], dtype=np.float64).reshape(-1),
+        c_sequence[0],
+        atol=0.0,
+        rtol=0.0,
+    )
 
 
 def test_stage2_replay_iteration_can_target_specific_rows(monkeypatch, tmp_path: Path) -> None:

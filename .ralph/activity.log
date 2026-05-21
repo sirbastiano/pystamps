@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-21 14:31:52 | run=20260521-135359-4008139 | iter=1 | mode=build | story=US-001 | duration=2248s | status=success
 - 2026-05-21 10:46:34 | run=20260520-150910-3748988 | iter=38 | mode=build | story=US-010 | duration=2718s | status=success
 - 2026-05-21 10:01:13 | run=20260520-150910-3748988 | iter=37 | mode=build | story=US-009 | duration=4856s | status=success
 - 2026-05-21 08:40:15 | run=20260520-150910-3748988 | iter=36 | mode=build | story=US-008 | duration=4344s | status=success
@@ -686,3 +687,11 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-21 13:56:16] US-001 code and regression updated for final checkpoint state ownership
 [2026-05-21 14:25:55] US-001 verification complete: smoke/focused pytest/probe/full pytest passed; all-patch narrow_compare remains red
 [2026-05-21 14:29:43] US-001 progress entry appended; code commit ca28ba6 recorded with validation outcomes
+[2026-05-21 14:31:29] ITERATION 1 end (duration=2248s)
+[2026-05-21 14:32:01] ITERATION 2 start (mode=build story=US-002)
+[2026-05-21 14:35:37] Start US-002 Match MATLAB loop save semantics
+[2026-05-21 14:55:35] Implementing US-002 loop/save semantics change
+[2026-05-21 14:56:08] Applied signed gamma change stop-rule + regression test for US-002
+[2026-05-21 15:08:56] After major code changes: keep final checkpoint payload from accepted iteration and adjust Stage2 iteration-count regression assertions for loop/checkpoint tests
+[2026-05-21 15:13:53] After code changes: aligned Stage2 loop-save unit assertions to accepted-state replay semantics
+[2026-05-21 15:37:03] After tests/verification: focused and suite-level commands executed; narrow_compare failed for C_ps mismatches in PATCH_1/3/4
