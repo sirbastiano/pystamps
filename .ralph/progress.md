@@ -2144,3 +2144,29 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context
     - `narrow_compare` still flags `C_ps` mismatches on this run, so parity for full probe remains blocked even after accepted-state checkpoint fix.
 ---
+## [2026-05-21 17:29:27 UTC] - US-003: Prove all-patch manifest Stage 2 parity
+Thread: 
+Run: 20260521-135359-4008139 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-135359-4008139-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-135359-4008139-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: Fix stage2 checkpoint final state selection (amended with run metadata)
+- Post-commit status: clean
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> FAIL (process hangs in this environment; no `failures=` emitted)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (missing run artifacts)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+- Files changed:
+  - [pystamps/pipeline/ported.py](pystamps/pipeline/ported.py)
+  - [tests/test_stage2_ported.py](tests/test_stage2_ported.py)
+- What was implemented
+  - Restored final checkpoint write behavior to prefer the final computed stage for convergence, while preserving legacy "max iteration" behavior that writes the last accepted payload.
+  - Updated two Stage 2 checkpoint unit tests to validate the final-state semantics from the convergence path.
+- **Learnings for future iterations:**
+  - Patterns discovered: stale `last_accepted_payload` replay can regress Stage 2 parity when convergence occurs before max iteration.
+  - Gotchas encountered: `stage2_patch1_probe.py` execution intermittently stalls with uninterruptible I/O wait in this environment; `narrow_compare` will fail with missing `pm1.mat` when probe doesn’t complete.
+  - Useful context: `--run-root` under `/tmp` can fail due cross-device link errors during `shutil.copytree` hardlink phase.
+---

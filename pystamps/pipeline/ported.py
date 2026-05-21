@@ -4271,14 +4271,14 @@ def stage2_estimate_gamma(
             "gamma_change_save": np.asarray(gamma_change_save, dtype=np.float64),
         }
 
+    def _write_stage2_pm(payload: dict[str, Any]) -> None:
+        write_mat(patch_dir / "pm1.mat", payload)
+
     def _snapshot_pm_payload(loop_value: int) -> dict[str, Any]:
         return {
             key: np.array(value, copy=True) if isinstance(value, np.ndarray) else value
             for key, value in _stage2_pm_payload(loop_value).items()
         }
-
-    def _write_stage2_pm(payload: dict[str, Any]) -> None:
-        write_mat(patch_dir / "pm1.mat", payload)
 
     def _write_stage2_debug_pm_snapshot(iteration: int) -> None:
         if not debug:
@@ -4457,9 +4457,6 @@ def stage2_estimate_gamma(
             },
         )
         last_gamma_change_change = float(gamma_change_change)
-        # Keep the legacy absolute convergence test, but keep the last accepted
-        # loop payload and replay it at final so we do not write the state from
-        # the stopping iteration.
         should_stop = abs(gamma_change_change) < gamma_change_convergence or i_loop >= gamma_max_iterations
         max_iterations_hit = i_loop >= gamma_max_iterations
 
@@ -4534,7 +4531,7 @@ def stage2_estimate_gamma(
             final=should_stop,
         ):
             checkpoint_t0 = time.perf_counter()
-            if should_stop and not max_iterations_hit and last_accepted_payload is not None:
+            if should_stop and max_iterations_hit and last_accepted_payload is not None:
                 checkpoint_payload = dict(last_accepted_payload)
                 checkpoint_payload["i_loop"] = np.asarray(float(i_loop), dtype=np.float64)
             else:

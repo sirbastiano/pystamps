@@ -1,6 +1,8 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-21 17:30:44 | run=20260521-135359-4008139 | iter=3 | mode=build | story=US-003 | duration=6335s | status=success
+- 2026-05-21 15:45:07 | run=20260521-135359-4008139 | iter=2 | mode=build | story=US-002 | duration=4389s | status=success
 - 2026-05-21 14:31:52 | run=20260521-135359-4008139 | iter=1 | mode=build | story=US-001 | duration=2248s | status=success
 - 2026-05-21 10:46:34 | run=20260520-150910-3748988 | iter=38 | mode=build | story=US-010 | duration=2718s | status=success
 - 2026-05-21 10:01:13 | run=20260520-150910-3748988 | iter=37 | mode=build | story=US-009 | duration=4856s | status=success
@@ -698,3 +700,13 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-21 15:44:01] After updating progress log for US-002 with command outcomes and blockers
 [2026-05-21 15:44:15] Updated progress entry commit hash reference to latest commit
 [2026-05-21 15:44:54] US-002 progress hash corrected to final commit ae455bb
+[2026-05-21 15:45:05] ITERATION 2 end (duration=4389s)
+[2026-05-21 15:45:11] ITERATION 3 start (mode=build story=US-003)
+[2026-05-21 15:46:06] Start US-003: begin required gate runs and verify all-patch Stage2 parity baseline
+[2026-05-21 16:18:37] US-003: applying Stage2 checkpoint final-payload fix to avoid previous-iteration replay on convergence
+[2026-05-21 16:18:54] US-003: removed convergence fallback to last accepted payload in stage2 checkpoint write; updated checkpoint finalization path
+[2026-05-21 17:28:28] US-003 verification: uv pytest subsets and TMPDIR pytest passed; stage2_probe commands hung / missing pm1 artifacts; narrow_compare reports missing run artifacts
+[2026-05-21 17:29:34] US-003 progress entry appended with verification outcomes
+[2026-05-21 17:29:56] US-003 amended progress entry with final commit hash 330bf9e
+[2026-05-21 17:30:11] US-003 progress log hash finalized to 293731e
+[2026-05-21 17:30:44] ITERATION 3 end (duration=6335s)

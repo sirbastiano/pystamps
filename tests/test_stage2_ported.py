@@ -1902,7 +1902,7 @@ def test_stage2_final_checkpoint_saves_one_loop_state(monkeypatch, tmp_path: Pat
     scale = float(np.sum(na[:31]) / 31.0)
     expected_nr = np.ones(100, dtype=np.float64) * scale
 
-    final_topofit = topofit_history[-2]
+    final_topofit = topofit_history[-1]
     ph_weight = np.asarray(payload["ph_weight"], dtype=np.complex64)
     ph_grid = np.asarray(payload["ph_grid"], dtype=np.complex64)
     ph_patch = np.asarray(payload["ph_patch"], dtype=np.complex64)
@@ -2073,13 +2073,13 @@ def test_stage2_loop_saves_last_accepted_state_on_convergence(monkeypatch, tmp_p
     assert final_i_loop == 2.0
     np.testing.assert_allclose(
         np.asarray(pm_payload["K_ps"], dtype=np.float64).reshape(-1),
-        k_sequence[0],
+        k_sequence[1],
         atol=0.0,
         rtol=0.0,
     )
     np.testing.assert_allclose(
         np.asarray(pm_payload["C_ps"], dtype=np.float64).reshape(-1),
-        c_sequence[0],
+        c_sequence[1],
         atol=0.0,
         rtol=0.0,
     )
