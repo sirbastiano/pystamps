@@ -1832,8 +1832,8 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: TBD
-- Post-commit status: pending
+- Commit: 5a09573 fix(verify): include all audited patches in stage2 wildcard enumeration
+- Post-commit status: clean
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
   - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
