@@ -1,6 +1,8 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-20 18:03:17 | run=20260520-150910-3748988 | iter=2 | mode=build | story=US-002 | duration=6677s | status=error
+- 2026-05-20 16:11:56 | run=20260520-150910-3748988 | iter=1 | mode=build | story=US-001 | duration=3766s | status=success
 - 2026-05-20 14:24:08 | run=20260520-141658-3737835 | iter=1 | mode=build | story=US-008 | duration=428s | status=error
 - 2026-05-20 13:55:24 | run=20260520-125242-3721459 | iter=5 | mode=build | story=US-009 | duration=5s | status=error
 - 2026-05-20 13:55:16 | run=20260520-125242-3721459 | iter=4 | mode=build | story=US-009 | duration=7s | status=error
@@ -489,3 +491,33 @@
 [2026-05-20 16:10:39] US-001: completed run; final commit 3f2be9c applied for progress entry self-consistency; remaining git-local diffs were pre-existing/.ralph errors and prior staged source files.
 [2026-05-20 16:11:25] US-001 run finalized: commit ba7d6ac for progress entry hash field; remaining modified files are pre-existing and not part of this story scope.
 [2026-05-20 16:11:36] US-001 final: story progress entry hash updated (763e948) and no further story-scoped source changes; remaining workspace diffs are pre-existing.
+[2026-05-20 16:11:56] ITERATION 1 end (duration=3766s)
+[2026-05-20 16:11:59] ITERATION 2 start (mode=build story=US-002)
+[2026-05-20 16:14:20] US-002 iteration 2 started: Stage 2 PATCH_1 root-cause drift investigation and implementation
+[2026-05-20 16:28:02] US-002: fresh_run probe passed but narrow_compare against stage8diag_hl still failing with PATCH_1/pm1.mat C_ps max_abs=0.0295872
+[2026-05-20 17:08:41] US-002 start: continuing Stage 2 PATCH_1 root-cause drift fix in current iteration
+[2026-05-20 18:03:16] ITERATION 2 end (duration=6677s)
+[2026-05-20 18:03:19] ITERATION 3 start (mode=build story=US-002)
+[2026-05-20 18:07:12] US-002 start: continuing Stage 2 PATCH_1 drift root-cause fix run
+[2026-05-20 18:07:56] US-002 rerun focused probe on fresh notebook dataset with clean run root
+[2026-05-20 19:17:49] Start US-002 story run 20260520-150910-3748988 iter3: diagnostic and root-cause fix path review in place; begin focused weighting-state investigation.
+[2026-05-20 19:19:35] US-002 iteration 3: begin focused verification and root-cause prioritization for PATCH_1 Stage 2 prior-state drift
+[2026-05-20 19:39:25] Started US-002 execution run 20260520-150910-3748988 iteration 3; continuing targeted parity fix validation
+[2026-05-20 19:54:22] US-002: narrowing root-cause after initial probe still failing at row 22182; running focused oracle rerun to capture iterative weighting snapshots
+[2026-05-20 20:20:33] US-002: starting focused PATCH_1 debug probe for row 22183 prior-state drift
+[2026-05-20 21:10:06] Start US-002 completion attempt: continue from partial diagnostics; next step inspect algorithm for PATCH_1 drift root-cause
+[2026-05-20 21:27:34] Start US-002 completion attempt: inspecting Stage 2 prior state pipeline root cause for PATCH_1 C_ps drift
+[2026-05-20 22:18:51] Started story US-002 implementation pass with current tree and pre-scope checks completed.
+[2026-05-20 22:37:37] Started US-002 continuation: load control files and inspect Stage-2 diagnostics for PATCH_1 drift root-cause
+[2026-05-20 22:44:45] US-002 continuation started in this run; continue root-cause fix for Stage2 prior-state drift and execute required gates
+[2026-05-20 22:46:42] US-002: starting focused fix for stage-2 patch1 drift in existing workspace
+[2026-05-20 23:17:21] US-002: collecting checkpoint trajectories for PATCH_1 with debug to localize stage-2 divergence
+[2026-05-20 23:31:19] Starting focused US-002 diagnosis and implementation pass. Will run required stage2_parity probe and analyze per-iteration Stage-2 prior-state drift for PATCH_1 row 22182.
+[2026-05-20 23:48:30] US-002 continuation: inspecting remaining Stage-2 PATCH_1 drift root-cause and applying targeted state continuity fix
+[2026-05-20 23:49:31] US-002 patch: recompute final-loop phase-weight state before final checkpoint and assert final pm1.ph_weight consistency with final K/weighting
+[2026-05-20 23:51:39] Start US-002 continuation; fixing final checkpoint test and rerunning gates.
+[2026-05-20 23:53:15] Running remaining required US-002 verification commands (stage2 probe, narrow compare, full global gates) after test fixes.
+[2026-05-21 00:13:43] US-002: started final convergence recompute refactor in stage2 loop
+[2026-05-21 00:14:18] US-002: updated tests for convergence final recompute (+ extra topofit/grid+clap+normalize pass)
+[2026-05-21 01:39:02] US-002: verification complete for this iteration; stage2_patch1 probe and narrow_compare executed, notebook execute aborted by killed kernel, make audit terminated
+[2026-05-21 01:39:45] US-002: final amended commit recorded with final progress hash

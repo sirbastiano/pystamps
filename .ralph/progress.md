@@ -11,7 +11,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260515-151412-1547726-iter-10.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: cb9c8d5 perf(validation): unblock stage3 parity runs
+- Commit: b919415 fix(stage2): rerun final convergence phase
 - Post-commit status: clean after progress commit
 - Verification:
   - Command: uv run python -m pip install --force-reinstall --no-deps -e . -> PASS
@@ -1785,4 +1785,43 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Patterns discovered: `uv run` invocations can appear to run slowly for full gates but still complete successfully; long-running manifest probes/audit commands are expectedly CPU heavy.
   - Gotchas encountered: long multiprocess jobs (`stage2_patch1_probe`, `make audit`) may require external timeout policies in automation to avoid indefinite waits.
   - Useful context: when `uv run` succeeds but downstream Stage-2 parity fails, keep scope on artifact/algorithm parity, not executable bootstrap.
+---
+## [2026-05-20 17:43:32 UTC] - US-002: Fix Stage 2 PATCH_1 root-cause drift
+Thread:
+Run: 20260520-150910-3748988 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: ae7a72e fix(stage2): rerun final convergence phase
+- Post-commit status: clean
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/validation_runs/notebook_stage_by_stage/fresh_run --run-root inputs_and_outputs/validation_runs/stage2_parity_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_parity_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag_hl --patterns 'PATCH_1/pm1.mat' -> FAIL (first_failure=PATCH_1/pm1.mat key `C_ps` max_abs=2.95493)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` first failure max_abs=2.95493)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (kernel terminated during execution)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL
+  - Command: make audit -> FAIL (terminated)
+- Files changed:
+  - pystamps/pipeline/ported.py
+  - tests/test_stage2_ported.py
+  - .ralph/activity.log
+  - .ralph/errors.log
+- What was implemented
+  - Refactored the Stage 2 convergence loop in `pystamps/pipeline/ported.py` to rerun full phase-grid/CLAP/patch/topofit recomputation from the final `ph_weight` before writing the final checkpoint.
+  - Added a shared helper `_stage2_recompute_from_weighting()` to keep iteration and convergence code paths consistent while avoiding duplicated inline blocks.
+  - Adjusted Stage-2 ported tests to validate the new behavior where convergence performs an extra weighted-phase recomputation pass (`test_stage2_checkpoint_modes`, `test_stage2_estimate_gamma_uses_legacy_precision_path`).
+  - Logged all required execution attempts and blockers in activity log.
+- **Learnings for future iterations:**
+  - Patterns discovered:
+    - The final convergence path now triggers one extra topofit pass on stop, which changes `topofit_calls` expectations in existing Stage-2 checkpoint tests.
+    - Comparing against `_hl` still reports large `C_ps` failures, and manifest `InSAR_dataset_test_stage8diag` remains red for all four audited patches with this change.
+  - Gotchas encountered:
+    - Notebook and full audit commands remain vulnerable to long/blocked kernels when Stage 2 is red, so they need bounded-time execution wrappers in automation.
+  - Useful context:
+    - Additional root-cause work is still required; this final recompute fix alone is not sufficient to move the known `C_ps` failure magnitude to green.
 ---

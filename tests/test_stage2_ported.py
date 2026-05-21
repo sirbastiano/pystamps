@@ -181,6 +181,16 @@ def test_stage2_estimate_gamma_routes_per_kernel_overrides(monkeypatch, tmp_path
 
     monkeypatch.setattr(ported, "run_stage2_topofit_coh_row_invariant_kernel", fake_row_invariant_coh)
     monkeypatch.setattr(ported, "_ps_topofit_batch", fake_topofit)
+    monkeypatch.setattr(
+        ported,
+        "_stage2_psquare_weighting",
+        lambda Nr, Na, low_coh_thresh, nr_max_nz_ix, coh_ps: (
+            np.zeros_like(Nr),
+            np.zeros_like(Na),
+            np.zeros_like(coh_ps),
+            np.full_like(coh_ps, 0.5, dtype=np.float64),
+        ),
+    )
     monkeypatch.setattr(ported, "run_stage2_histogram_kernel", fake_histogram)
 
     result = ported.stage2_estimate_gamma(
@@ -892,6 +902,67 @@ def test_ps_topofit_batch_recomputes_partial_zero_row_after_row_invariant_fast_p
     np.testing.assert_allclose(phase_residual[1, :], expected_residual.astype(np.complex64), rtol=0.0, atol=0.0)
 
 
+def test_ps_topofit_batch_recomputes_partial_nonfinite_row_after_row_invariant_fast_path(monkeypatch) -> None:
+    cpxphase = np.exp(
+        1j
+        * np.asarray(
+            [
+                [0.1, 0.2, 0.3],
+                [0.2, 0.4, 0.8],
+            ],
+            dtype=np.float64,
+        )
+    ).astype(np.complex128)
+    cpxphase[1, 1] = np.nan
+    cpxphase[1, 2] = np.inf
+    bperp = np.tile(np.asarray([10.0, 25.0, 40.0], dtype=np.float64), (2, 1))
+
+    def fake_fast(
+        cpxphase: np.ndarray,
+        bperp: np.ndarray,
+        n_trial_wraps: float,
+        *,
+        backend: str,
+        threads: int,
+        cpu_fallback: object | None,
+    ):
+        n_row, n_col = cpxphase.shape
+        return (
+            np.full(n_row, 9.0, dtype=np.float64),
+            np.full(n_row, 8.0, dtype=np.float64),
+            np.full(n_row, 7.0, dtype=np.float64),
+            np.full((n_row, n_col), 1.0 + 0.0j, dtype=np.complex64),
+        )
+
+    monkeypatch.setattr(ported, "run_stage2_topofit_row_invariant_kernel", fake_fast)
+
+    K0, C0, coh0, phase_residual = ported._ps_topofit_batch(
+        cpxphase,
+        bperp,
+        n_trial_wraps=1.0,
+        kernel_backend="native",
+    )
+    cleaned_row = np.nan_to_num(cpxphase[1, :], nan=0.0, posinf=0.0, neginf=0.0)
+    expected_k, expected_c, expected_coh, expected_residual = ported._ps_topofit_single(
+        cleaned_row,
+        bperp[1, :],
+        1.0,
+    )
+
+    np.testing.assert_allclose(K0[0], 9.0)
+    np.testing.assert_allclose(C0[0], 8.0)
+    np.testing.assert_allclose(coh0[0], 7.0)
+    np.testing.assert_allclose(K0[1], expected_k, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(C0[1], expected_c, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(coh0[1], expected_coh, rtol=0.0, atol=0.0)
+    np.testing.assert_allclose(
+        phase_residual[1, :],
+        expected_residual.astype(np.complex64),
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
 def test_stage2_ph_weight_block_uses_double_precision_phase_ramp() -> None:
     ph_nm = np.asarray(
         [
@@ -1378,7 +1449,8 @@ def test_stage2_checkpoint_modes(monkeypatch, tmp_path: Path) -> None:
         )
 
         assert result == "Stage 2 computed coherence for 3 candidates in 3 iterations"
-        assert topofit_calls["count"] == 3
+        iterations = int(result.rsplit(" in ", 1)[1].removesuffix(" iterations"))
+        assert topofit_calls["count"] == iterations + 1
         assert random_hist_calls["count"] == _STAGE2_RANDOM_HIST_CALLS
         return writes
 
@@ -1617,10 +1689,10 @@ def test_stage2_estimate_gamma_uses_legacy_precision_path(monkeypatch, tmp_path:
     result = ported.stage2_estimate_gamma(patch_dir, debug=False)
 
     assert result == "Stage 2 computed coherence for 2 candidates in 1 iterations"
-    assert flags["ph_weight"] == [False]
-    assert flags["grid"] == [False]
-    assert flags["clap"] == [False]
-    assert flags["normalize"] == [False]
+    assert flags["ph_weight"] == [False, False]
+    assert flags["grid"] == [False, False]
+    assert flags["clap"] == [False, False]
+    assert flags["normalize"] == [False, False]
 
 
 def test_stage2_saved_nr_matches_scaled_histogram(monkeypatch, tmp_path: Path) -> None:
@@ -1779,16 +1851,27 @@ def test_stage2_final_checkpoint_preserves_current_outputs_and_previous_weightin
         native_threads: int = 0,
     ):
         topofit_calls["count"] += 1
+        k = 1.0 if topofit_calls["count"] == 1 else 2.0
         coh = 0.1 if topofit_calls["count"] == 1 else 0.2
         n_row, n_col = cpxphase.shape
         return (
-            np.zeros(n_row, dtype=np.float64),
+            np.full(n_row, k, dtype=np.float64),
             np.zeros(n_row, dtype=np.float64),
             np.full(n_row, coh, dtype=np.float64),
             np.ones((n_row, n_col), dtype=np.complex64),
         )
 
     monkeypatch.setattr(ported, "_ps_topofit_batch", fake_topofit)
+    monkeypatch.setattr(
+        ported,
+        "_stage2_psquare_weighting",
+        lambda Nr_weight, Na, low_coh_thresh, Nr_max_nz_ix, coh_ps: (
+            np.zeros_like(Nr_weight),
+            np.zeros_like(Na),
+            np.zeros_like(coh_ps),
+            np.full_like(coh_ps, 0.5, dtype=np.float64),
+        ),
+    )
     monkeypatch.setattr(
         ported,
         "write_mat",
@@ -1807,9 +1890,26 @@ def test_stage2_final_checkpoint_preserves_current_outputs_and_previous_weightin
     expected_nr = np.ones(100, dtype=np.float64) * scale
 
     np.testing.assert_allclose(coh_ps, np.full(2, 0.2, dtype=np.float64), atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(np.asarray(payload["K_ps"], dtype=np.float64).reshape(-1), np.full(2, 2.0, dtype=np.float64))
     np.testing.assert_allclose(np.asarray(payload["Nr"], dtype=np.float64).reshape(-1), expected_nr, atol=1e-15, rtol=0.0)
     np.testing.assert_allclose(np.asarray(payload["gamma_change_save"], dtype=np.float64).reshape(-1), np.asarray([0.1]))
     np.testing.assert_allclose(np.asarray(payload["i_loop"], dtype=np.float64).reshape(-1), np.asarray([2.0]))
+
+    ph_weight = np.asarray(payload["ph_weight"], dtype=np.complex64)
+    master_ix = int(np.asarray(ps_payload["master_ix"]).reshape(-1)[0])
+    ph_input = np.asarray(ph_payload["ph"], dtype=np.complex64)
+    ph_nm = np.concatenate((ph_input[:, : master_ix - 1], ph_input[:, master_ix:]), axis=1)
+    amp = np.abs(ph_nm).astype(np.float32)
+    amp[amp == 0] = 1.0
+    ph_nm = ph_nm / amp
+    bperp_mat = np.asarray(bp_payload["bperp_mat"], dtype=np.float64)
+    expected_ph_weight = ported._stage2_ph_weight_block(
+        ph_nm,
+        bperp_mat,
+        np.full(2, 2.0, dtype=np.float64),
+        np.full(2, 0.5, dtype=np.float64),
+    )
+    np.testing.assert_allclose(ph_weight, expected_ph_weight.astype(np.complex64), atol=0.0, rtol=0.0)
 
 
 def test_stage2_replay_iteration_can_target_specific_rows(monkeypatch, tmp_path: Path) -> None:

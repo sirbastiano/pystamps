@@ -2746,11 +2746,22 @@ def _ps_topofit_batch(
         except BackendUnavailableError as exc:
             raise PortedStageError(str(exc)) from exc
 
-    # Match single-path handling when missing interferograms are present.
-    zero_rows = np.any(cpxphase == 0, axis=1)
-    if np.any(zero_rows):
-        for row_ix in np.where(zero_rows)[0]:
-            k, c, coh, ph_res = _ps_topofit_single(cpxphase[row_ix, :], bperp[row_ix, :], n_trial_wraps)
+    # Match single-path handling when malformed rows are present (zeros or non-finite values)
+    # before they can leak into the vectorized topofit path.
+    fallback_rows = np.any(
+        (cpxphase == 0) | ~np.isfinite(cpxphase),
+        axis=1,
+    )
+    if np.any(fallback_rows):
+        for row_ix in np.where(fallback_rows)[0]:
+            row = np.nan_to_num(
+                np.asarray(cpxphase[row_ix, :], dtype=np.complex128),
+                nan=0.0,
+                posinf=0.0,
+                neginf=0.0,
+            )
+            bperp_row = np.asarray(bperp[row_ix, :], dtype=np.float64)
+            k, c, coh, ph_res = _ps_topofit_single(row, bperp_row, n_trial_wraps)
             K0[row_ix] = k
             C0[row_ix] = c
             coh0[row_ix] = coh
@@ -4306,9 +4317,7 @@ def stage2_estimate_gamma(
         iter_target = patch_dir / f"stage2_weighting_snapshot_iter_{int(iteration):02d}.json"
         iter_target.write_text(snapshot_text, encoding="utf-8")
 
-    while True:
-        iteration = i_loop
-        iter_t0 = time.perf_counter()
+    def _stage2_recompute_from_weighting() -> tuple[np.ndarray, float, float, float, float]:
         grid_t0 = time.perf_counter()
         ph_weight_curr[:, :] = _stage2_full_ph_weight()
         _stage2_grid_accumulate_matlab(
@@ -4319,26 +4328,8 @@ def stage2_estimate_gamma(
             out=ph_grid,
         )
         grid_dt = time.perf_counter() - grid_t0
-        _emit_stage2(
-            "grid_accumulated",
-            iteration=iteration,
-            timings={
-                "grid_accumulate": grid_dt,
-                "total": time.perf_counter() - stage2_t0,
-            },
-        )
 
         filt_t0 = time.perf_counter()
-        _emit_stage2(
-            "clap_filter_in_progress",
-            iteration=iteration,
-            extra={"filter_completed_ifg": 0},
-            timings={
-                "grid_accumulate": grid_dt,
-                "clap_filter": 0.0,
-                "total": time.perf_counter() - stage2_t0,
-            },
-        )
         _clap_filt_grid_stack_prepared(
             ph_grid,
             alpha=options.clap_alpha,
@@ -4348,16 +4339,6 @@ def stage2_estimate_gamma(
             workers=native_threads_norm,
         )
         filt_dt = time.perf_counter() - filt_t0
-        _emit_stage2(
-            "clap_filter_in_progress",
-            iteration=iteration,
-            extra={"filter_completed_ifg": int(n_ifg)},
-            timings={
-                "grid_accumulate": grid_dt,
-                "clap_filter": filt_dt,
-                "total": time.perf_counter() - stage2_t0,
-            },
-        )
 
         patch_t0 = time.perf_counter()
         ph_patch[:, :] = ph_filt[grid_rows, grid_cols, :]
@@ -4402,6 +4383,41 @@ def stage2_estimate_gamma(
             N_opt[out_ix] = 1.0
             ph_res[out_ix, :] = np.angle(phase_residual).astype(np.float32)
         topofit_dt = time.perf_counter() - topofit_t0
+        return valid_rows, grid_dt, filt_dt, patch_dt, topofit_dt
+
+    while True:
+        iteration = i_loop
+        iter_t0 = time.perf_counter()
+        valid_rows, grid_dt, filt_dt, patch_dt, topofit_dt = _stage2_recompute_from_weighting()
+        _emit_stage2(
+            "grid_accumulated",
+            iteration=iteration,
+            timings={
+                "grid_accumulate": grid_dt,
+                "total": time.perf_counter() - stage2_t0,
+            },
+        )
+
+        _emit_stage2(
+            "clap_filter_in_progress",
+            iteration=iteration,
+            extra={"filter_completed_ifg": 0},
+            timings={
+                "grid_accumulate": grid_dt,
+                "clap_filter": 0.0,
+                "total": time.perf_counter() - stage2_t0,
+            },
+        )
+        _emit_stage2(
+            "clap_filter_in_progress",
+            iteration=iteration,
+            extra={"filter_completed_ifg": int(n_ifg)},
+            timings={
+                "grid_accumulate": grid_dt,
+                "clap_filter": filt_dt,
+                "total": time.perf_counter() - stage2_t0,
+            },
+        )
 
         gamma_change_rms = float(np.sqrt(np.sum((coh_ps - coh_ps_save) ** 2) / max(1, n_ps)))
         gamma_change_change = gamma_change_rms - gamma_change_save
@@ -4432,6 +4448,9 @@ def stage2_estimate_gamma(
         )
         last_gamma_change_change = float(gamma_change_change)
         should_stop = abs(gamma_change_change) < gamma_change_convergence or i_loop >= gamma_max_iterations
+
+        if should_stop:
+            valid_rows, grid_dt, filt_dt, patch_dt, topofit_dt = _stage2_recompute_from_weighting()
 
         weight_dt = 0.0
         if not should_stop:
