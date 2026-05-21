@@ -2112,3 +2112,35 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context:
     - The exact manifest Stage 2 probe completed with `failures=0` and wrote all four `pm1.mat` files before `narrow_compare` failed.
 ---
+## [2026-05-21 15:43:50 UTC] - US-002: Match MATLAB loop save semantics
+Thread: 
+Run: 20260521-135359-4008139 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-135359-4008139-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-135359-4008139-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 6177dcd fix(stage2): preserve accepted checkpoint state
+- Post-commit status: `clean`
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> FAIL (hung and manually terminated before completion)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (C_ps mismatches in PATCH_1, PATCH_3, PATCH_4)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+- Files changed:
+  - pystamps/pipeline/ported.py
+  - tests/test_stage2_ported.py
+  - .ralph/activity.log
+  - .ralph/errors.log
+- What was implemented
+  - Adjusted Stage-2 final checkpoint write path to replay the last accepted loop payload when loop stop is triggered by convergence, preventing overwrite by the stopping iteration.
+  - Added snapshotting to decouple saved pm1 payloads from mutable in-loop arrays.
+  - Added a focused test for accepted-state replay on convergence and updated checkpoint test expectations to match stored accepted payload behavior.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - `i_loop` only advances after `should_stop` is false, so the stopping call already has computed state for the next candidate while accepted payload remains from prior loop.
+  - Gotchas encountered
+    - `stage2_patch1_probe.py` with native threaded backend can run very long/hang-like with no output; log/process-level watchdog is needed.
+  - Useful context
+    - `narrow_compare` still flags `C_ps` mismatches on this run, so parity for full probe remains blocked even after accepted-state checkpoint fix.
+---
