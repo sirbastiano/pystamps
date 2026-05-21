@@ -1970,3 +1970,39 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context:
     - Current gate state remains unsuitable for push because Stage 2 and notebook parity both fail and full audit was not completed.
 ---
+## [2026-05-21 08:38:40] - US-008: Repair all-patch Stage 2 C_ps parity
+Thread: 
+Run: 20260520-150910-3748988 (iteration 36)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-36.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-36.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: f34d774 fix(loop): gate US-008 completion on manifest parity
+- Post-commit status: not clean (`pystamps/pipeline/ported.py`, `tests/test_stage2_ported.py`)
+- Verification:
+  - Command: `timeout 180 uv run python -c "print('uv-smoke-ok')"` -> PASS
+  - Command: `uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py` -> PASS
+  - Command: `uv run pytest -q tests/test_stage2_probe.py tests/test_verify.py tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py` -> PASS
+  - Command: `uv run pytest -q tests/test_ralph_completion_guard.py tests/test_verify.py tests/test_stage2_probe.py` -> PASS
+  - Command: `uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always` -> PASS
+  - Command: `uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat'` -> FAIL
+  - Command: `TMPDIR="$PWD/.tmp_pytest" uv run pytest -q` -> PASS
+  - Command: `uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb` -> FAIL (manually interrupted due long-running execution)
+  - Command: `uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb` -> FAIL
+  - Command: `make audit` -> FAIL (manually terminated while running)
+- Files changed:
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.agents/ralph/loop.sh
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/scripts/ralph_completion_guard.py
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/tests/test_ralph_completion_guard.py
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/activity.log
+  - /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/errors.log
+- What was implemented
+  - Added a testable completion guard utility that requires US-008 to include a green Stage-2 all-patch manifest compare (`PATCH_*/pm1.mat`) against `stage2_manifest_probe` + `InSAR_dataset_test_stage8diag` with at least 4 checks before completion is allowed.
+  - Wired the Ralph loop completion path to defer `done` for US-008 unless that compare passes, preventing false completion from a promise line alone.
+  - Added focused regression tests covering successful and failing guard scenarios.
+  - Logged the US-008 completion-workflow execution and verification blockers in runtime activity/error logs.
+- **Learnings for future iterations:**
+  - Patterns discovered: `narrow_compare` JSON output is not sufficient by itself; command and payload shape must be validated before treating completion as trustworthy.
+  - Gotchas encountered: Long-running Stage-2 probe and audit commands can remain CPU-bound for long intervals; add explicit watchdog/timeout handling before reruns.
+  - Useful context: US-008 remains blocked on repeated all-patch `C_ps` mismatches despite successful probe completion.
+---
