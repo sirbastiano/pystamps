@@ -23,3 +23,15 @@ def test_stage2_probe_default_uses_authoritative_patch_manifest(tmp_path: Path) 
 
     assert module._selected_patch_names(dataset, None) == ["PATCH_1", "PATCH_2"]
     assert module._selected_patch_names(dataset, "PATCH_2") == ["PATCH_2"]
+
+
+def test_stage2_probe_default_uses_all_patch_dirs_without_patch_list_old(tmp_path: Path) -> None:
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    (dataset / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    for name in ("PATCH_1", "PATCH_2", "PATCH_3"):
+        (dataset / name).mkdir()
+
+    module = _load_stage2_probe_module()
+
+    assert module._selected_patch_names(dataset, None) == ["PATCH_1", "PATCH_2", "PATCH_3"]

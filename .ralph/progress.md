@@ -1825,3 +1825,42 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context:
     - Additional root-cause work is still required; this final recompute fix alone is not sufficient to move the known `C_ps` failure magnitude to green.
 ---
+## [2026-05-21 02:56 UTC] - US-003: Verify Stage 2 all audited patches
+Thread:
+Run: 20260520-150910-3748988 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: TBD
+- Post-commit status: pending
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: timeout 300 uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> FAIL (exit 124 timeout; multiprocessing semaphore warnings)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4; `C_ps` mismatches in PATCH_1..PATCH_4)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: timeout 180 uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (DeadKernelError / kernel died)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stage 2..8 failed parity)
+  - Command: timeout 420 make audit -> FAIL (terminated by timeout)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - pystamps/io/dataset.py
+  - tests/test_stage2_probe.py
+  - tests/test_verify.py
+- What was implemented
+  - Restored patch discovery to avoid restricting authoritative patches to an incomplete `patch.list` when `patch.list_old` is absent.
+  - Added regression tests for `_selected_patch_names()` fallback to all `PATCH_*` directories and wildcard Stage-2 compare coverage over all available patches.
+  - Kept `patch.list_old` precedence behavior unchanged so explicit authoritative manifests remain respected.
+- **Learnings for future iterations:**
+  - Patterns discovered:
+    - `patch.list` may be a legacy or shortened list and should not silently scope patch enumeration.
+    - Narrow compare now confirms wildcard Stage-2 checks include all discovered patch directories under the fallback path.
+  - Gotchas encountered:
+    - Long-running parity probes/audit commands can stall for minutes; bounded timeouts are needed for deterministic local CI.
+    - `make audit` and notebook execution can fail even when core unit gates pass due broader parity instability.
+  - Useful context:
+    - Stage-2 failures persist with `C_ps` mismatches regardless of patch enumeration scope for this dataset.
+---

@@ -69,6 +69,37 @@ def test_patch_wildcard_fails_when_only_short_patch_list_was_compared(tmp_path: 
     assert report.comparisons[1].failure_kind == "missing_run_artifact"
 
 
+def test_patch_wildcard_falls_back_to_all_patch_dirs_when_patch_list_is_short_and_no_patch_list_old(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    golden_root = tmp_path / "golden"
+    for root in (run_root, golden_root):
+        root.mkdir()
+        (root / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+        _write_pm1(root, "PATCH_1", 1.0)
+        _write_pm1(root, "PATCH_2", 2.0)
+        _write_pm1(root, "PATCH_3", 3.0)
+    _write_pm1(golden_root, "PATCH_2", 2.0)
+    _write_pm1(golden_root, "PATCH_3", 3.0)
+
+    report = verify_run_against_golden(
+        run_root,
+        golden_root,
+        RunConfig().tolerance,
+        patterns=("PATCH_*/pm1.mat",),
+    )
+
+    assert [comparison.relative_path for comparison in report.comparisons] == [
+        "PATCH_1/pm1.mat",
+        "PATCH_2/pm1.mat",
+        "PATCH_3/pm1.mat",
+    ]
+    assert [comparison.ok for comparison in report.comparisons] == [
+        True,
+        True,
+        True,
+    ]
+
+
 def test_classify_failures_groups_downstream_residuals() -> None:
     report = VerificationReport(
         comparisons=[

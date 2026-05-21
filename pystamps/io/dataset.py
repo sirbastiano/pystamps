@@ -56,12 +56,21 @@ def discover_authoritative_patch_paths(root: str | Path) -> list[Path]:
     root_path = Path(root).expanduser().resolve()
     if not root_path.exists():
         raise DatasetError(f"Dataset root does not exist: {root_path}")
+
+    discovered = sorted([p for p in root_path.iterdir() if p.is_dir() and p.name.startswith(PATCH_PREFIX)], key=_patch_sort_key)
     for manifest_name in ("patch.list_old", "patch.list"):
         patch_names = read_patch_manifest(root_path / manifest_name)
         patches = [root_path / name for name in patch_names if (root_path / name).is_dir()]
+        if patches and manifest_name == "patch.list":
+            # Some single-master fixture datasets keep a legacy shortened patch.list for compatibility.
+            # When patch.list is incomplete, fall back to the actual patch directories so wildcard
+            # comparisons cannot accidentally hide unverified audited patches.
+            if len(patches) < len(discovered):
+                continue
+            return patches
         if patches:
             return patches
-    return sorted([p for p in root_path.iterdir() if p.is_dir() and p.name.startswith(PATCH_PREFIX)], key=_patch_sort_key)
+    return discovered
 
 
 def discover_dataset(root: str | Path) -> DatasetLayout:
