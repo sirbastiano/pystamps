@@ -21,6 +21,22 @@ def _md5(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _copy_dataset_for_probe(dataset_root: Path, run_root: Path) -> None:
+    if run_root.exists():
+        shutil.rmtree(run_root)
+    try:
+        shutil.copytree(dataset_root, run_root, copy_function=os.link)
+    except OSError as err:
+        if run_root.exists():
+            shutil.rmtree(run_root)
+        try:
+            shutil.copytree(dataset_root, run_root)
+        except OSError as fallback_err:
+            raise RuntimeError(
+                f"Failed to prepare run_root from {dataset_root} to {run_root} after hardlink failure: {err} then fallback: {fallback_err}"
+            ) from fallback_err
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True)
@@ -53,12 +69,7 @@ def main() -> int:
         raise SystemExit(f"No PATCH_* entries found for {dataset_root}")
 
     run_root.parent.mkdir(parents=True, exist_ok=True)
-    if run_root.exists():
-        shutil.rmtree(run_root)
-    try:
-        shutil.copytree(dataset_root, run_root, copy_function=os.link)
-    except OSError:
-        shutil.copytree(dataset_root, run_root)
+    _copy_dataset_for_probe(dataset_root, run_root)
 
     selected = set(patch_names)
     missing = sorted(name for name in selected if not (run_root / name).is_dir())

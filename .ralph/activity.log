@@ -710,3 +710,7 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-21 17:29:56] US-003 amended progress entry with final commit hash 330bf9e
 [2026-05-21 17:30:11] US-003 progress log hash finalized to 293731e
 [2026-05-21 17:30:44] ITERATION 3 end (duration=6335s)
+[2026-05-21 22:18:10] ITERATION 1 start (mode=build story=US-001)
+[2026-05-21 22:18:23] Start US-001 Stabilize Stage 2 probe setup
+[2026-05-21 22:18:34] US-001 code changes applied for hardlink fallback cleanup and added focused test
+[2026-05-21 22:30:04] US-001 fixed run_root pre-cleanup before hardlink copy
