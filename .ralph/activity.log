@@ -1,6 +1,35 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-21 04:50:10 | run=20260520-150910-3748988 | iter=33 | mode=build | story=US-005 | duration=214s | status=error
+- 2026-05-21 04:46:34 | run=20260520-150910-3748988 | iter=32 | mode=build | story=US-005 | duration=11s | status=error
+- 2026-05-21 04:46:21 | run=20260520-150910-3748988 | iter=31 | mode=build | story=US-005 | duration=32s | status=error
+- 2026-05-21 04:45:47 | run=20260520-150910-3748988 | iter=30 | mode=build | story=US-005 | duration=31s | status=error
+- 2026-05-21 04:45:13 | run=20260520-150910-3748988 | iter=29 | mode=build | story=US-005 | duration=28s | status=error
+- 2026-05-21 04:44:43 | run=20260520-150910-3748988 | iter=28 | mode=build | story=US-005 | duration=179s | status=error
+- 2026-05-21 04:41:42 | run=20260520-150910-3748988 | iter=27 | mode=build | story=US-005 | duration=219s | status=error
+- 2026-05-21 04:38:01 | run=20260520-150910-3748988 | iter=26 | mode=build | story=US-005 | duration=12s | status=error
+- 2026-05-21 04:37:47 | run=20260520-150910-3748988 | iter=25 | mode=build | story=US-005 | duration=12s | status=error
+- 2026-05-21 04:37:33 | run=20260520-150910-3748988 | iter=24 | mode=build | story=US-005 | duration=35s | status=error
+- 2026-05-21 04:36:56 | run=20260520-150910-3748988 | iter=23 | mode=build | story=US-005 | duration=32s | status=error
+- 2026-05-21 04:36:22 | run=20260520-150910-3748988 | iter=22 | mode=build | story=US-005 | duration=39s | status=error
+- 2026-05-21 04:35:40 | run=20260520-150910-3748988 | iter=21 | mode=build | story=US-005 | duration=377s | status=error
+- 2026-05-21 04:29:21 | run=20260520-150910-3748988 | iter=20 | mode=build | story=US-005 | duration=30s | status=error
+- 2026-05-21 04:28:49 | run=20260520-150910-3748988 | iter=19 | mode=build | story=US-005 | duration=23s | status=error
+- 2026-05-21 04:28:23 | run=20260520-150910-3748988 | iter=18 | mode=build | story=US-005 | duration=30s | status=error
+- 2026-05-21 04:27:51 | run=20260520-150910-3748988 | iter=17 | mode=build | story=US-005 | duration=29s | status=error
+- 2026-05-21 04:27:20 | run=20260520-150910-3748988 | iter=16 | mode=build | story=US-005 | duration=379s | status=error
+- 2026-05-21 04:20:59 | run=20260520-150910-3748988 | iter=15 | mode=build | story=US-005 | duration=9s | status=error
+- 2026-05-21 04:20:48 | run=20260520-150910-3748988 | iter=14 | mode=build | story=US-005 | duration=11s | status=error
+- 2026-05-21 04:20:35 | run=20260520-150910-3748988 | iter=13 | mode=build | story=US-005 | duration=31s | status=error
+- 2026-05-21 04:20:02 | run=20260520-150910-3748988 | iter=12 | mode=build | story=US-005 | duration=31s | status=error
+- 2026-05-21 04:19:27 | run=20260520-150910-3748988 | iter=11 | mode=build | story=US-005 | duration=37s | status=error
+- 2026-05-21 04:18:48 | run=20260520-150910-3748988 | iter=10 | mode=build | story=US-005 | duration=404s | status=error
+- 2026-05-21 04:12:02 | run=20260520-150910-3748988 | iter=9 | mode=build | story=US-005 | duration=24s | status=error
+- 2026-05-21 04:11:36 | run=20260520-150910-3748988 | iter=8 | mode=build | story=US-005 | duration=24s | status=error
+- 2026-05-21 04:11:10 | run=20260520-150910-3748988 | iter=7 | mode=build | story=US-005 | duration=245s | status=error
+- 2026-05-21 04:07:03 | run=20260520-150910-3748988 | iter=6 | mode=build | story=US-005 | duration=1044s | status=error
+- 2026-05-21 03:49:36 | run=20260520-150910-3748988 | iter=5 | mode=build | story=US-004 | duration=3155s | status=success
 - 2026-05-21 02:56:58 | run=20260520-150910-3748988 | iter=4 | mode=build | story=US-003 | duration=4593s | status=success
 - 2026-05-21 01:40:23 | run=20260520-150910-3748988 | iter=3 | mode=build | story=US-002 | duration=27424s | status=success
 - 2026-05-20 18:03:17 | run=20260520-150910-3748988 | iter=2 | mode=build | story=US-002 | duration=6677s | status=error
@@ -541,3 +570,78 @@
 [2026-05-21 03:48:16] US-004: implemented Stage-2 short-circuit in scripts/assert_notebook_parity.py and added test_assert_notebook_parity coverage
 [2026-05-21 03:48:18] US-004: verification commands executed (smoke, stage2 tests, probe/narrow, TMPDIR pytest, notebook check, assert parity, full test mix); probe and audit/nbclient failed to complete
 [2026-05-21 03:48:56] US-004: appended progress entry with full verification outcomes and implementation summary
+[2026-05-21 03:49:21] US-004: finalized progress entry with final commit chain after final verification pass
+[2026-05-21 03:49:35] ITERATION 5 end (duration=3155s)
+[2026-05-21 03:49:38] ITERATION 6 start (mode=build story=US-005)
+[2026-05-21 03:49:56] Start: US-005 Execute single notebook parity proof (run 20260520-150910-3748988 iter 6)
+[2026-05-21 04:07:02] ITERATION 6 end (duration=1044s)
+[2026-05-21 04:07:05] ITERATION 7 start (mode=build story=US-005)
+[2026-05-21 04:07:44] US-005: start execution of single notebook parity proof story
+[2026-05-21 04:11:10] ITERATION 7 end (duration=245s)
+[2026-05-21 04:11:13] ITERATION 8 start (mode=build story=US-005)
+[2026-05-21 04:11:36] ITERATION 8 end (duration=24s)
+[2026-05-21 04:11:38] ITERATION 9 start (mode=build story=US-005)
+[2026-05-21 04:12:02] ITERATION 9 end (duration=24s)
+[2026-05-21 04:12:04] ITERATION 10 start (mode=build story=US-005)
+[2026-05-21 04:12:33] Started US-005 execution: validating notebook parity proof in notebooks/03_stage_by_stage_oracle.ipynb.
+[2026-05-21 04:18:48] ITERATION 10 end (duration=404s)
+[2026-05-21 04:18:50] ITERATION 11 start (mode=build story=US-005)
+[2026-05-21 04:19:27] ITERATION 11 end (duration=37s)
+[2026-05-21 04:19:30] ITERATION 12 start (mode=build story=US-005)
+[2026-05-21 04:20:01] ITERATION 12 end (duration=31s)
+[2026-05-21 04:20:04] ITERATION 13 start (mode=build story=US-005)
+[2026-05-21 04:20:35] ITERATION 13 end (duration=31s)
+[2026-05-21 04:20:38] ITERATION 14 start (mode=build story=US-005)
+[2026-05-21 04:20:48] ITERATION 14 end (duration=11s)
+[2026-05-21 04:20:50] ITERATION 15 start (mode=build story=US-005)
+[2026-05-21 04:20:59] ITERATION 15 end (duration=9s)
+[2026-05-21 04:21:01] ITERATION 16 start (mode=build story=US-005)
+[2026-05-21 04:21:17] Start US-005 story execution; inspecting notebook and parity proof assets before edits
+[2026-05-21 04:27:20] ITERATION 16 end (duration=379s)
+[2026-05-21 04:27:23] ITERATION 17 start (mode=build story=US-005)
+[2026-05-21 04:27:51] ITERATION 17 end (duration=29s)
+[2026-05-21 04:27:54] ITERATION 18 start (mode=build story=US-005)
+[2026-05-21 04:28:23] ITERATION 18 end (duration=30s)
+[2026-05-21 04:28:26] ITERATION 19 start (mode=build story=US-005)
+[2026-05-21 04:28:49] ITERATION 19 end (duration=23s)
+[2026-05-21 04:28:51] ITERATION 20 start (mode=build story=US-005)
+[2026-05-21 04:29:21] ITERATION 20 end (duration=30s)
+[2026-05-21 04:29:24] ITERATION 21 start (mode=build story=US-005)
+[2026-05-21 04:29:53] Start: entering US-005 notebook parity proof story implementation
+[2026-05-21 04:30:36] Major step: executing required US-005 commands; starting validation sweep
+[2026-05-21 04:35:40] ITERATION 21 end (duration=377s)
+[2026-05-21 04:35:42] ITERATION 22 start (mode=build story=US-005)
+[2026-05-21 04:36:22] ITERATION 22 end (duration=39s)
+[2026-05-21 04:36:25] ITERATION 23 start (mode=build story=US-005)
+[2026-05-21 04:36:56] ITERATION 23 end (duration=32s)
+[2026-05-21 04:36:58] ITERATION 24 start (mode=build story=US-005)
+[2026-05-21 04:37:33] ITERATION 24 end (duration=35s)
+[2026-05-21 04:37:35] ITERATION 25 start (mode=build story=US-005)
+[2026-05-21 04:37:47] ITERATION 25 end (duration=12s)
+[2026-05-21 04:37:50] ITERATION 26 start (mode=build story=US-005)
+[2026-05-21 04:38:01] ITERATION 26 end (duration=12s)
+[2026-05-21 04:38:03] ITERATION 27 start (mode=build story=US-005)
+$(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to run required gates and notebook parity proof.
+2026-05-21 04:38:42 Start US-005 execution commands: preparing to run required gates and notebook parity proof.
+2026-05-21 04:38:50 Command pass: timeout 180 uv run python -c "print("uv-smoke-ok")"
+2026-05-21 04:39:11 Command pass: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py
+[2026-05-21 04:41:42] ITERATION 27 end (duration=219s)
+[2026-05-21 04:41:44] ITERATION 28 start (mode=build story=US-005)
+[2026-05-21 04:41:53] US-005 start: begin guardrails/context intake and scope check
+[2026-05-21 04:44:43] ITERATION 28 end (duration=179s)
+[2026-05-21 04:44:45] ITERATION 29 start (mode=build story=US-005)
+[2026-05-21 04:45:13] ITERATION 29 end (duration=28s)
+[2026-05-21 04:45:16] ITERATION 30 start (mode=build story=US-005)
+[2026-05-21 04:45:47] ITERATION 30 end (duration=31s)
+[2026-05-21 04:45:50] ITERATION 31 start (mode=build story=US-005)
+[2026-05-21 04:46:21] ITERATION 31 end (duration=32s)
+[2026-05-21 04:46:23] ITERATION 32 start (mode=build story=US-005)
+[2026-05-21 04:46:34] ITERATION 32 end (duration=11s)
+[2026-05-21 04:46:36] ITERATION 33 start (mode=build story=US-005)
+[2026-05-21 04:46:59] US-005 start: run notebook parity proof scope, reviewing notebook+assert script before edits
+[2026-05-21 04:50:10] ITERATION 33 end (duration=214s)
+[2026-05-21 04:50:12] ITERATION 34 start (mode=build story=US-005)
+[2026-05-21 04:50:22] US-005 start: begin scope for single notebook parity proof; reading notebook and parity helper
+[2026-05-21 05:06:19] US-005 after required tests/probes: running notebook in-place execution
+[2026-05-21 05:38:15] US-005 verification blocked: uv run jupyter execute --inplace timed out in-session at ~31m with no completion output; continuing with required remaining gates
+[2026-05-21 06:17:49] US-005 progress entry added to .ralph/progress.md with full verification outcomes
