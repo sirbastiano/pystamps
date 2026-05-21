@@ -1864,3 +1864,41 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context:
     - Stage-2 failures persist with `C_ps` mismatches regardless of patch enumeration scope for this dataset.
 ---
+## [2026-05-21 03:48:19] - US-004: Repair downstream parity after Stage 2
+Thread: 
+Run: 20260520-150910-3748988 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: pending (will update after commit)
+- Post-commit status: pending
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: timeout 600 uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> FAIL (stalled; terminated)
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (first_failure=PATCH_1/pm1.mat key 'C_ps' max_abs=6.28136)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: timeout 180 uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (DeadKernelError / timeout)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (Stage 2 failed parity)
+  - Command: make audit -> FAIL (stalled / manually terminated)
+  - Command: uv run pytest -q tests/test_assert_notebook_parity.py tests/test_verify.py tests/test_validate_audit.py tests/test_parity_bug_loop.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py tests/test_assert_notebook_parity.py tests/test_verify.py tests/test_validate_audit.py tests/test_parity_bug_loop.py -> PASS
+- Files changed:
+  - scripts/assert_notebook_parity.py
+  - tests/test_assert_notebook_parity.py
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+- What was implemented
+  - Added a Stage 2 failure/absence short-circuit in `scripts/assert_notebook_parity.py` so stage 3+ parity checks are skipped once Stage 2 is not clean.
+  - Added targeted tests in `tests/test_assert_notebook_parity.py` for Stage 2 failure and Stage 2 missing-summary behavior, plus regression coverage that Stage 3 failures are still detected when Stage 2 passes.
+- **Learnings for future iterations:**
+  - Patterns discovered:
+    - Stage 2 red states can cause downstream probe/audit tools to hang; explicit short-circuiting in reporting reduces false downstream triage.
+    - `make audit` and notebook execution are useful but brittle when Stage 2 remains non-parity-clean.
+  - Gotchas encountered:
+    - Long-running probe/audit commands can fork multiple multiprocessing workers without producing output, requiring bounded execution windows and manual cleanup.
+  - Useful context:
+    - `C_ps` in Stage 2 manifest probe remains mismatched across at least PATCH_1..4, so root-cause Stage 3+ repair work remains blocked by upstream Stage 2 state.
+---

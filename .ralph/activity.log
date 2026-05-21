@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-21 02:56:58 | run=20260520-150910-3748988 | iter=4 | mode=build | story=US-003 | duration=4593s | status=success
 - 2026-05-21 01:40:23 | run=20260520-150910-3748988 | iter=3 | mode=build | story=US-002 | duration=27424s | status=success
 - 2026-05-20 18:03:17 | run=20260520-150910-3748988 | iter=2 | mode=build | story=US-002 | duration=6677s | status=error
 - 2026-05-20 16:11:56 | run=20260520-150910-3748988 | iter=1 | mode=build | story=US-001 | duration=3766s | status=success
@@ -532,3 +533,11 @@
 [2026-05-21 02:56:17] US-003: completed verification command attempts (including timeouts/expected failures)
 [2026-05-21 02:56:28] US-003: progress log appended with command outcomes and implementation details
 [2026-05-21 02:56:42] US-003: progress entry finalized with commit hash and clean status
+[2026-05-21 02:56:58] ITERATION 4 end (duration=4593s)
+[2026-05-21 02:57:01] ITERATION 5 start (mode=build story=US-004)
+
+- [2026-05-21 00:00:00] US-004 iteration 5 started
+[2026-05-21 03:27:38] US-004: verification started after parity short-circuit changes
+[2026-05-21 03:48:16] US-004: implemented Stage-2 short-circuit in scripts/assert_notebook_parity.py and added test_assert_notebook_parity coverage
+[2026-05-21 03:48:18] US-004: verification commands executed (smoke, stage2 tests, probe/narrow, TMPDIR pytest, notebook check, assert parity, full test mix); probe and audit/nbclient failed to complete
+[2026-05-21 03:48:56] US-004: appended progress entry with full verification outcomes and implementation summary

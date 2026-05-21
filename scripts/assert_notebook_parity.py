@@ -129,12 +129,21 @@ def assert_notebook_parity(notebook_path: Path) -> ParityReport:
     if SETUP_MARKER not in all_output_text:
         errors.append(f"Notebook setup output missing {SETUP_MARKER!r}")
 
+    stage2_failed = False
     for stage in EXPECTED_STAGES:
         summary = stage_summaries.get(stage)
+
+        if stage2_failed and stage > 2:
+            continue
+
         if summary is None:
             errors.append(f"Stage {stage} missing final parity summary")
+            if stage == 2:
+                stage2_failed = True
         elif summary.failed > 0 or not summary.matched:
             errors.append(f"Stage {stage} failed parity: failed={summary.failed}, matched={summary.matched}")
+            if stage == 2:
+                stage2_failed = True
 
         summaries = execution_summaries.get(stage, [])
         if not summaries:
