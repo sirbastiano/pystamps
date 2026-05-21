@@ -1871,7 +1871,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-5.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: dd8b67b fix(stage2): gate downstream parity checks on stage2; b97a167 docs(prog): record US-004 verification results
+- Commit: dd8b67b fix(stage2): gate downstream parity checks on stage2; b97a167 docs(prog): record US-004 verification results; a7d09cb docs(prog): include functional and docs commits in US-004 entry
 - Post-commit status: clean
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
