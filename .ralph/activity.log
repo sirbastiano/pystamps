@@ -652,3 +652,4 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-21 07:02:04] US-006 gate 3 blocked: uv jupyter execution for notebooks/03_stage_by_stage_oracle.ipynb was killed after long silent stall; proceeding with remaining gates and capturing exact failures
 [2026-05-21 07:25:16] US-006 verification complete: uv-smoke/pass, stage2 tests pass, manifest narrow compare fail (C_ps all patches), notebook execute stalled then killed, notebook parity fail, make audit manually bounded and terminated
 [2026-05-21 07:25:33] US-006 progress appended with command outcomes and blockers; staging progress/audit logs for commit
+[2026-05-21 07:26:06] US-006 finalizing: committed progress updates; final commit 49d7975; story remains blocked by manifest Stage 2 C_ps failures and incomplete notebook/audit gates
