@@ -4521,8 +4521,6 @@ def stage2_estimate_gamma(
             i_loop,
             final=should_stop,
         ):
-            if should_stop:
-                grid_dt, filt_dt, patch_dt = _stage2_rebuild_from_current_weighting()
             checkpoint_t0 = time.perf_counter()
             _write_stage2_pm(i_loop)
             if debug:

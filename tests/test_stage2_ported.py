@@ -1689,10 +1689,10 @@ def test_stage2_estimate_gamma_uses_legacy_precision_path(monkeypatch, tmp_path:
     result = ported.stage2_estimate_gamma(patch_dir, debug=False)
 
     assert result == "Stage 2 computed coherence for 2 candidates in 1 iterations"
-    assert flags["ph_weight"] == [False, False]
-    assert flags["grid"] == [False, False]
-    assert flags["clap"] == [False, False]
-    assert flags["normalize"] == [False, False]
+    assert flags["ph_weight"] == [False]
+    assert flags["grid"] == [False]
+    assert flags["clap"] == [False]
+    assert flags["normalize"] == [False]
 
 
 def test_stage2_saved_nr_matches_scaled_histogram(monkeypatch, tmp_path: Path) -> None:
@@ -1784,9 +1784,7 @@ def test_stage2_saved_nr_matches_scaled_histogram(monkeypatch, tmp_path: Path) -
     np.testing.assert_allclose(np.asarray(payload["Nr"], dtype=np.float64).reshape(-1), expected_nr, atol=1e-15, rtol=0.0)
 
 
-def test_stage2_final_checkpoint_preserves_current_outputs_and_previous_weighting_state(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_stage2_final_checkpoint_saves_one_loop_state(monkeypatch, tmp_path: Path) -> None:
     patch_dir = tmp_path / "PATCH_1"
     patch_dir.mkdir()
     (patch_dir / "bp1.mat").touch()
@@ -1825,6 +1823,7 @@ def test_stage2_final_checkpoint_preserves_current_outputs_and_previous_weightin
 
     saved: dict[str, object] = {}
     topofit_calls = {"count": 0}
+    topofit_history: list[dict[str, np.ndarray]] = []
 
     monkeypatch.setattr(ported, "read_mat", fake_read_mat)
     monkeypatch.setattr(
@@ -1852,13 +1851,27 @@ def test_stage2_final_checkpoint_preserves_current_outputs_and_previous_weightin
     ):
         topofit_calls["count"] += 1
         k = 1.0 if topofit_calls["count"] == 1 else 2.0
+        c = 0.25 if topofit_calls["count"] == 1 else 0.75
         coh = 0.1 if topofit_calls["count"] == 1 else 0.2
         n_row, n_col = cpxphase.shape
+        k_out = np.full(n_row, k, dtype=np.float64)
+        c_out = np.full(n_row, c, dtype=np.float64)
+        coh_out = np.full(n_row, coh, dtype=np.float64)
+        phase_residual = np.exp(1j * np.full((n_row, n_col), c, dtype=np.float64)).astype(np.complex64)
+        topofit_history.append(
+            {
+                "cpxphase": np.asarray(cpxphase, dtype=np.complex128).copy(),
+                "K_ps": k_out.copy(),
+                "C_ps": c_out.copy(),
+                "coh_ps": coh_out.copy(),
+                "ph_res": np.angle(phase_residual).astype(np.float32),
+            }
+        )
         return (
-            np.full(n_row, k, dtype=np.float64),
-            np.zeros(n_row, dtype=np.float64),
-            np.full(n_row, coh, dtype=np.float64),
-            np.ones((n_row, n_col), dtype=np.complex64),
+            k_out,
+            c_out,
+            coh_out,
+            phase_residual,
         )
 
     monkeypatch.setattr(ported, "_ps_topofit_batch", fake_topofit)
@@ -1889,13 +1902,25 @@ def test_stage2_final_checkpoint_preserves_current_outputs_and_previous_weightin
     scale = float(np.sum(na[:31]) / 31.0)
     expected_nr = np.ones(100, dtype=np.float64) * scale
 
-    np.testing.assert_allclose(coh_ps, np.full(2, 0.2, dtype=np.float64), atol=0.0, rtol=0.0)
-    np.testing.assert_allclose(np.asarray(payload["K_ps"], dtype=np.float64).reshape(-1), np.full(2, 2.0, dtype=np.float64))
+    final_topofit = topofit_history[-1]
+    ph_weight = np.asarray(payload["ph_weight"], dtype=np.complex64)
+    ph_grid = np.asarray(payload["ph_grid"], dtype=np.complex64)
+    ph_patch = np.asarray(payload["ph_patch"], dtype=np.complex64)
+    ph_res = np.asarray(payload["ph_res"], dtype=np.float32)
+
+    assert topofit_calls["count"] == 2
+    np.testing.assert_allclose(coh_ps, final_topofit["coh_ps"], atol=0.0, rtol=0.0)
+    np.testing.assert_allclose(
+        np.asarray(payload["K_ps"], dtype=np.float64).reshape(-1), final_topofit["K_ps"], atol=0.0, rtol=0.0
+    )
+    np.testing.assert_allclose(
+        np.asarray(payload["C_ps"], dtype=np.float64).reshape(-1), final_topofit["C_ps"], atol=0.0, rtol=0.0
+    )
+    np.testing.assert_allclose(ph_res, final_topofit["ph_res"], atol=0.0, rtol=0.0)
     np.testing.assert_allclose(np.asarray(payload["Nr"], dtype=np.float64).reshape(-1), expected_nr, atol=1e-15, rtol=0.0)
     np.testing.assert_allclose(np.asarray(payload["gamma_change_save"], dtype=np.float64).reshape(-1), np.asarray([0.1]))
     np.testing.assert_allclose(np.asarray(payload["i_loop"], dtype=np.float64).reshape(-1), np.asarray([2.0]))
 
-    ph_weight = np.asarray(payload["ph_weight"], dtype=np.complex64)
     master_ix = int(np.asarray(ps_payload["master_ix"]).reshape(-1)[0])
     ph_input = np.asarray(ph_payload["ph"], dtype=np.complex64)
     ph_nm = np.concatenate((ph_input[:, : master_ix - 1], ph_input[:, master_ix:]), axis=1)
@@ -1906,10 +1931,23 @@ def test_stage2_final_checkpoint_preserves_current_outputs_and_previous_weightin
     expected_ph_weight = ported._stage2_ph_weight_block(
         ph_nm,
         bperp_mat,
-        np.full(2, 2.0, dtype=np.float64),
+        np.full(2, 1.0, dtype=np.float64),
         np.full(2, 0.5, dtype=np.float64),
     )
     np.testing.assert_allclose(ph_weight, expected_ph_weight.astype(np.complex64), atol=0.0, rtol=0.0)
+
+    grid_ij = np.asarray(payload["grid_ij"], dtype=np.int64)
+    replay_grid = ported._stage2_grid_accumulate_matlab(
+        ph_weight,
+        np.ravel_multi_index((grid_ij[:, 0] - 1, grid_ij[:, 1] - 1), ph_grid.shape[:2]),
+        ph_grid.shape[0],
+        ph_grid.shape[1],
+    )
+    np.testing.assert_allclose(ph_grid, replay_grid, atol=0.0, rtol=0.0)
+
+    replay_cpxphase = np.conjugate(ph_patch).astype(np.complex64)
+    replay_cpxphase *= ph_nm
+    np.testing.assert_allclose(replay_cpxphase, final_topofit["cpxphase"], atol=0.0, rtol=0.0)
 
 
 def test_stage2_replay_iteration_can_target_specific_rows(monkeypatch, tmp_path: Path) -> None:

@@ -222,3 +222,5 @@
 [2026-05-21 07:27:47] ITERATION 35 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-35.md
 [2026-05-21 08:40:15] ITERATION 36 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-36.md
 [2026-05-21 10:01:13] ITERATION 37 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-37.md
+[2026-05-21 10:46:34] ITERATION 38 left uncommitted changes; review run summary at /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-38.md
+[2026-05-21 14:15:21] ITERATION 1 US-001 blocker: exact manifest-backed Stage 2 probe completed and regenerated PATCH_1 through PATCH_4, but `narrow_compare --patterns 'PATCH_*/pm1.mat'` checked 4 files and remained red after removing the mixed final checkpoint rebuild; first failure is PATCH_1 key `ph_grid` max_abs=3.84284, with PATCH_2/PATCH_3/PATCH_4 still failing `C_ps`.
