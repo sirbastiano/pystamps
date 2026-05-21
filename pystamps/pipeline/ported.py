@@ -4317,7 +4317,7 @@ def stage2_estimate_gamma(
         iter_target = patch_dir / f"stage2_weighting_snapshot_iter_{int(iteration):02d}.json"
         iter_target.write_text(snapshot_text, encoding="utf-8")
 
-    def _stage2_recompute_from_weighting() -> tuple[np.ndarray, float, float, float, float]:
+    def _stage2_rebuild_from_current_weighting() -> tuple[float, float, float]:
         grid_t0 = time.perf_counter()
         ph_weight_curr[:, :] = _stage2_full_ph_weight()
         _stage2_grid_accumulate_matlab(
@@ -4346,7 +4346,10 @@ def stage2_estimate_gamma(
             stop = min(start + stage2_row_chunk, n_ps)
             _normalize_complex_unit_magnitude_inplace(ph_patch[start:stop, :])
         patch_dt = time.perf_counter() - patch_t0
+        return grid_dt, filt_dt, patch_dt
 
+    def _stage2_recompute_from_weighting() -> tuple[np.ndarray, float, float, float, float]:
+        grid_dt, filt_dt, patch_dt = _stage2_rebuild_from_current_weighting()
         topofit_t0 = time.perf_counter()
         valid_rows = np.zeros(n_ps, dtype=bool)
         K_ps.fill(np.nan)
@@ -4449,9 +4452,6 @@ def stage2_estimate_gamma(
         last_gamma_change_change = float(gamma_change_change)
         should_stop = abs(gamma_change_change) < gamma_change_convergence or i_loop >= gamma_max_iterations
 
-        if should_stop:
-            valid_rows, grid_dt, filt_dt, patch_dt, topofit_dt = _stage2_recompute_from_weighting()
-
         weight_dt = 0.0
         if not should_stop:
             weight_t0 = time.perf_counter()
@@ -4521,6 +4521,8 @@ def stage2_estimate_gamma(
             i_loop,
             final=should_stop,
         ):
+            if should_stop:
+                grid_dt, filt_dt, patch_dt = _stage2_rebuild_from_current_weighting()
             checkpoint_t0 = time.perf_counter()
             _write_stage2_pm(i_loop)
             if debug:

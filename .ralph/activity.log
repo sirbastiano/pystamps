@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-21 08:40:15 | run=20260520-150910-3748988 | iter=36 | mode=build | story=US-008 | duration=4344s | status=success
 - 2026-05-21 07:27:47 | run=20260520-150910-3748988 | iter=35 | mode=build | story=US-006 | duration=4114s | status=success
 - 2026-05-21 06:19:10 | run=20260520-150910-3748988 | iter=34 | mode=build | story=US-005 | duration=5338s | status=success
 - 2026-05-21 04:50:10 | run=20260520-150910-3748988 | iter=33 | mode=build | story=US-005 | duration=214s | status=error
@@ -663,3 +664,9 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-21 08:38:12] US-008 verification pass done: smoke/tests/probe/compare/audit workflow executed, Stage-2 manifest compare still red, no completion gate bypass.
 [2026-05-21 08:38:33] US-008 targeted tests passed after completion-guard addition: test_ralph_completion_guard.py plus stage2 probe verification regressions.
 [2026-05-21 08:38:57] US-008 cleanup fix applied to completion guard module; focused tests re-run and pass.
+[2026-05-21 08:40:13] ITERATION 36 end (duration=4344s)
+[2026-05-21 08:40:18] ITERATION 37 start (mode=build story=US-009)
+[2026-05-21 08:41:28] Start: US-009 completion-guard fix and verification for this run
+[2026-05-21 09:59:44] Verification complete for this story: stage2 patch probe succeeded; narrow_compare shows C_ps mismatches (all patches). Jupyter/audit/parity not green due dependency blocker; full pytest passes
+[2026-05-21 10:00:02] Progress log updated for US-009 with verification outcomes and blocker evidence
+[2026-05-21 10:00:57] Committed US-009 guard fix as 8fe1461/0908ee3 (amended to final hash), working tree clean

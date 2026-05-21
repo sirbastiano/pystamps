@@ -63,7 +63,7 @@ def has_successful_stage2_manifest_compare(
 
 
 def completion_is_allowed(story_id: str, log_text: str) -> bool:
-    if story_id != "US-008":
+    if story_id not in {"US-008", "US-009"}:
         return True
     return has_successful_stage2_manifest_compare(log_text)
 

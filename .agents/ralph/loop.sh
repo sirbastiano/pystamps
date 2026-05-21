@@ -623,7 +623,7 @@ PY
 can_mark_story_done() {
   local story_id="$1"
   local log_file="$2"
-  if [ "${story_id}" != "US-008" ]; then
+  if [ "${story_id}" != "US-008" ] && [ "${story_id}" != "US-009" ]; then
     return 0
   fi
   python3 "$ROOT_DIR/scripts/ralph_completion_guard.py" "$log_file" --story-id "${story_id}" >/dev/null
@@ -943,7 +943,7 @@ for i in $(seq 1 "$MAX_ITERATIONS"); do
         echo "Completion signal received; story marked done."
       else
         update_story_status "$STORY_ID" "open"
-        echo "Completion signal withheld: required Stage-2 manifest compare for US-008 is not green."
+        echo "Completion signal withheld: required Stage-2 manifest compare is not green."
       fi
     else
       update_story_status "$STORY_ID" "open"

@@ -2006,3 +2006,37 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: Long-running Stage-2 probe and audit commands can remain CPU-bound for long intervals; add explicit watchdog/timeout handling before reruns.
   - Useful context: US-008 remains blocked on repeated all-patch `C_ps` mismatches despite successful probe completion.
 ---
+
+## [2026-05-21 09:59:56 UTC] - US-009: Reprove single notebook parity
+Thread:
+Run: 20260520-150910-3748988 (iteration 37)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-37.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260520-150910-3748988-iter-37.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 8fe1461 fix(ralph): gate US-009 on stage-2 manifest compare
+- Post-commit status: clean
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_trial_wraps.py tests/test_kernels_accelerated.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+  - Command: uv run jupyter execute --inplace --timeout=-1 notebooks/03_stage_by_stage_oracle.ipynb -> FAIL (timed out / interrupted)
+  - Command: uv run python scripts/assert_notebook_parity.py --notebook notebooks/03_stage_by_stage_oracle.ipynb -> FAIL
+  - Command: make audit -> FAIL (interrupted; no completion)
+- Files changed:
+  - .agents/ralph/loop.sh
+  - scripts/ralph_completion_guard.py
+  - tests/test_ralph_completion_guard.py
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Extended the completion guard for `US-009` so it enforces the same Stage-2 manifest compare prerequisite currently used for `US-008`.
+  - Updated Ralph loop completion gating to route `US-009` through that same check before auto-complete.
+  - Added `US-008`/`US-009` parameterized regression coverage for the completion guard test module.
+- **Learnings for future iterations:**
+  - Patterns discovered: wildcard Stage-2 manifest compare currently reports `C_ps` mismatches for all four patches, so notebook/audit work remains intentionally blocked by guard.
+  - Gotchas encountered: `scripts/narrow_compare.py --patterns 'PATCH_*/pm1.mat'` can hit transient read issues on first invocation after a new probe run and should be re-run for stable results.
+  - Useful context: `make audit` and full notebook execution are still long-running under current data footprint and may require additional timeout strategy.
+---

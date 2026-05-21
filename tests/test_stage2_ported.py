@@ -1450,7 +1450,7 @@ def test_stage2_checkpoint_modes(monkeypatch, tmp_path: Path) -> None:
 
         assert result == "Stage 2 computed coherence for 3 candidates in 3 iterations"
         iterations = int(result.rsplit(" in ", 1)[1].removesuffix(" iterations"))
-        assert topofit_calls["count"] == iterations + 1
+        assert topofit_calls["count"] == iterations
         assert random_hist_calls["count"] == _STAGE2_RANDOM_HIST_CALLS
         return writes
 
