@@ -2119,7 +2119,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-135359-4008139-iter-2.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 6177dcd fix(stage2): preserve accepted checkpoint state
+- Commit: 4ff230b chore(progress): append US-002 run summary (includes prior 6177dcd)
 - Post-commit status: `clean`
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
