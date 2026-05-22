@@ -2206,10 +2206,14 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
     - Focused `PATCH_1` probe now regenerates consistently, but parity check still fails on `ph_grid/C_ps` values; this remains outside US-001 scope.
 ---
 ## [2026-05-22 00:25:58 UTC] - US-002: Correct final checkpoint source rule
+- Thread: 
+- Run: 20260521-221809-4058922 (iteration 3)
+- Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-221809-4058922-iter-3.log
+- Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-221809-4058922-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: none yet (pending commit)
-- Post-commit status: pending
+- Commit: 3c852b1 fix(stage2): apply signed final checkpoint replay
+- Post-commit status: clean
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
   - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
