@@ -2212,7 +2212,7 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
 - Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-221809-4058922-iter-3.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 3c852b1 fix(stage2): apply signed final checkpoint replay (followed by f13a7a6, 7989101, 0786f05, 240dd70)
+- Commit: 3c852b1 fix(stage2): apply signed final checkpoint replay (followed by f13a7a6, 7989101, 0786f05, 240dd70, 91d1c37)
 - Post-commit status: clean
 - Verification:
   - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
