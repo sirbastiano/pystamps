@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-22 00:27:21 | run=20260521-221809-4058922 | iter=3 | mode=build | story=US-002 | duration=4580s | status=success
 - 2026-05-21 23:10:58 | run=20260521-221809-4058922 | iter=2 | mode=build | story=US-002 | duration=769s | status=error
 - 2026-05-21 22:58:06 | run=20260521-221809-4058922 | iter=1 | mode=build | story=US-001 | duration=2396s | status=success
 - 2026-05-21 17:30:44 | run=20260521-135359-4008139 | iter=3 | mode=build | story=US-003 | duration=6335s | status=success
@@ -732,3 +733,7 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-22 00:26:35] US-002 progress metadata updated with final commit hash
 [2026-05-22 00:26:48] US-002 final progress entry updated with complete commit list
 [2026-05-22 00:27:06] US-002 progress entry final revision committed
+[2026-05-22 00:27:21] ITERATION 3 end (duration=4580s)
+[2026-05-22 00:27:25] ITERATION 4 start (mode=build story=US-003)
+[2026-05-22 00:27:37] START US-003: Prove all-patch Stage 2 parity
+[2026-05-22 01:06:06] US-003 verification executed; stage2_probe generated all four pm1 files; wildcard narrow_compare failed on PATCH_1 ph_grid and PATCH_3/4 C_ps; full pytest gates still pass

@@ -2239,3 +2239,36 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context
     - Fresh per-patch probe evidence was collected in `inputs_and_outputs/validation_runs/us002_evidence/*` and remains available for diffing checkpoint source selection.
 ---
+## [2026-05-22 01:06:17 UTC] - US-003: Prove all-patch Stage 2 parity
+Thread:
+Run: 20260521-221809-4058922 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-221809-4058922-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260521-221809-4058922-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: b67bb6e chore(log): record US-003 verification blocker status
+- Post-commit status: clean
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_probe.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe_patch1 --kernel-backend native --native-threads 8 --debug --checkpoint-mode always --patch PATCH_1 -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL (ph_grid max_abs=3.842844)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (checked=4, failures=[PATCH_1 ph_grid, PATCH_3 C_ps, PATCH_4 C_ps])
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+- Files changed:
+  - [.ralph/activity.log](.ralph/activity.log)
+  - [.ralph/errors.log](.ralph/errors.log)
+- What was implemented
+  - Re-ran US-003 acceptance commands on a clean run root for PATCH_1 and full manifest; stage2 manifests now regenerate all required artifacts but wildcard parity remains red.
+  - Confirmed Stage-2 `C_ps` parity is fixed for PATCH_1 and remains failing on other keys/payloads, with the current blocker being `PATCH_1 ph_grid` plus `PATCH_3/4 C_ps` in full compare.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - Running focused probe and compare in parallel can produce race with stale artifacts; compare should be sequential after a probe exits.
+    - This build still leaves Stage-2 state payload drift even after signed-checkpoint semantics from US-002.
+  - Gotchas encountered
+    - `narrow_compare` `checked=4` confirms full wildcard coverage is working; failures are real value mismatches.
+  - Useful context
+    - `PATCH_1/pm1.mat` `ph_grid` mismatch is largest blocker after US-002 changes; next step should inspect final `ph_weight`/`ph_grid` reconstruction in the stage-2 loop.
+---
