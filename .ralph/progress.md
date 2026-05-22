@@ -2205,3 +2205,33 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Useful context:
     - Focused `PATCH_1` probe now regenerates consistently, but parity check still fails on `ph_grid/C_ps` values; this remains outside US-001 scope.
 ---
+## [2026-05-22 00:25:58 UTC] - US-002: Correct final checkpoint source rule
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: none yet (pending commit)
+- Post-commit status: pending
+- Verification:
+  - Command: timeout 180 uv run python -c "print('uv-smoke-ok')" -> PASS
+  - Command: uv run pytest -q tests/test_stage2_ported.py tests/test_stage2_probe.py tests/test_verify.py -> PASS
+  - Command: uv run pytest -q tests/test_stage2_probe.py -> PASS
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe_patch1 --kernel-backend native --native-threads 8 --debug --checkpoint-mode always --patch PATCH_1 -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe_patch1 --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_1/pm1.mat' -> FAIL (ph_grid max_abs=3.84284)
+  - Command: uv run python scripts/stage2_patch1_probe.py --dataset inputs_and_outputs/InSAR_dataset_test_stage8diag --run-root inputs_and_outputs/validation_runs/stage2_manifest_probe --kernel-backend native --native-threads 8 --debug --checkpoint-mode always -> PASS
+  - Command: uv run python scripts/narrow_compare.py --run inputs_and_outputs/validation_runs/stage2_manifest_probe --golden inputs_and_outputs/InSAR_dataset_test_stage8diag --patterns 'PATCH_*/pm1.mat' -> FAIL (ph_grid/C_ps mismatches)
+  - Command: TMPDIR="$PWD/.tmp_pytest" uv run pytest -q -> PASS
+- Files changed:
+  - pystamps/pipeline/ported.py
+  - tests/test_stage2_ported.py
+  - .ralph/activity.log
+  - .ralph/errors.log
+- What was implemented
+  - Added signed final-checkpoint selection: checkpoint source remains previous accepted payload when stopping on negative convergence, while preserving current `i_loop` value and still keeping max-iteration replay behavior.
+  - Added focused Stage-2 unit tests to assert positive convergence uses current stopping state and negative convergence replays previous accepted state.
+  - Captured fresh per-patch evidence (PATCH_1..PATCH_4) showing positive convergence for PATCH_1/PATCH_3 and negative for PATCH_2/PATCH_4 under native checkpoint replay logic.
+- **Learnings for future iterations:**
+  - Patterns discovered
+    - For negative-convergence cutoff, `pm1.mat` matches prior iteration payload while `i_loop` remains the stopping iteration value.
+    - `narrow_compare` remains red on Stage 2 parity (`ph_grid`/`C_ps`) so US-003 cannot proceed yet.
+  - Useful context
+    - Fresh per-patch probe evidence was collected in `inputs_and_outputs/validation_runs/us002_evidence/*` and remains available for diffing checkpoint source selection.
+---

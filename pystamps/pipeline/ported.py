@@ -4459,6 +4459,7 @@ def stage2_estimate_gamma(
         last_gamma_change_change = float(gamma_change_change)
         should_stop = abs(gamma_change_change) < gamma_change_convergence or i_loop >= gamma_max_iterations
         max_iterations_hit = i_loop >= gamma_max_iterations
+        negative_convergence_hit = (not max_iterations_hit) and (gamma_change_change < 0)
 
         weight_dt = 0.0
         if not should_stop:
@@ -4531,7 +4532,9 @@ def stage2_estimate_gamma(
             final=should_stop,
         ):
             checkpoint_t0 = time.perf_counter()
-            if should_stop and max_iterations_hit and last_accepted_payload is not None:
+            if should_stop and last_accepted_payload is not None and (
+                max_iterations_hit or negative_convergence_hit
+            ):
                 checkpoint_payload = dict(last_accepted_payload)
                 checkpoint_payload["i_loop"] = np.asarray(float(i_loop), dtype=np.float64)
             else:

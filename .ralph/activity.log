@@ -1,6 +1,8 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-21 23:10:58 | run=20260521-221809-4058922 | iter=2 | mode=build | story=US-002 | duration=769s | status=error
+- 2026-05-21 22:58:06 | run=20260521-221809-4058922 | iter=1 | mode=build | story=US-001 | duration=2396s | status=success
 - 2026-05-21 17:30:44 | run=20260521-135359-4008139 | iter=3 | mode=build | story=US-003 | duration=6335s | status=success
 - 2026-05-21 15:45:07 | run=20260521-135359-4008139 | iter=2 | mode=build | story=US-002 | duration=4389s | status=success
 - 2026-05-21 14:31:52 | run=20260521-135359-4008139 | iter=1 | mode=build | story=US-001 | duration=2248s | status=success
@@ -715,3 +717,14 @@ $(date -u '+%Y-%m-%d %H:%M:%S') Start US-005 execution commands: preparing to ru
 [2026-05-21 22:18:34] US-001 code changes applied for hardlink fallback cleanup and added focused test
 [2026-05-21 22:30:04] US-001 fixed run_root pre-cleanup before hardlink copy
 [2026-05-21 22:57:59] US-001 progress log updated with verification matrix and commit/hash
+[2026-05-21 22:58:05] ITERATION 1 end (duration=2396s)
+[2026-05-21 22:58:10] ITERATION 2 start (mode=build story=US-002)
+[2026-05-21 22:58:23] Start US-002 final checkpoint source rule
+[2026-05-21 22:58:57] US-002 edits applied: added signed convergence checkpoint rule and new focused tests
+[2026-05-21 23:01:37] US-002 focused probe tests now pass for signed final checkpoint behavior
+[2026-05-21 23:10:57] ITERATION 2 end (duration=769s)
+[2026-05-21 23:11:01] ITERATION 3 start (mode=build story=US-002)
+[2026-05-21 23:11:11] Started US-002 final checkpoint rule work
+[2026-05-21 23:57:47] Initial code inspection and evidence collection complete for US-002; ready for required command verification
+[2026-05-22 00:25:51] US-002 verification executed: smoke, pytest gate set, patch probes, narrow_compare checks, full pytest
+[2026-05-22 00:26:02] US-002 progress entry appended to .ralph/progress.md
