@@ -3,26 +3,26 @@
   <desc id="desc">A capability map showing the main parts of pySTAMPS: interface, execution, verification, and supporting modules.</desc>
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f4f8fb" />
-      <stop offset="100%" stop-color="#e7eff8" />
+      <stop offset="0%" stop-color="#f2f8f5" />
+      <stop offset="100%" stop-color="#e7f3ef" />
     </linearGradient>
     <linearGradient id="hero" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#17324a" />
-      <stop offset="100%" stop-color="#244f79" />
+      <stop offset="0%" stop-color="#10221e" />
+      <stop offset="100%" stop-color="#0f766e" />
     </linearGradient>
     <style>
-      .frame { fill: url(#bg); stroke: #c6d7e8; stroke-width: 1.2; rx: 28; }
+      .frame { fill: url(#bg); stroke: #c6dad3; stroke-width: 1.2; rx: 28; }
       .core { fill: url(#hero); rx: 26; }
-      .cardA { fill: #ffffff; stroke: #bfd0e4; stroke-width: 1.3; rx: 20; }
-      .cardB { fill: #f7fbff; stroke: #bfd0e4; stroke-width: 1.3; rx: 20; }
-      .title { fill: #0f2740; font: 700 34px Arial, Helvetica, sans-serif; }
-      .sub { fill: #4b637b; font: 500 16px Arial, Helvetica, sans-serif; }
+      .cardA { fill: #ffffff; stroke: #bfd8d0; stroke-width: 1.3; rx: 20; }
+      .cardB { fill: #f7fbf9; stroke: #bfd8d0; stroke-width: 1.3; rx: 20; }
+      .title { fill: #10221e; font: 700 34px Arial, Helvetica, sans-serif; }
+      .sub { fill: #53635f; font: 500 16px Arial, Helvetica, sans-serif; }
       .core-title { fill: #f5fbff; font: 700 28px Arial, Helvetica, sans-serif; }
       .core-copy { fill: #d5e7f8; font: 500 15px Arial, Helvetica, sans-serif; }
-      .label { fill: #102742; font: 700 20px Arial, Helvetica, sans-serif; }
-      .copy { fill: #526a83; font: 500 14px Arial, Helvetica, sans-serif; }
-      .mini { fill: #6e869f; font: 600 12px Arial, Helvetica, sans-serif; letter-spacing: 0.08em; }
-      .line { stroke: #8faed0; stroke-width: 3; fill: none; }
+      .label { fill: #10221e; font: 700 20px Arial, Helvetica, sans-serif; }
+      .copy { fill: #53635f; font: 500 14px Arial, Helvetica, sans-serif; }
+      .mini { fill: #0f766e; font: 600 12px Arial, Helvetica, sans-serif; letter-spacing: 0.08em; }
+      .line { stroke: #8cbfb3; stroke-width: 3; fill: none; }
     </style>
   </defs>
 

@@ -57,7 +57,8 @@
       const pre = code.parentElement;
       if (pre.dataset.copyBound) return;
       pre.dataset.copyBound = '1';
-      const btn = document.createElement('button');
+      const existing = pre.querySelector('.copy-btn');
+      const btn = existing || document.createElement('button');
       btn.type = 'button';
       btn.className = 'copy-btn';
       btn.textContent = 'Copy';
@@ -72,7 +73,7 @@
           setTimeout(() => (btn.textContent = 'Copy'), 900);
         }
       });
-      pre.appendChild(btn);
+      if (!existing) pre.appendChild(btn);
     });
   };
 
@@ -132,6 +133,11 @@
     wrapCode();
     initSidebarToggle();
     markActive();
+
+    document.querySelectorAll('.hero, .card, .diagram-card, .action-card').forEach((el, index) => {
+      el.classList.add('reveal-ready');
+      el.style.animationDelay = `${Math.min(index * 45, 260)}ms`;
+    });
 
     document.querySelectorAll('.diagram-zoom-slider').forEach((slider) => {
       const target = document.querySelector(slider.dataset.diagramZoom);
