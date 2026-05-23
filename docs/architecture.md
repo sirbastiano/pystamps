@@ -15,7 +15,10 @@ For the full teaching guide, read [pipeline_science_guide.md](pipeline_science_g
 | Scientific stages | `pystamps.pipeline.ported` | Implement StaMPS-style stage behavior in Python |
 | Kernels | `pystamps.kernels` | Dispatch hot numerical kernels to Python, native Rust/CPU, or CUDA providers |
 | Runtime execution | `pystamps.runtime` | Provide hybrid thread/process execution primitives |
-| Native Rust core | `crates/pystamps-core` | Mirror dataset discovery and artifact-driven stage planning for native execution surfaces |
+| Native Rust core | `crates/pystamps-core` | Mirror dataset discovery, own native execution planning, and expose the native CLI |
+| MAT artifact I/O | `crates/pystamps-mat` | Write MATLAB v5 artifacts from Rust-owned stage code |
+| Native stage registry | `crates/pystamps-stages` | Track stage-scope ownership and parity certification status |
+| Parity harness types | `crates/pystamps-parity` | Share comparison result records between future Rust/Python parity runners |
 | HTML frontend | `crates/pystamps-web` | Serve the local Rust execution console and launch pipeline runs |
 | Verification | `pystamps.verify`, `scripts/validate_audit.py` | Compare run outputs against golden datasets and audit manifests |
 
@@ -99,7 +102,21 @@ It serves `http://127.0.0.1:8787`. Dry-run planning uses `pystamps-core` directl
 - Rust driver coverage: the selected stage chain can be planned or launched from Rust.
 - Full native stage coverage: every selected stage/scope has Rust-owned stage semantics.
 
-The full native verification gate intentionally fails until stages 1 through 8, including the stage-5 merged step, are ported beyond the current kernel acceleration layer.
+Inspect current native coverage from the Rust CLI:
+
+```bash
+cargo run -p pystamps-core --bin pystamps-native -- coverage
+```
+
+Stage execution is also routed through the Rust CLI. The canonical raw single-master Stage 1 path is scaffolded for direct execution:
+
+```bash
+cargo run -p pystamps-core --bin pystamps-native -- stage 1 --patch DATASET/PATCH_1
+```
+
+That path writes MAT v5 artifacts directly from Rust for `ps1.mat`, `ph1.mat`, `bp1.mat`, `psver.mat`, and optional `da1.mat` / `hgt1.mat`. It remains marked `native_stage=false` in the coverage matrix until the Stage 1 parity story certifies it.
+
+The full native verification gate intentionally fails until stages 1 through 8, including the stage-5 merged step, are parity-certified beyond the current kernel acceleration layer.
 
 The running web server exposes the current coverage matrix at `GET /api/native-coverage`.
 

@@ -1,0 +1,10 @@
+# Activity Log
+
+## Run Summary
+
+## Events
+
+[2026-05-23 23:39:55] ITERATION 1 start (mode=build story=US-001)
+[2026-05-23 23:45:00] Start work on US-001 scaffold native Rust project
+[2026-05-23 23:55:00] Added Rust workspace scaffold crates and native CLI coverage/stage subcommands
+[2026-05-24 00:02:00] Verification passed: cargo test --workspace and accelerated kernel pytest gate

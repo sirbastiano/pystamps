@@ -1,0 +1,101 @@
+use pystamps_core::native_stage1::run_stage1_native;
+use pystamps_core::processing_chain_coverage;
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    match run(std::env::args().skip(1).collect()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("error: {err}");
+            usage();
+            ExitCode::from(2)
+        }
+    }
+}
+
+fn run(args: Vec<String>) -> Result<(), String> {
+    let Some((command, rest)) = args.split_first() else {
+        return Err("missing subcommand".to_string());
+    };
+    match command.as_str() {
+        "coverage" => {
+            let (start_step, end_step) = parse_coverage_args(rest)?;
+            let coverage = processing_chain_coverage(start_step, end_step).map_err(|err| err.to_string())?;
+            let json = serde_json::to_string_pretty(&coverage).map_err(|err| err.to_string())?;
+            println!("{json}");
+            Ok(())
+        }
+        "stage" => run_stage(rest),
+        "stage1" => {
+            let patch = parse_patch_arg(rest)?;
+            let details = run_stage1_native(patch).map_err(|err| err.to_string())?;
+            println!("{details}");
+            Ok(())
+        }
+        _ => Err(format!("unknown subcommand '{command}'")),
+    }
+}
+
+fn run_stage(args: &[String]) -> Result<(), String> {
+    let Some((stage, rest)) = args.split_first() else {
+        return Err("expected stage number".to_string());
+    };
+    let stage = stage
+        .parse::<u8>()
+        .map_err(|err| format!("invalid stage number '{stage}': {err}"))?;
+    if stage != 1 {
+        return Err(format!("stage {stage} is not native-executable yet"));
+    }
+
+    let patch = parse_patch_arg(rest)?;
+    let details = run_stage1_native(patch).map_err(|err| err.to_string())?;
+    println!("{details}");
+    Ok(())
+}
+
+fn parse_coverage_args(args: &[String]) -> Result<(u8, u8), String> {
+    let mut start_step = 1;
+    let mut end_step = 8;
+    let mut ix = 0;
+    while ix < args.len() {
+        match args[ix].as_str() {
+            "--start-step" => {
+                start_step = parse_step_value(args, ix, "--start-step")?;
+                ix += 2;
+            }
+            "--end-step" => {
+                end_step = parse_step_value(args, ix, "--end-step")?;
+                ix += 2;
+            }
+            other => return Err(format!("unexpected coverage argument '{other}'")),
+        }
+    }
+    Ok((start_step, end_step))
+}
+
+fn parse_step_value(args: &[String], ix: usize, name: &str) -> Result<u8, String> {
+    let value = args
+        .get(ix + 1)
+        .ok_or_else(|| format!("{name} requires a value"))?;
+    value
+        .parse::<u8>()
+        .map_err(|err| format!("invalid {name} value '{value}': {err}"))
+}
+
+fn parse_patch_arg(args: &[String]) -> Result<PathBuf, String> {
+    if args.len() == 2 && args[0] == "--patch" {
+        Ok(PathBuf::from(&args[1]))
+    } else {
+        Err("expected --patch PATH".to_string())
+    }
+}
+
+fn usage() {
+    eprintln!(
+        "Usage:
+  pystamps-native coverage [--start-step N] [--end-step N]
+  pystamps-native stage 1 --patch PATH
+  pystamps-native stage1 --patch PATH"
+    );
+}

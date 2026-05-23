@@ -82,6 +82,18 @@ make web
 
 Then open `http://127.0.0.1:8787`. Dry runs are planned in the native Rust core. Full runs are launched from the Rust web process through the existing `pystamps` CLI so artifact semantics and parity behavior stay aligned with the command-line runtime.
 
+Inspect the native Rust coverage matrix:
+
+```bash
+cargo run -p pystamps-core --bin pystamps-native -- coverage
+```
+
+The native stage execution entrypoint is scaffolded for direct stage runs. The canonical raw Stage 1 patch path can be exercised directly, but it is not reported as full native coverage until the parity story certifies it:
+
+```bash
+cargo run -p pystamps-core --bin pystamps-native -- stage 1 --patch "$DATASET_COPY/PATCH_1"
+```
+
 ## Verify a run
 
 ```bash

@@ -8,6 +8,9 @@ publish = false
 members = [
     ".",
     "crates/pystamps-core",
+    "crates/pystamps-mat",
+    "crates/pystamps-parity",
+    "crates/pystamps-stages",
     "crates/pystamps-web",
 ]
 resolver = "2"

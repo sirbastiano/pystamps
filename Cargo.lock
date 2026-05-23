@@ -621,9 +621,34 @@ dependencies = [
 name = "pystamps-core"
 version = "0.1.0"
 dependencies = [
+ "pystamps-mat",
+ "pystamps-parity",
+ "pystamps-stages",
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "pystamps-mat"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
+name = "pystamps-parity"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "pystamps-stages"
+version = "0.1.0"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

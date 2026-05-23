@@ -6,6 +6,9 @@ use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
+pub mod mat_v5;
+pub mod native_stage1;
+
 #[derive(Debug, Error)]
 pub enum CoreError {
     #[error("dataset does not exist: {0}")]
@@ -31,6 +34,15 @@ pub enum CoreError {
         program: String,
         source: std::io::Error,
     },
+    #[error("stage {stage} native implementation error: {message}")]
+    NativeStage { stage: u8, message: String },
+    #[error("unable to access {path}: {source}")]
+    FileIo {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error(transparent)]
+    Mat(#[from] pystamps_mat::MatError),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -362,15 +374,22 @@ fn selected_stages(start_step: u8, end_step: u8) -> impl Iterator<Item = StageDe
 }
 
 fn stage_coverage(stage_id: u8, scope: StageScope, target: &'static str) -> StageCoverage {
+    let scope_name = scope.to_string();
+    let native_stage = pystamps_stages::native_stage_is_parity_certified(stage_id, &scope_name);
     StageCoverage {
         stage: stage_id,
         scope,
         target: target.to_string(),
         rust_driver: true,
-        native_stage: false,
+        native_stage,
         native_kernels: native_kernel_acceleration(stage_id, scope),
-        details: "Rust currently drives this stage through the CLI bridge; full stage semantics are not native Rust yet.",
+        details: stage_coverage_details(stage_id, scope),
     }
+}
+
+fn stage_coverage_details(stage_id: u8, scope: StageScope) -> &'static str {
+    let scope_name = scope.to_string();
+    pystamps_stages::native_stage_details(stage_id, &scope_name)
 }
 
 fn native_kernel_acceleration(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
@@ -627,6 +646,7 @@ mod tests {
         let message = err.to_string();
 
         assert!(message.contains("stage 1 patch"));
+        assert!(message.contains("stage 2 patch"));
         assert!(message.contains("stage 8 merged"));
     }
 
