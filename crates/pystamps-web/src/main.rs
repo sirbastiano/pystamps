@@ -3,16 +3,16 @@ use axum::extract::{Form, Path, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
-use axum::Router;
-use pystamps_core::{plan_pipeline, RunRequest, StageResult};
+use axum::{Json, Router};
+use pystamps_core::{
+    execute_pipeline_cli_bridge, plan_pipeline, processing_chain_coverage, CliBridgeOptions, RunRequest,
+    RuntimeOptions, StageCoverage, StageResult,
+};
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::process::Stdio;
 use std::sync::Arc;
-use tokio::process::Command;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -169,6 +169,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/", get(index))
         .route("/runs", post(start_run))
         .route("/runs/{id}", get(show_run))
+        .route("/api/native-coverage", get(native_coverage))
         .with_state(state);
 
     let addr: SocketAddr = "127.0.0.1:8787".parse()?;
@@ -227,6 +228,12 @@ async fn start_run(
         .into_response())
 }
 
+async fn native_coverage() -> Result<Json<Vec<StageCoverage>>, AppError> {
+    processing_chain_coverage(1, 8)
+        .map(Json)
+        .map_err(|err| AppError::internal(err.to_string()))
+}
+
 async fn run_job(state: AppState, id: String) {
     let request = {
         let mut jobs = state.jobs.write().await;
@@ -261,61 +268,45 @@ async fn run_job(state: AppState, id: String) {
         return;
     }
 
-    let config_path = std::env::temp_dir().join(format!("pystamps-web-{id}.yaml"));
-    let config = format!(
-        "runtime:\n  backend: {}\n  stage2_kernel_backend: native\n  io_workers: {}\n  cpu_workers: {}\n",
-        request.backend, request.io_workers, request.cpu_workers
-    );
-    if let Err(err) = fs::write(&config_path, config) {
-        let mut jobs = state.jobs.write().await;
-        if let Some(job) = jobs.get_mut(&id) {
-            job.stderr = format!("failed to write run config: {err}");
-            job.state = JobState::Failed;
-        }
-        return;
-    }
-
-    let output = Command::new("uv")
-        .arg("run")
-        .arg("pystamps")
-        .arg("--config")
-        .arg(&config_path)
-        .arg("run")
-        .arg("--dataset")
-        .arg(&request.dataset)
-        .arg("--start-step")
-        .arg(request.start_step.to_string())
-        .arg("--end-step")
-        .arg(request.end_step.to_string())
-        .arg("--io-workers")
-        .arg(request.io_workers.to_string())
-        .arg("--cpu-workers")
-        .arg(request.cpu_workers.to_string())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await;
-    let _ = fs::remove_file(&config_path);
+    let core_request = RunRequest {
+        dataset_root: PathBuf::from(&request.dataset),
+        start_step: request.start_step,
+        end_step: request.end_step,
+        dry_run: false,
+    };
+    let options = CliBridgeOptions {
+        runtime: RuntimeOptions {
+            backend: request.backend.clone(),
+            stage2_kernel_backend: "native".to_string(),
+            io_workers: request.io_workers,
+            cpu_workers: request.cpu_workers,
+        },
+        ..CliBridgeOptions::default()
+    };
+    let execution =
+        tokio::task::spawn_blocking(move || execute_pipeline_cli_bridge(&core_request, &options)).await;
 
     let mut jobs = state.jobs.write().await;
     let Some(job) = jobs.get_mut(&id) else {
         return;
     };
-    match output {
-        Ok(output) => {
-            job.stdout = String::from_utf8_lossy(&output.stdout).to_string();
-            job.stderr = String::from_utf8_lossy(&output.stderr).to_string();
-            if let Ok(results) = serde_json::from_str::<Vec<StageResult>>(&job.stdout) {
-                job.results = results;
-            }
-            job.state = if output.status.success() {
+    match execution {
+        Ok(Ok(execution)) => {
+            job.stdout = execution.stdout;
+            job.stderr = execution.stderr;
+            job.results = execution.results;
+            job.state = if execution.exit_code == Some(0) {
                 JobState::Completed
             } else {
                 JobState::Failed
             };
         }
+        Ok(Err(err)) => {
+            job.stderr = err.to_string();
+            job.state = JobState::Failed;
+        }
         Err(err) => {
-            job.stderr = format!("failed to start pystamps CLI: {err}");
+            job.stderr = format!("execution task failed: {err}");
             job.state = JobState::Failed;
         }
     }

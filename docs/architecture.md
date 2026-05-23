@@ -92,7 +92,16 @@ The local Rust web console starts with:
 make web
 ```
 
-It serves `http://127.0.0.1:8787`. Dry-run planning uses `pystamps-core` directly. Full execution currently shells into the existing CLI from the Rust server to preserve the Python runtime contract while native stage execution is expanded.
+It serves `http://127.0.0.1:8787`. Dry-run planning uses `pystamps-core` directly. Full execution is also submitted through `pystamps-core`; the core execution driver currently uses a CLI bridge to preserve the Python runtime contract while native stage execution is expanded.
+
+`pystamps-core` includes two separate verification concepts:
+
+- Rust driver coverage: the selected stage chain can be planned or launched from Rust.
+- Full native stage coverage: every selected stage/scope has Rust-owned stage semantics.
+
+The full native verification gate intentionally fails until stages 1 through 8, including the stage-5 merged step, are ported beyond the current kernel acceleration layer.
+
+The running web server exposes the current coverage matrix at `GET /api/native-coverage`.
 
 ## Config flow
 

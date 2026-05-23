@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -17,6 +19,18 @@ pub enum CoreError {
     },
     #[error("invalid stage range {start_step}..{end_step}; expected 1..8")]
     InvalidStageRange { start_step: u8, end_step: u8 },
+    #[error("full native Rust processing chain is incomplete: {0}")]
+    IncompleteNativeChain(String),
+    #[error("unable to write runtime config {path}: {source}")]
+    WriteRuntimeConfig {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    #[error("unable to start execution command '{program}': {source}")]
+    StartExecution {
+        program: String,
+        source: std::io::Error,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -27,6 +41,48 @@ pub struct RunRequest {
     pub dry_run: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RuntimeOptions {
+    pub backend: String,
+    pub stage2_kernel_backend: String,
+    pub io_workers: u16,
+    pub cpu_workers: u16,
+}
+
+impl Default for RuntimeOptions {
+    fn default() -> Self {
+        Self {
+            backend: "native".to_string(),
+            stage2_kernel_backend: "native".to_string(),
+            io_workers: 8,
+            cpu_workers: 0,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CliBridgeOptions {
+    pub command: Vec<String>,
+    pub runtime: RuntimeOptions,
+}
+
+impl Default for CliBridgeOptions {
+    fn default() -> Self {
+        Self {
+            command: vec!["uv".to_string(), "run".to_string(), "pystamps".to_string()],
+            runtime: RuntimeOptions::default(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PipelineExecution {
+    pub results: Vec<StageResult>,
+    pub stdout: String,
+    pub stderr: String,
+    pub exit_code: Option<i32>,
+}
+
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct StageResult {
     pub stage: u8,
@@ -35,6 +91,17 @@ pub struct StageResult {
     pub status: StageStatus,
     pub details: String,
     pub duration_sec: Option<f64>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct StageCoverage {
+    pub stage: u8,
+    pub scope: StageScope,
+    pub target: String,
+    pub rust_driver: bool,
+    pub native_stage: bool,
+    pub native_kernels: &'static [&'static str],
+    pub details: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -217,6 +284,67 @@ pub fn plan_pipeline(request: &RunRequest) -> Result<Vec<StageResult>, CoreError
     Ok(results)
 }
 
+pub fn execute_pipeline_cli_bridge(
+    request: &RunRequest,
+    options: &CliBridgeOptions,
+) -> Result<PipelineExecution, CoreError> {
+    validate_stage_range(request.start_step, request.end_step)?;
+    let _dataset = discover_dataset(&request.dataset_root)?;
+
+    let config_path = temp_runtime_config_path();
+    fs::write(&config_path, runtime_config_text(&options.runtime)).map_err(|source| {
+        CoreError::WriteRuntimeConfig {
+            path: config_path.clone(),
+            source,
+        }
+    })?;
+
+    let output = run_cli_bridge_command(request, options, &config_path);
+    let _ = fs::remove_file(&config_path);
+    let output = output?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    let results = serde_json::from_str::<Vec<StageResult>>(&stdout).unwrap_or_default();
+
+    Ok(PipelineExecution {
+        results,
+        stdout,
+        stderr,
+        exit_code: output.status.code(),
+    })
+}
+
+pub fn processing_chain_coverage(start_step: u8, end_step: u8) -> Result<Vec<StageCoverage>, CoreError> {
+    validate_stage_range(start_step, end_step)?;
+    let mut coverage = Vec::new();
+    for stage in selected_stages(start_step, end_step) {
+        match stage.scope {
+            StageScope::Patch => {
+                coverage.push(stage_coverage(stage.stage_id, StageScope::Patch, "PATCH_*"));
+                if stage.stage_id == 5 {
+                    coverage.push(stage_coverage(5, StageScope::Merged, "dataset root"));
+                }
+            }
+            StageScope::Merged => coverage.push(stage_coverage(stage.stage_id, StageScope::Merged, "dataset root")),
+        }
+    }
+    Ok(coverage)
+}
+
+pub fn verify_full_native_processing_chain(start_step: u8, end_step: u8) -> Result<(), CoreError> {
+    let missing: Vec<String> = processing_chain_coverage(start_step, end_step)?
+        .into_iter()
+        .filter(|coverage| !coverage.native_stage)
+        .map(|coverage| format!("stage {} {} ({})", coverage.stage, coverage.scope, coverage.target))
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(CoreError::IncompleteNativeChain(missing.join(", ")))
+    }
+}
+
 fn validate_stage_range(start_step: u8, end_step: u8) -> Result<(), CoreError> {
     if start_step == 0 || end_step == 0 || start_step > end_step || end_step > 8 {
         return Err(CoreError::InvalidStageRange {
@@ -231,6 +359,85 @@ fn selected_stages(start_step: u8, end_step: u8) -> impl Iterator<Item = StageDe
     STAGE_DEFS
         .into_iter()
         .filter(move |stage| start_step <= stage.stage_id && stage.stage_id <= end_step)
+}
+
+fn stage_coverage(stage_id: u8, scope: StageScope, target: &'static str) -> StageCoverage {
+    StageCoverage {
+        stage: stage_id,
+        scope,
+        target: target.to_string(),
+        rust_driver: true,
+        native_stage: false,
+        native_kernels: native_kernel_acceleration(stage_id, scope),
+        details: "Rust currently drives this stage through the CLI bridge; full stage semantics are not native Rust yet.",
+    }
+}
+
+fn native_kernel_acceleration(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
+    match (stage_id, scope) {
+        (2, StageScope::Patch) => &[
+            "stage2_grid_accumulate",
+            "stage2_histogram",
+            "stage2_topofit",
+            "stage2_topofit_row_invariant",
+            "stage2_topofit_coh_row_invariant",
+        ],
+        (4, StageScope::Patch) => &["stage4_edge_stats"],
+        (7, StageScope::Merged) => &["stage7_scla"],
+        (8, StageScope::Merged) => &["stage8_edge_noise"],
+        _ => &[],
+    }
+}
+
+fn runtime_config_text(runtime: &RuntimeOptions) -> String {
+    format!(
+        "runtime:\n  backend: {}\n  stage2_kernel_backend: {}\n  io_workers: {}\n  cpu_workers: {}\n",
+        runtime.backend, runtime.stage2_kernel_backend, runtime.io_workers, runtime.cpu_workers
+    )
+}
+
+fn run_cli_bridge_command(
+    request: &RunRequest,
+    options: &CliBridgeOptions,
+    config_path: &Path,
+) -> Result<std::process::Output, CoreError> {
+    let Some((program, args)) = options.command.split_first() else {
+        return Err(CoreError::StartExecution {
+            program: "<empty>".to_string(),
+            source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "empty execution command"),
+        });
+    };
+    let mut command = Command::new(program);
+    command
+        .args(args)
+        .arg("--config")
+        .arg(config_path)
+        .arg("run")
+        .arg("--dataset")
+        .arg(&request.dataset_root)
+        .arg("--start-step")
+        .arg(request.start_step.to_string())
+        .arg("--end-step")
+        .arg(request.end_step.to_string())
+        .arg("--io-workers")
+        .arg(options.runtime.io_workers.to_string())
+        .arg("--cpu-workers")
+        .arg(options.runtime.cpu_workers.to_string());
+    if request.dry_run {
+        command.arg("--dry-run");
+    }
+    command.output().map_err(|source| CoreError::StartExecution {
+        program: program.clone(),
+        source,
+    })
+}
+
+fn temp_runtime_config_path() -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    std::env::temp_dir().join(format!("pystamps-core-runtime-{}-{nanos}.yaml", std::process::id()))
 }
 
 fn plan_single_scope(
@@ -389,6 +596,66 @@ mod tests {
         })
         .unwrap();
         assert_eq!(complete[0].status, StageStatus::SkippedExisting);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn coverage_spans_the_full_processing_chain() {
+        let coverage = processing_chain_coverage(1, 8).unwrap();
+        let stages: Vec<(u8, StageScope)> = coverage.iter().map(|row| (row.stage, row.scope)).collect();
+
+        assert_eq!(
+            stages,
+            vec![
+                (1, StageScope::Patch),
+                (2, StageScope::Patch),
+                (3, StageScope::Patch),
+                (4, StageScope::Patch),
+                (5, StageScope::Patch),
+                (5, StageScope::Merged),
+                (6, StageScope::Merged),
+                (7, StageScope::Merged),
+                (8, StageScope::Merged),
+            ]
+        );
+        assert!(coverage.iter().all(|row| row.rust_driver));
+    }
+
+    #[test]
+    fn full_native_chain_verification_fails_until_stage_ports_exist() {
+        let err = verify_full_native_processing_chain(1, 8).unwrap_err();
+        let message = err.to_string();
+
+        assert!(message.contains("stage 1 patch"));
+        assert!(message.contains("stage 8 merged"));
+    }
+
+    #[test]
+    fn cli_bridge_runs_the_selected_chain_and_parses_json_results() {
+        let root = temp_dataset("pystamps-core-cli-bridge");
+        fs::create_dir(root.join("PATCH_1")).unwrap();
+
+        let execution = execute_pipeline_cli_bridge(
+            &RunRequest {
+                dataset_root: root.clone(),
+                start_step: 1,
+                end_step: 1,
+                dry_run: false,
+            },
+            &CliBridgeOptions {
+                command: vec![
+                    "sh".to_string(),
+                    "-c".to_string(),
+                    "printf '[{\"stage\":1,\"scope\":\"patch\",\"target\":\"PATCH_1\",\"status\":\"completed\",\"details\":\"ok\",\"duration_sec\":0.1}]'".to_string(),
+                ],
+                runtime: RuntimeOptions::default(),
+            },
+        )
+        .unwrap();
+
+        assert_eq!(execution.exit_code, Some(0));
+        assert_eq!(execution.results.len(), 1);
+        assert_eq!(execution.results[0].status, StageStatus::Completed);
         fs::remove_dir_all(root).unwrap();
     }
 
