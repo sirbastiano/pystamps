@@ -15,6 +15,8 @@ For the full teaching guide, read [pipeline_science_guide.md](pipeline_science_g
 | Scientific stages | `pystamps.pipeline.ported` | Implement StaMPS-style stage behavior in Python |
 | Kernels | `pystamps.kernels` | Dispatch hot numerical kernels to Python, native Rust/CPU, or CUDA providers |
 | Runtime execution | `pystamps.runtime` | Provide hybrid thread/process execution primitives |
+| Native Rust core | `crates/pystamps-core` | Mirror dataset discovery and artifact-driven stage planning for native execution surfaces |
+| HTML frontend | `crates/pystamps-web` | Serve the local Rust execution console and launch pipeline runs |
 | Verification | `pystamps.verify`, `scripts/validate_audit.py` | Compare run outputs against golden datasets and audit manifests |
 
 ## Pipeline model
@@ -83,6 +85,14 @@ Inspect local availability with:
 ```bash
 uv run pystamps describe-backends
 ```
+
+The local Rust web console starts with:
+
+```bash
+make web
+```
+
+It serves `http://127.0.0.1:8787`. Dry-run planning uses `pystamps-core` directly. Full execution currently shells into the existing CLI from the Rust server to preserve the Python runtime contract while native stage execution is expanded.
 
 ## Config flow
 

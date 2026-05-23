@@ -4,8 +4,15 @@ AUDIT_OUTPUT = inputs_and_outputs/validation_runs/latest_audit.json
 VERIFY_RUN = inputs_and_outputs/RUN_FULL_GATE_1e10
 VERIFY_GOLDEN = inputs_and_outputs/InSAR_dataset_test
 BENCHMARK_DATASET = inputs_and_outputs/InSAR_dataset_test_stage8diag
+PYPI_PROJECT ?= pystamps-insar
+VERSION ?=
+DIST_DIR ?= dist
+RELEASE_DIST_DIR ?= /tmp/pystamps-insar-dist
+WHEELHOUSE ?= /tmp/pystamps-insar-wheelhouse
+TWINE_USERNAME ?= __token__
+TWINE_PASSWORD ?= $(UV_PUBLISH_TOKEN)
 
-.PHONY: setup test test-impl build twine-check audit verify benchmark parity-loop
+.PHONY: setup test test-impl build clean-dist require-version next-patch bump release-build repair-wheel release-check publish release release-patch audit verify benchmark parity-loop web
 
 setup:
 	uv sync
@@ -22,6 +29,55 @@ build:
 twine-check:
 	uv run --with twine python -m twine check dist/*
 
+clean-dist:
+	rm -rf $(RELEASE_DIST_DIR) $(WHEELHOUSE)
+
+require-version:
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Usage: make release VERSION=0.1.3"; \
+		exit 2; \
+	fi
+
+next-patch:
+	@python -c 'import json, urllib.request; v=json.load(urllib.request.urlopen("https://pypi.org/pypi/$(PYPI_PROJECT)/json", timeout=15))["info"]["version"].split("."); print(f"{v[0]}.{v[1]}.{int(v[2]) + 1}")'
+
+bump: require-version
+	@echo "Preparing release version $(VERSION)"
+	@git tag -a "v$(VERSION)" -m "Release $(VERSION)"
+
+release-build: clean-dist require-version
+	SETUPTOOLS_SCM_PRETEND_VERSION=$(VERSION) \
+		uv run --with build --with setuptools-scm --with setuptools-rust \
+		python -m build --sdist --wheel -o $(RELEASE_DIST_DIR)
+
+repair-wheel: release-build
+	mkdir -p $(WHEELHOUSE)
+	uv run --with auditwheel --with patchelf auditwheel repair \
+		$(RELEASE_DIST_DIR)/*-linux_x86_64.whl \
+		-w $(WHEELHOUSE)
+
+release-check: repair-wheel
+	uv run --with twine python -m twine check \
+		$(WHEELHOUSE)/*.whl \
+		$(RELEASE_DIST_DIR)/*.tar.gz
+
+publish: release-check
+	@if [ -z "$(TWINE_PASSWORD)" ]; then \
+		echo "Set UV_PUBLISH_TOKEN or TWINE_PASSWORD before publishing"; \
+		exit 2; \
+	fi
+	TWINE_USERNAME=$(TWINE_USERNAME) TWINE_PASSWORD=$(TWINE_PASSWORD) \
+		uv run --with twine python -m twine upload \
+		$(WHEELHOUSE)/*.whl \
+		$(RELEASE_DIST_DIR)/*.tar.gz
+
+release: publish
+
+release-patch:
+	@VERSION=$$($(MAKE) --no-print-directory next-patch); \
+	echo "Releasing $(PYPI_PROJECT) $$VERSION"; \
+	$(MAKE) release VERSION=$$VERSION
+
 audit:
 	$(PARITY_ENV) uv run python scripts/validate_audit.py \
 		--datasets $(AUDIT_DATASETS) \
@@ -35,6 +91,9 @@ benchmark:
 		--dataset $(BENCHMARK_DATASET) \
 		--start-step 1 --end-step 8 \
 		--repeat 3 --warmup 1
+
+web:
+	cargo run -p pystamps-web
 
 parity-loop:
 	$(PARITY_ENV) uv run python scripts/parity_bug_loop.py \

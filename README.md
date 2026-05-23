@@ -72,6 +72,16 @@ Use `--dry-run` to preview actions without writing:
 uv run pystamps run --dataset "$DATASET_COPY" --start-step 1 --end-step 8 --dry-run
 ```
 
+## Native web execution console
+
+Start the Rust HTML frontend:
+
+```bash
+make web
+```
+
+Then open `http://127.0.0.1:8787`. Dry runs are planned in the native Rust core. Full runs are launched from the Rust web process through the existing `pystamps` CLI so artifact semantics and parity behavior stay aligned with the command-line runtime.
+
 ## Verify a run
 
 ```bash

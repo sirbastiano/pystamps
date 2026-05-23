@@ -747,7 +747,7 @@ wheels = [
 ]
 
 [[package]]
-name = "pystamps"
+name = "pystamps-insar"
 source = { editable = "." }
 dependencies = [
     { name = "h5py" },

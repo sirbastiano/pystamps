@@ -4,6 +4,14 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[workspace]
+members = [
+    ".",
+    "crates/pystamps-core",
+    "crates/pystamps-web",
+]
+resolver = "2"
+
 [lib]
 name = "_stage2_native"
 crate-type = ["cdylib"]
