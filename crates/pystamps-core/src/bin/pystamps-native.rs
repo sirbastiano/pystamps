@@ -1,6 +1,6 @@
 use pystamps_core::native_stage1::run_stage1_native;
 use pystamps_core::native_stage3::run_stage3_native;
-use pystamps_core::native_stage5::run_stage5_patch_native;
+use pystamps_core::native_stage5::{run_stage5_merge_native, run_stage5_patch_native};
 use pystamps_core::processing_chain_coverage;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -47,6 +47,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
             println!("{details}");
             Ok(())
         }
+        "stage5-merge" => {
+            let dataset = parse_dataset_arg(rest)?;
+            let details = run_stage5_merge_native(dataset).map_err(|err| err.to_string())?;
+            println!("{details}");
+            Ok(())
+        }
         _ => Err(format!("unknown subcommand '{command}'")),
     }
 }
@@ -62,11 +68,13 @@ fn run_stage(args: &[String]) -> Result<(), String> {
         return Err(format!("stage {stage} is not native-executable yet"));
     }
 
-    let patch = parse_patch_arg(rest)?;
     let details = match stage {
-        1 => run_stage1_native(patch).map_err(|err| err.to_string())?,
-        3 => run_stage3_native(patch).map_err(|err| err.to_string())?,
-        5 => run_stage5_patch_native(patch).map_err(|err| err.to_string())?,
+        1 => run_stage1_native(parse_patch_arg(rest)?).map_err(|err| err.to_string())?,
+        3 => run_stage3_native(parse_patch_arg(rest)?).map_err(|err| err.to_string())?,
+        5 if rest.len() == 2 && rest[0] == "--dataset" => {
+            run_stage5_merge_native(parse_dataset_arg(rest)?).map_err(|err| err.to_string())?
+        }
+        5 => run_stage5_patch_native(parse_patch_arg(rest)?).map_err(|err| err.to_string())?,
         _ => unreachable!("stage was validated above"),
     };
     println!("{details}");
@@ -110,6 +118,14 @@ fn parse_patch_arg(args: &[String]) -> Result<PathBuf, String> {
     }
 }
 
+fn parse_dataset_arg(args: &[String]) -> Result<PathBuf, String> {
+    if args.len() == 2 && args[0] == "--dataset" {
+        Ok(PathBuf::from(&args[1]))
+    } else {
+        Err("expected --dataset PATH".to_string())
+    }
+}
+
 fn usage() {
     eprintln!(
         "Usage:
@@ -117,8 +133,10 @@ fn usage() {
   pystamps-native stage 1 --patch PATH
   pystamps-native stage 3 --patch PATH
   pystamps-native stage 5 --patch PATH
+  pystamps-native stage 5 --dataset PATH
   pystamps-native stage1 --patch PATH
   pystamps-native stage3 --patch PATH
-  pystamps-native stage5 --patch PATH"
+  pystamps-native stage5 --patch PATH
+  pystamps-native stage5-merge --dataset PATH"
     );
 }
