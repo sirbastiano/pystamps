@@ -1,4 +1,5 @@
 use pystamps_core::native_stage1::run_stage1_native;
+use pystamps_core::native_stage2::run_stage2_native;
 use pystamps_core::native_stage3::run_stage3_native;
 use pystamps_core::native_stage5::{run_stage5_merge_native, run_stage5_patch_native};
 use pystamps_core::native_stage7::run_stage7_native;
@@ -34,6 +35,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
         "stage1" => {
             let patch = parse_patch_arg(rest)?;
             let details = run_stage1_native(patch).map_err(|err| err.to_string())?;
+            println!("{details}");
+            Ok(())
+        }
+        "stage2" => {
+            let patch = parse_patch_arg(rest)?;
+            let details = run_stage2_native(patch).map_err(|err| err.to_string())?;
             println!("{details}");
             Ok(())
         }
@@ -78,12 +85,13 @@ fn run_stage(args: &[String]) -> Result<(), String> {
     let stage = stage
         .parse::<u8>()
         .map_err(|err| format!("invalid stage number '{stage}': {err}"))?;
-    if !matches!(stage, 1 | 3 | 5 | 7 | 8) {
+    if !matches!(stage, 1 | 2 | 3 | 5 | 7 | 8) {
         return Err(format!("stage {stage} is not native-executable yet"));
     }
 
     let details = match stage {
         1 => run_stage1_native(parse_patch_arg(rest)?).map_err(|err| err.to_string())?,
+        2 => run_stage2_native(parse_patch_arg(rest)?).map_err(|err| err.to_string())?,
         3 => run_stage3_native(parse_patch_arg(rest)?).map_err(|err| err.to_string())?,
         5 if rest.len() == 2 && rest[0] == "--dataset" => {
             run_stage5_merge_native(parse_dataset_arg(rest)?).map_err(|err| err.to_string())?
@@ -147,11 +155,13 @@ fn usage() {
         "Usage:
   pystamps-native coverage [--start-step N] [--end-step N]
   pystamps-native stage 1 --patch PATH
+  pystamps-native stage 2 --patch PATH
   pystamps-native stage 3 --patch PATH
   pystamps-native stage 5 --patch PATH
   pystamps-native stage 5 --dataset PATH
   pystamps-native stage 7 --dataset PATH
   pystamps-native stage1 --patch PATH
+  pystamps-native stage2 --patch PATH
   pystamps-native stage3 --patch PATH
   pystamps-native stage5 --patch PATH
   pystamps-native stage5-merge --dataset PATH

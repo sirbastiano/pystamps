@@ -50,10 +50,10 @@ const INVENTORY: [StageImplementation; 9] = [
     StageImplementation {
         stage: 2,
         scope: "patch",
-        crate_name: "pystamps-stages",
-        entrypoint: "planned_stage_port",
-        readiness: NativeReadiness::Planned,
-        details: "Stage 2 full native semantics are not implemented yet.",
+        crate_name: "pystamps-core",
+        entrypoint: "native_stage2::run_stage2_native",
+        readiness: NativeReadiness::ParityCertified,
+        details: "Stage 2 patch coherence estimation is native for MAT artifact loading, CLAP grid preparation/checkpoint writes, iterative weighting, topofit-compatible output variables, and synthetic parity coverage.",
     },
     StageImplementation {
         stage: 3,
@@ -143,6 +143,11 @@ mod tests {
     #[test]
     fn stage1_patch_is_parity_certified() {
         assert!(native_stage_is_parity_certified(1, "patch"));
+    }
+
+    #[test]
+    fn stage2_patch_is_parity_certified() {
+        assert!(native_stage_is_parity_certified(2, "patch"));
     }
 
     #[test]
