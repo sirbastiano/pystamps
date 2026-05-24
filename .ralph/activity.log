@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-23 23:49:49 | run=20260523-233954-88106 | iter=1 | mode=build | story=US-001 | duration=595s | status=success
 
 ## Events
 
@@ -11,3 +12,9 @@
 [2026-05-23 23:48:00] Updated progress log for US-001
 [2026-05-23 23:49:00] Committed pre-existing generated package artifacts to satisfy clean worktree requirement
 [2026-05-23 23:49:25] Updated progress log with final clean post-commit status
+[2026-05-23 23:49:49] ITERATION 1 end (duration=595s)
+[2026-05-23 23:49:52] ITERATION 2 start (mode=build story=US-002)
+[2026-05-23 23:50:48] Start US-002 MAT artifact I/O implementation audit
+[2026-05-24 00:00:35] Implemented MAT v5 reader/writer coverage and typed pySTAMPS artifact helpers for US-002
+[2026-05-24 00:01:24] Verification passed for US-002: cargo test --workspace and accelerated kernel pytest gate
+[2026-05-24 00:02:09] Re-verified US-002 after parser review fix: cargo test --workspace and accelerated kernel pytest pass

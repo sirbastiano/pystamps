@@ -1,5 +1,9 @@
 use crate::CoreError;
-use pystamps_mat::MatFile;
+use pystamps_mat::{
+    f32_matrix, f64_matrix, write_baseline_artifact, write_da_artifact, write_hgt_artifact,
+    write_phase_artifact, write_psver_artifact, Ps1Artifact, VAR_BPERP, VAR_DAY, VAR_IJ, VAR_LL0,
+    VAR_LONLAT, VAR_SORT_IX, VAR_XY,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -147,20 +151,14 @@ pub fn run_stage1_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         &sort_ix,
         ll0,
     )?;
-    let mut ph_mat = MatFile::new(patch_dir.join("ph1.mat"));
-    ph_mat.add_complex_f32_matrix("ph", n_ps, day_full.len(), ph_sorted)?;
-    ph_mat.write()?;
-    let mut psver = MatFile::new(patch_dir.join("psver.mat"));
-    psver.add_f64_matrix("psver", 1, 1, vec![1.0])?;
-    psver.write()?;
+    write_phase_artifact(patch_dir.join("ph1.mat"), n_ps, day_full.len(), ph_sorted)?;
+    write_psver_artifact(patch_dir.join("psver.mat"), 1.0)?;
 
     if patch_dir.join("pscands.1.da").exists() {
         let da = read_text_flat(&patch_dir.join("pscands.1.da"))?;
         if da.len() == n_ps {
             let sorted = sort_ix.iter().map(|&ix| da[ix]).collect::<Vec<_>>();
-            let mut da_mat = MatFile::new(patch_dir.join("da1.mat"));
-            da_mat.add_f64_matrix("D_A", 1, n_ps, sorted)?;
-            da_mat.write()?;
+            write_da_artifact(patch_dir.join("da1.mat"), sorted)?;
         }
     }
 
@@ -168,9 +166,7 @@ pub fn run_stage1_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         let hgt = read_binary_f32(&patch_dir.join("pscands.1.hgt"), BinaryKind::Generic)?;
         if hgt.len() == n_ps {
             let sorted = sort_ix.iter().map(|&ix| hgt[ix]).collect::<Vec<_>>();
-            let mut hgt_mat = MatFile::new(patch_dir.join("hgt1.mat"));
-            hgt_mat.add_f32_matrix("hgt", 1, n_ps, sorted)?;
-            hgt_mat.write()?;
+            write_hgt_artifact(patch_dir.join("hgt1.mat"), sorted)?;
         }
     }
 
@@ -183,9 +179,7 @@ pub fn run_stage1_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
     for _ in 0..n_ps {
         bperp_mat.extend_from_slice(&no_master_bperp);
     }
-    let mut bp_mat = MatFile::new(patch_dir.join("bp1.mat"));
-    bp_mat.add_f32_matrix("bperp_mat", n_ps, no_master_bperp.len(), bperp_mat)?;
-    bp_mat.write()?;
+    write_baseline_artifact(patch_dir.join("bp1.mat"), n_ps, no_master_bperp.len(), bperp_mat)?;
 
     Ok(format!("Stage 1 created ps1/ph1 for {n_ps} candidates"))
 }
@@ -204,27 +198,28 @@ fn write_ps1(
     sort_ix: &[usize],
     ll0: [f64; 2],
 ) -> Result<(), CoreError> {
-    let mut ps = MatFile::new(patch_dir.join("ps1.mat"));
-    ps.add_f64_matrix("ij", n_ps, ij_cols, ij_sorted.to_vec())?;
-    ps.add_f64_matrix("lonlat", n_ps, 2, lonlat_sorted.to_vec())?;
-    ps.add_f32_matrix("xy", n_ps, 3, xy_out.to_vec())?;
-    ps.add_f64_matrix("bperp", 1, bperp_full.len(), bperp_full.to_vec())?;
-    ps.add_f64_matrix("day", 1, day_full.len(), day_full.to_vec())?;
-    ps.add_f64_matrix("master_day", 1, 1, vec![master_day])?;
-    ps.add_f64_matrix("master_ix", 1, 1, vec![master_ix as f64])?;
-    ps.add_f64_matrix("n_ifg", 1, 1, vec![day_full.len() as f64])?;
-    ps.add_f64_matrix("n_image", 1, 1, vec![day_full.len() as f64])?;
-    ps.add_f64_matrix("n_ps", 1, 1, vec![n_ps as f64])?;
-    ps.add_f64_matrix(
-        "sort_ix",
-        1,
-        sort_ix.len(),
-        sort_ix.iter().map(|&ix| (ix + 1) as f64).collect(),
-    )?;
-    ps.add_f64_matrix("ll0", 1, 2, vec![ll0[0], ll0[1]])?;
-    ps.add_f64_matrix("mean_range", 1, 1, vec![DEFAULT_MEAN_RANGE])?;
-    ps.add_f64_matrix("mean_incidence", 1, 1, vec![DEFAULT_MEAN_INCIDENCE])?;
-    Ok(ps.write()?)
+    let ps = Ps1Artifact {
+        ij: f64_matrix(VAR_IJ, n_ps, ij_cols, ij_sorted.to_vec())?,
+        lonlat: f64_matrix(VAR_LONLAT, n_ps, 2, lonlat_sorted.to_vec())?,
+        xy: f32_matrix(VAR_XY, n_ps, 3, xy_out.to_vec())?,
+        bperp: f64_matrix(VAR_BPERP, 1, bperp_full.len(), bperp_full.to_vec())?,
+        day: f64_matrix(VAR_DAY, 1, day_full.len(), day_full.to_vec())?,
+        master_day,
+        master_ix: master_ix as f64,
+        n_ifg: day_full.len() as f64,
+        n_image: day_full.len() as f64,
+        n_ps: n_ps as f64,
+        sort_ix: f64_matrix(
+            VAR_SORT_IX,
+            1,
+            sort_ix.len(),
+            sort_ix.iter().map(|&ix| (ix + 1) as f64).collect(),
+        )?,
+        ll0: f64_matrix(VAR_LL0, 1, 2, vec![ll0[0], ll0[1]])?,
+        mean_range: DEFAULT_MEAN_RANGE,
+        mean_incidence: DEFAULT_MEAN_INCIDENCE,
+    };
+    Ok(ps.write(patch_dir.join("ps1.mat"))?)
 }
 
 #[derive(Clone, Copy)]
