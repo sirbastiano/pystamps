@@ -1,4 +1,5 @@
 use pystamps_core::native_stage1::run_stage1_native;
+use pystamps_core::native_stage3::run_stage3_native;
 use pystamps_core::processing_chain_coverage;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -33,6 +34,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
             println!("{details}");
             Ok(())
         }
+        "stage3" => {
+            let patch = parse_patch_arg(rest)?;
+            let details = run_stage3_native(patch).map_err(|err| err.to_string())?;
+            println!("{details}");
+            Ok(())
+        }
         _ => Err(format!("unknown subcommand '{command}'")),
     }
 }
@@ -44,12 +51,16 @@ fn run_stage(args: &[String]) -> Result<(), String> {
     let stage = stage
         .parse::<u8>()
         .map_err(|err| format!("invalid stage number '{stage}': {err}"))?;
-    if stage != 1 {
+    if !matches!(stage, 1 | 3) {
         return Err(format!("stage {stage} is not native-executable yet"));
     }
 
     let patch = parse_patch_arg(rest)?;
-    let details = run_stage1_native(patch).map_err(|err| err.to_string())?;
+    let details = match stage {
+        1 => run_stage1_native(patch).map_err(|err| err.to_string())?,
+        3 => run_stage3_native(patch).map_err(|err| err.to_string())?,
+        _ => unreachable!("stage was validated above"),
+    };
     println!("{details}");
     Ok(())
 }
@@ -96,6 +107,8 @@ fn usage() {
         "Usage:
   pystamps-native coverage [--start-step N] [--end-step N]
   pystamps-native stage 1 --patch PATH
-  pystamps-native stage1 --patch PATH"
+  pystamps-native stage 3 --patch PATH
+  pystamps-native stage1 --patch PATH
+  pystamps-native stage3 --patch PATH"
     );
 }

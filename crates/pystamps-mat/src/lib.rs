@@ -16,6 +16,9 @@ const MI_INT64: u32 = 12;
 const MI_UINT64: u32 = 13;
 const MI_MATRIX: u32 = 14;
 const MI_COMPRESSED: u32 = 15;
+const MI_UTF8: u32 = 16;
+const MI_UTF16: u32 = 17;
+const MI_UTF32: u32 = 18;
 
 const MX_CHAR_CLASS: u32 = 4;
 const MX_SPARSE_CLASS: u32 = 5;
@@ -887,7 +890,7 @@ fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatErr
     let flag_word = endian.read_u32(&flags.data[..4]);
     let class = flag_word & 0xff;
     let is_complex = (flag_word & MX_COMPLEX_FLAG) != 0;
-    let is_logical = (flag_word & MX_LOGICAL_FLAG) != 0;
+    let _is_logical = (flag_word & MX_LOGICAL_FLAG) != 0;
 
     let dims_element = read_element(bytes, &mut offset, endian).map_err(|message| MatError::MalformedVariable {
         name: "<unknown>".to_string(),
@@ -915,18 +918,24 @@ fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatErr
         "<unknown>".to_string()
     };
 
-    if dims.len() != 2 || dims.iter().any(|&dim| dim < 0) {
+    if dims.len() < 2 || dims.iter().any(|&dim| dim < 0) {
         return Err(MatError::MalformedDimensions { name, dims });
     }
     let rows = dims[0] as usize;
-    let cols = dims[1] as usize;
+    let mut cols = 1_usize;
+    for dim in &dims[1..] {
+        cols = cols.checked_mul(*dim as usize).ok_or_else(|| MatError::MalformedVariable {
+            name: name.clone(),
+            message: "dimensions overflow usize".to_string(),
+        })?;
+    }
     let Some(expected_len) = rows.checked_mul(cols) else {
         return Err(MatError::MalformedVariable {
             name,
             message: "dimensions overflow usize".to_string(),
         });
     };
-    if is_logical || class == MX_CHAR_CLASS || class == MX_SPARSE_CLASS || !supported_class(class) {
+    if class == MX_SPARSE_CLASS || !supported_class(class) {
         return Err(MatError::UnsupportedClass { name, class });
     }
 
@@ -991,6 +1000,11 @@ fn decode_numeric_data(
             .map(|values| NumericData::I64(row_major_i64(values, rows, cols))),
         MI_UINT64 => decode_fixed_width(name, bytes, expected_len, 8, |chunk| NumericValue::U64(endian.read_u64(chunk)))
             .map(|values| NumericData::U64(row_major_u64(values, rows, cols))),
+        MI_UTF8 => decode_u8(name, bytes, expected_len).map(|values| NumericData::U8(row_major_u8(values, rows, cols))),
+        MI_UTF16 => decode_fixed_width(name, bytes, expected_len, 2, |chunk| NumericValue::U16(endian.read_u16(chunk)))
+            .map(|values| NumericData::U16(row_major_u16(values, rows, cols))),
+        MI_UTF32 => decode_fixed_width(name, bytes, expected_len, 4, |chunk| NumericValue::U32(endian.read_u32(chunk)))
+            .map(|values| NumericData::U32(row_major_u32(values, rows, cols))),
         other => Err(MatError::UnsupportedDataType {
             name: name.to_string(),
             data_type: other,
@@ -1098,6 +1112,7 @@ fn supported_class(class: u32) -> bool {
     matches!(
         class,
         MX_DOUBLE_CLASS
+            | MX_CHAR_CLASS
             | MX_SINGLE_CLASS
             | MX_INT8_CLASS
             | MX_UINT8_CLASS
@@ -1281,7 +1296,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unsupported_mat_class_without_panic() {
+    fn reads_matlab_char_arrays_as_numeric_codes() {
         let path = temp_path("pystamps-mat-char");
         let script = format!(
             "from scipy.io import savemat; savemat({path:?}, {{'small_baseline_flag': 'n'}})",
@@ -1293,8 +1308,40 @@ mod tests {
             .expect("uv run python should be available for pySTAMPS tests");
         assert!(status.success());
 
-        let err = MatData::read(&path).unwrap_err();
-        assert!(matches!(err, MatError::UnsupportedClass { .. }));
+        let data = MatData::read(&path).unwrap();
+        let flag = data.get_f64_matrix("small_baseline_flag").unwrap();
+        assert_eq!((flag.rows, flag.cols), (1, 1));
+        assert_eq!(flag.values, vec!['n' as u32 as f64]);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn reads_three_dimensional_payloads_as_flattened_matrices() {
+        let path = temp_path("pystamps-mat-3d");
+        let mut bytes = Vec::new();
+        write_header_to_vec(&mut bytes);
+
+        let mut body = Vec::new();
+        write_array_flags(&mut body, MX_DOUBLE_CLASS, false).unwrap();
+        write_tag(&mut body, MI_INT32, 12).unwrap();
+        body.write_all(&1i32.to_le_bytes()).unwrap();
+        body.write_all(&2i32.to_le_bytes()).unwrap();
+        body.write_all(&3i32.to_le_bytes()).unwrap();
+        pad_to_8(&mut body, 12).unwrap();
+        write_name(&mut body, "flat3").unwrap();
+        write_tag(&mut body, MI_DOUBLE, 48).unwrap();
+        for value in [1.0_f64, 2.0, 3.0, 4.0, 5.0, 6.0] {
+            body.write_all(&value.to_le_bytes()).unwrap();
+        }
+        write_tag(&mut bytes, MI_MATRIX, body.len()).unwrap();
+        bytes.extend_from_slice(&body);
+        pad_to_8(&mut bytes, body.len()).unwrap();
+        std::fs::write(&path, bytes).unwrap();
+
+        let data = MatData::read(&path).unwrap();
+        let flat3 = data.get_f64_matrix("flat3").unwrap();
+        assert_eq!((flat3.rows, flat3.cols), (1, 6));
+        assert_eq!(flat3.values, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
         std::fs::remove_file(path).unwrap();
     }
 
@@ -1306,11 +1353,9 @@ mod tests {
 
         let mut body = Vec::new();
         write_array_flags(&mut body, MX_DOUBLE_CLASS, false).unwrap();
-        write_tag(&mut body, MI_INT32, 12).unwrap();
-        body.write_all(&1i32.to_le_bytes()).unwrap();
-        body.write_all(&2i32.to_le_bytes()).unwrap();
-        body.write_all(&3i32.to_le_bytes()).unwrap();
-        pad_to_8(&mut body, 12).unwrap();
+        write_tag(&mut body, MI_INT32, 4).unwrap();
+        body.write_all(&6i32.to_le_bytes()).unwrap();
+        pad_to_8(&mut body, 4).unwrap();
         write_name(&mut body, "bad").unwrap();
         write_tag(&mut body, MI_DOUBLE, 48).unwrap();
         for value in [1.0_f64, 2.0, 3.0, 4.0, 5.0, 6.0] {
