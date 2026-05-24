@@ -292,3 +292,35 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - The current Python/native-kernel Stage 7 path still pays Python orchestration and MAT I/O overhead; the Rust dataset-level path avoids that and is faster on the synthetic parity fixture.
   - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
 ---
+## [2026-05-24 01:27:08 UTC] - US-009: Port Stage 8 orchestration
+Thread:
+Run: 20260523-233954-88106 (iteration 9)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-9.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-9.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: d8db06c feat(native-stage8): port stage 8 orchestration
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - crates/pystamps-core/src/native_stage8.rs
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-stages/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added Rust-native Stage 8 merged orchestration that reads `ps2.mat`, `phuw2.mat`, `scla2.mat`, `ifgstd2.mat`, `uw_grid.mat`, and `uw_interp.mat`.
+  - Wrote `mean_v.mat` and `uw_space_time.mat` from Rust with Python-compatible variable names and edge-noise outputs.
+  - Added a Rust edge-noise kernel path for `dph_noise` and `dph_space_uw`, plus synthetic parity/performance coverage against the current Python/native-kernel path.
+  - Added malformed edge-table orientation validation returning `CoreError::NativeStage { stage: 8, ... }` before any Stage 8 outputs are written.
+  - Wired `pystamps-native stage 8 --dataset PATH` / `stage8 --dataset PATH` and marked Stage 8 merged coverage parity-certified.
+- **Learnings for future iterations:**
+  - `uw_interp.edgs` is treated as an Nx3 table with 1-based node ids in columns 2 and 3; validating the shape before indexing prevents partial output writes.
+  - Stage 8 can reuse the same MAT reader and weighted least-squares patterns used by Stage 7 for the `mean_v.mat` payload.
+  - The Python/native-kernel Stage 8 fixture still pays Python process and MAT I/O overhead; the Rust orchestration path is faster on the synthetic edge graph fixture.
+  - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
+---
