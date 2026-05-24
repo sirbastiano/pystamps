@@ -106,10 +106,10 @@ const INVENTORY: [StageImplementation; 9] = [
     StageImplementation {
         stage: 8,
         scope: "merged",
-        crate_name: "pystamps-stages",
-        entrypoint: "planned_stage_port",
-        readiness: NativeReadiness::Planned,
-        details: "Stage 8 full native semantics are not implemented yet.",
+        crate_name: "pystamps-core",
+        entrypoint: "native_stage8::run_stage8_native",
+        readiness: NativeReadiness::ParityCertified,
+        details: "Stage 8 merged filtering orchestration is native for merged unwrap/SCLA artifact loading, Rust edge-noise kernel execution, and mean_v/uw_space_time writes with parity coverage.",
     },
 ];
 
@@ -159,5 +159,10 @@ mod tests {
     #[test]
     fn stage7_merged_is_parity_certified() {
         assert!(native_stage_is_parity_certified(7, "merged"));
+    }
+
+    #[test]
+    fn stage8_merged_is_parity_certified() {
+        assert!(native_stage_is_parity_certified(8, "merged"));
     }
 }

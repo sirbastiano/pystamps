@@ -11,6 +11,7 @@ pub mod native_stage1;
 pub mod native_stage3;
 pub mod native_stage5;
 pub mod native_stage7;
+pub mod native_stage8;
 
 #[derive(Debug, Error)]
 pub enum CoreError {
@@ -647,7 +648,7 @@ mod tests {
         let message = err.to_string();
 
         assert!(message.contains("stage 2 patch"));
-        assert!(message.contains("stage 8 merged"));
+        assert!(message.contains("stage 6 merged"));
     }
 
     #[test]
