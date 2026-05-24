@@ -120,3 +120,38 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - `rustup component add rustfmt` failed with a cross-device rename error after rollback; keep using `git diff --check` unless the toolchain is fixed outside the story run.
   - Activity/progress files must be committed after the implementation commit to avoid repeating the prior uncommitted-run failure.
 ---
+## [2026-05-24 00:29:18 UTC] - US-004: Complete native Stage 1
+Thread:
+Run: 20260523-233954-88106 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 55db6de feat(stage1): complete native Stage 1
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage1 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt --all` -> FAIL (rustfmt component is not installed for the active stable toolchain)
+- Files changed:
+  - crates/pystamps-core/src/native_stage1.rs
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-core/tests/native_cli.rs
+  - crates/pystamps-mat/src/lib.rs
+  - crates/pystamps-stages/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Completed native Stage 1 execution for canonical raw single-master inputs, reusable `ps1.mat`/`bp1.mat` metadata, and SNAP `diff0`/`rslc` metadata synthesis.
+  - Wrote Rust-owned `ps1.mat`, `ph1.mat`, `bp1.mat`, `psver.mat`, optional `da1.mat`/`hgt1.mat`, and optional `la1.mat` when a raw look-angle vector is present.
+  - Added a synthetic Stage 1 parity test that runs Python and Rust from identical raw fixtures and compares `ps1`, `ph1`, `bp1`, `psver`, `da1`, and `hgt1` variables within the shared tolerance contract.
+  - Added regression tests for reusable ps1 metadata, SNAP metadata synthesis, and the missing `pscands.1.ph` structured error path with no Stage 1 artifacts written.
+  - Marked Stage 1 patch coverage `native_stage=true` after the parity test passed and updated planner behavior so optional Stage 1 artifacts do not block existing-core-artifact detection.
+- **Learnings for future iterations:**
+  - The Python Stage 1 metadata precedence is text metadata first, reusable `ps1.mat`/`bp1.mat` second, and SNAP synthesis last.
+  - SNAP-derived `bperp_mat` must keep per-candidate columns until day sorting and candidate sorting are both applied.
+  - Stage 1 parity is sensitive to MAT shape conventions and xy quantization; compare generated artifacts rather than only checking file existence.
+  - `rustfmt` remains unavailable in this environment; `git diff --check` is the available formatting sanity gate.
+---
