@@ -74,10 +74,10 @@ const INVENTORY: [StageImplementation; 9] = [
     StageImplementation {
         stage: 5,
         scope: "patch",
-        crate_name: "pystamps-stages",
-        entrypoint: "planned_stage_port",
-        readiness: NativeReadiness::Planned,
-        details: "Stage 5 patch promotion full native semantics are not implemented yet.",
+        crate_name: "pystamps-core",
+        entrypoint: "native_stage5::run_stage5_patch_native",
+        readiness: NativeReadiness::ParityCertified,
+        details: "Stage 5 patch promotion is native for selected/weeded artifact promotion with parity coverage.",
     },
     StageImplementation {
         stage: 5,
@@ -148,5 +148,11 @@ mod tests {
     #[test]
     fn stage3_patch_is_parity_certified() {
         assert!(native_stage_is_parity_certified(3, "patch"));
+    }
+
+    #[test]
+    fn stage5_patch_is_parity_certified() {
+        assert!(native_stage_is_parity_certified(5, "patch"));
+        assert!(!native_stage_is_parity_certified(5, "merged"));
     }
 }

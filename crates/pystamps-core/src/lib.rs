@@ -9,6 +9,7 @@ use thiserror::Error;
 pub mod mat_v5;
 pub mod native_stage1;
 pub mod native_stage3;
+pub mod native_stage5;
 
 #[derive(Debug, Error)]
 pub enum CoreError {
