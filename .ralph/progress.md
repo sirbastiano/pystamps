@@ -258,3 +258,37 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Out-of-bounds selected rows must be validated before any row slicing so Rust returns `CoreError::NativeStage { stage: 5, ... }` instead of panicking.
   - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
 ---
+## [2026-05-24 01:16:17 UTC] - US-008: Port Stage 7 orchestration
+Thread:
+Run: 20260523-233954-88106 (iteration 8)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-8.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-8.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: c957f4f feat(stage7): add native scla orchestration
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage7 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt` -> FAIL (rustfmt component is not installed for the active stable toolchain)
+- Files changed:
+  - crates/pystamps-core/src/native_stage7.rs
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-stages/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added Rust-native Stage 7 orchestration that reads merged `ps2.mat`, `phuw2.mat`, `bp2.mat`, and `ifgstd2.mat`.
+  - Ported the SCLA least-squares flow into Rust, including baseline reconstruction, optional deramping, reference centering, dropped-IFG handling, SCLA coefficient solving, and MAT v5 output writing.
+  - Wrote `scla2.mat` and `scla_smooth2.mat` with Python-compatible `K_ps_uw`, `C_ps_uw`, `ph_scla`, `ph_ramp`, and `ifg_vcm` variables where applicable.
+  - Added synthetic Python/native-kernel versus Rust parity and performance coverage for `K_ps_uw`, `C_ps_uw`, `ph_scla`, and `ph_ramp`.
+  - Added the missing-`phuw2.mat` structured Stage 7 error test, CLI `stage 7 --dataset` / `stage7 --dataset` wiring, and native coverage readiness for Stage 7 merged scope.
+- **Learnings for future iterations:**
+  - Stage 7 single-master `bp2.bperp_mat` is stored without the master column and must be expanded before SCLA phase reconstruction.
+  - `scla_deramp='n'` writes an empty `ph_ramp`, matching the Python writer surface for fixtures that do not need ramp removal.
+  - The current Python/native-kernel Stage 7 path still pays Python orchestration and MAT I/O overhead; the Rust dataset-level path avoids that and is faster on the synthetic parity fixture.
+  - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
+---
