@@ -87,6 +87,39 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Unsupported char/logical/sparse payloads should remain structured errors until a stage story specifically needs them.
   - `rustfmt` is still unavailable in this environment; keep code manually formatted or install the component outside this run.
 ---
+## [2026-05-24 01:05:36 UTC] - US-007: Port Stage 5 merge
+Thread:
+Run: 20260523-233954-88106 (iteration 7)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-7.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-7.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 81266ba feat(stage5): port merged aggregation to rust
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage5 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt` -> FAIL (rustfmt component is not installed for the active stable toolchain)
+- Files changed:
+  - crates/pystamps-core/src/native_stage5.rs
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-stages/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added Rust-native Stage 5 merged aggregation that discovers `PATCH_*` directories with `patch.list` precedence and loads promoted `ps2.mat`, `ph2.mat`, `pm2.mat`, optional ancillary artifacts, `bp2.mat`, and `rc2.mat`.
+  - Wrote dataset-level `ps2.mat`, `ph2.mat`, `pm2.mat`, `bp2.mat`, `hgt2.mat`, `la2.mat`, `rc2.mat`, `psver.mat`, and `ifgstd2.mat` from Rust.
+  - Preserved Python merge ordering, duplicate `ij` key replacement behavior, lon/lat de-duplication by highest coherence, merged XY sorting/quantization, normalized/transposed merged `rc2`, and single-master ifg standard deviation semantics.
+  - Added a two-patch synthetic Python/Rust parity and performance test plus a structured missing-`ph2.mat` merged Stage 5 error test.
+  - Exposed `pystamps-native stage 5 --dataset PATH` / `stage5-merge --dataset PATH` and marked Stage 5 merged coverage parity-certified.
+- **Learnings for future iterations:**
+  - Stage 5 merge uses `patch.list` order when present; otherwise it falls back to lexical `PATCH_*` directory order.
+  - Overlap handling replaces earlier merged rows when later patches contain the same rounded `ij[:, 1:3]` key, then a second lon/lat duplicate pass keeps the highest-coherence row.
+  - Merged `ifgstd2.ifg_std` is computed from phase differences against `ph_patch` with the master column reinserted for single-master datasets.
+  - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
+---
 ## [2026-05-24 00:10:43 UTC] - US-003: Build parity harness
 Thread:
 Run: 20260523-233954-88106 (iteration 3)
