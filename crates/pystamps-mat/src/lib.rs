@@ -177,6 +177,7 @@ pub const VAR_PH: &str = "ph";
 pub const VAR_PSVER: &str = "psver";
 pub const VAR_D_A: &str = "D_A";
 pub const VAR_HGT: &str = "hgt";
+pub const VAR_LA: &str = "la";
 
 #[derive(Clone, Debug)]
 pub struct Ps1Artifact {
@@ -576,6 +577,12 @@ pub fn write_da_artifact(path: impl AsRef<Path>, values: Vec<f64>) -> Result<(),
 pub fn write_hgt_artifact(path: impl AsRef<Path>, values: Vec<f32>) -> Result<(), MatError> {
     let mut mat = MatFile::new(path);
     mat.add_f32_row_vector(VAR_HGT, values)?;
+    mat.write()
+}
+
+pub fn write_la_artifact(path: impl AsRef<Path>, values: Vec<f64>) -> Result<(), MatError> {
+    let mut mat = MatFile::new(path);
+    mat.add_f64_row_vector(VAR_LA, values)?;
     mat.write()
 }
 

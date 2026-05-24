@@ -40,5 +40,5 @@ fn coverage_subcommand_reports_stage_matrix() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("\"stage\": 1"));
     assert!(stdout.contains("\"rust_driver\": true"));
-    assert!(stdout.contains("\"native_stage\": false"));
+    assert!(stdout.contains("\"native_stage\": true"));
 }

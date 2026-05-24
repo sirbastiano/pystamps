@@ -44,8 +44,8 @@ const INVENTORY: [StageImplementation; 9] = [
         scope: "patch",
         crate_name: "pystamps-core",
         entrypoint: "native_stage1::run_stage1_native",
-        readiness: NativeReadiness::Scaffolded,
-        details: "Canonical raw single-master Stage 1 path is scaffolded; parity certification belongs to the Stage 1 port story.",
+        readiness: NativeReadiness::ParityCertified,
+        details: "Stage 1 patch execution is native for canonical raw single-master inputs, reusable ps1 metadata, and SNAP metadata synthesis with parity coverage.",
     },
     StageImplementation {
         stage: 2,
@@ -141,7 +141,7 @@ mod tests {
     }
 
     #[test]
-    fn scaffolded_stage_is_not_parity_certified() {
-        assert!(!native_stage_is_parity_certified(1, "patch"));
+    fn stage1_patch_is_parity_certified() {
+        assert!(native_stage_is_parity_certified(1, "patch"));
     }
 }

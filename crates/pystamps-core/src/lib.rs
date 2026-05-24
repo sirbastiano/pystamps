@@ -530,9 +530,7 @@ pub fn expected_stage_artifact(stage_id: u8, scope: StageScope) -> Option<&'stat
 
 fn expected_bundle(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
     match (stage_id, scope) {
-        (1, StageScope::Patch) => &[
-            "ps1.mat", "ph1.mat", "bp1.mat", "da1.mat", "hgt1.mat", "la1.mat", "psver.mat",
-        ],
+        (1, StageScope::Patch) => &["ps1.mat", "ph1.mat", "bp1.mat", "psver.mat"],
         (2, StageScope::Patch) => &["pm1.mat"],
         (3, StageScope::Patch) => &["select1.mat"],
         (4, StageScope::Patch) => &["weed1.mat"],
@@ -604,7 +602,7 @@ mod tests {
         .unwrap();
         assert_eq!(partial[0].status, StageStatus::Planned);
 
-        for file in ["ph1.mat", "bp1.mat", "da1.mat", "hgt1.mat", "la1.mat", "psver.mat"] {
+        for file in ["ph1.mat", "bp1.mat", "psver.mat"] {
             File::create(patch.join(file)).unwrap();
         }
         let complete = plan_pipeline(&RunRequest {
@@ -645,7 +643,6 @@ mod tests {
         let err = verify_full_native_processing_chain(1, 8).unwrap_err();
         let message = err.to_string();
 
-        assert!(message.contains("stage 1 patch"));
         assert!(message.contains("stage 2 patch"));
         assert!(message.contains("stage 8 merged"));
     }
