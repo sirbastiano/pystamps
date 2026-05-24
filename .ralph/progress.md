@@ -155,3 +155,39 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Stage 1 parity is sensitive to MAT shape conventions and xy quantization; compare generated artifacts rather than only checking file existence.
   - `rustfmt` remains unavailable in this environment; `git diff --check` is the available formatting sanity gate.
 ---
+## [2026-05-24 00:41:50 UTC] - US-005: Port Stage 3 selection
+Thread:
+Run: 20260523-233954-88106 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 8c353a6 feat(stage3): port native selection
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage3 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt` -> FAIL (rustfmt component is not installed for the active stable toolchain)
+- Files changed:
+  - crates/pystamps-core/src/native_stage3.rs
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-mat/src/lib.rs
+  - crates/pystamps-stages/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added Rust-native Stage 3 candidate selection reading `ps1.mat`, `pm1.mat`, optional `da1.mat`, and optional `parms.mat`.
+  - Implemented Python-matching PERCENT and DENSITY threshold selection, including D_A binning, low-coherence random scaling, and threshold coefficient output.
+  - Wrote `select1.mat` from Rust with selected indices, keep mask, phase/coherence subsets, thresholds, coefficients, selection metadata, and interferogram index shape conventions.
+  - Added `pystamps-native stage 3 --patch PATH` / `stage3 --patch PATH` wiring and marked Stage 3 patch coverage native after synthetic parity passed.
+  - Extended MAT reading for MATLAB char/logical payloads and flattened 3-D variables so Rust can consume Python/SciPy `parms.mat`, `pm1.mat`, and `select1.mat` artifacts.
+  - Added parity, density-threshold, performance, and missing-`coh_ps` structured-error tests for the Rust Stage 3 path.
+- **Learnings for future iterations:**
+  - SciPy writes string parameters as MATLAB char arrays with UTF data elements and keep masks as logical uint8; the MAT reader needs to treat both as numeric-compatible payloads for parity.
+  - Stage 3 threshold parity can be proven without invoking Python at runtime by comparing Rust `select1.mat` against a Python reference fixture generated from identical synthetic inputs.
+  - The existing Python Stage 3 falls back to saved `pm1.mat` phase/coherence subsets when re-estimation inputs are absent; the Rust native path uses that artifact-compatible selection surface.
+  - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the formatting gate available in this run.
+---
