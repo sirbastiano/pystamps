@@ -4,7 +4,6 @@ Started: Sat May 23 23:39:54 UTC 2026
 ## Codebase Patterns
 - (add reusable patterns here)
 
----
 ## [2026-05-23 23:48:13 UTC] - US-001: Scaffold native Rust project
 Thread:
 Run: 20260523-233954-88106 (iteration 1)
@@ -55,7 +54,6 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - `rustfmt` is missing from the active stable toolchain, so `cargo fmt --all` cannot currently run.
   - `.ralph/` and `AGENTS.md` are ignored by default and must be force-added when a run requires committing operational logs.
   - The worktree had pre-existing version/dist artifacts before this story pass; they were committed separately to satisfy the required clean post-commit status.
----
 ## [2026-05-24 00:02:44 UTC] - US-002: Implement MAT artifact I/O
 Thread:
 Run: 20260523-233954-88106 (iteration 2)
@@ -88,4 +86,37 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - SciPy may emit small data element tags for compact names, so MAT parsing must handle regular and small tags.
   - Unsupported char/logical/sparse payloads should remain structured errors until a stage story specifically needs them.
   - `rustfmt` is still unavailable in this environment; keep code manually formatted or install the component outside this run.
+---
+## [2026-05-24 00:10:43 UTC] - US-003: Build parity harness
+Thread:
+Run: 20260523-233954-88106 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 994e3d6 feat(parity): add fixture comparison harness
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `cargo test -p pystamps-parity` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt --all` -> FAIL (rustfmt component is not installed for the active stable toolchain)
+- Files changed:
+  - Cargo.lock
+  - crates/pystamps-parity/Cargo.toml
+  - crates/pystamps-parity/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added a parity fixture runner that creates separate Python-run and Rust-run copies from the same fixture source.
+  - Added closure-based stage execution hooks so future stage ports can run each implementation against its own copy before comparison.
+  - Added MAT artifact comparison by requested variable, using default pySTAMPS tolerance semantics for `rtol`, `atol`, NaN equality, and phase wrap equivalence keys.
+  - Added JSON report helpers preserving the PRD fields: stage, scope, fixture, artifact, variable, ok, rtol, atol, and message.
+  - Added Rust tests for identical scalar and complex matrix artifacts, missing artifacts, shape mismatches, fixture copy identity, and JSON field output.
+- **Learnings for future iterations:**
+  - `crates/pystamps-parity` is the right boundary for reusable harness behavior; native stage coverage remains conservative in `pystamps-stages`.
+  - The MAT crate exposes row-major numeric payloads, so parity comparison can stay independent of MATLAB column-major file layout.
+  - `rustup component add rustfmt` failed with a cross-device rename error after rollback; keep using `git diff --check` unless the toolchain is fixed outside the story run.
+  - Activity/progress files must be committed after the implementation commit to avoid repeating the prior uncommitted-run failure.
 ---
