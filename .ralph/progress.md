@@ -191,3 +191,37 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - The existing Python Stage 3 falls back to saved `pm1.mat` phase/coherence subsets when re-estimation inputs are absent; the Rust native path uses that artifact-compatible selection surface.
   - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the formatting gate available in this run.
 ---
+## [2026-05-24 00:54:14 UTC] - US-006: Port Stage 5 patch promotion
+Thread:
+Run: 20260523-233954-88106 (iteration 6)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-6.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260523-233954-88106-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 4e68db8 feat(stage5): port patch promotion
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage5 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt` -> FAIL (rustfmt component is not installed for the active stable toolchain)
+- Files changed:
+  - crates/pystamps-core/src/native_stage5.rs
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-stages/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added Rust-native Stage 5 patch promotion reading `ps1.mat`, `pm1.mat`, `select1.mat`, `weed1.mat`, `ph1.mat`, optional ancillary artifacts, and `parms.mat`.
+  - Wrote promoted `ps2.mat`, `ph2.mat`, `pm2.mat`, `psver.mat`, optional `bp2.mat`/`hgt2.mat`/`la2.mat`/`da2.mat`, and `rc2.mat` with single-master and small-baseline phase correction semantics.
+  - Preserved Stage 3 keep-mask ordering, Stage 4 weed-mask ordering, one-based index handling, row-major MAT helper conventions, and Python fallback behavior for mismatched weed masks.
+  - Added synthetic Python/Rust parity and performance coverage for promoted rows/variables, small-baseline `rc2.mat`, and structured Stage 5 out-of-bounds errors.
+  - Wired `pystamps-native stage 5 --patch PATH` / `stage5 --patch PATH` and marked only Stage 5 patch coverage native; Stage 5 merged remains planned for US-007.
+- **Learnings for future iterations:**
+  - Python Stage 5 treats `ix_weed` as a mask over `select1.ix[keep_ix]`; if the mask length differs, it promotes all Stage 3 kept rows.
+  - Single-master `rc2.mat` inserts the master column into both full-baseline phase correction and `ph_reref`; small-baseline mode writes only `ph_rc`.
+  - Out-of-bounds selected rows must be validated before any row slicing so Rust returns `CoreError::NativeStage { stage: 5, ... }` instead of panicking.
+  - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
+---
