@@ -98,10 +98,10 @@ const INVENTORY: [StageImplementation; 9] = [
     StageImplementation {
         stage: 7,
         scope: "merged",
-        crate_name: "pystamps-stages",
-        entrypoint: "planned_stage_port",
-        readiness: NativeReadiness::Planned,
-        details: "Stage 7 full native semantics are not implemented yet.",
+        crate_name: "pystamps-core",
+        entrypoint: "native_stage7::run_stage7_native",
+        readiness: NativeReadiness::ParityCertified,
+        details: "Stage 7 merged SCLA orchestration is native for MAT artifact loading, Rust SCLA kernel execution, and scla2/scla_smooth2 writes with parity coverage.",
     },
     StageImplementation {
         stage: 8,
@@ -154,5 +154,10 @@ mod tests {
     fn stage5_patch_is_parity_certified() {
         assert!(native_stage_is_parity_certified(5, "patch"));
         assert!(native_stage_is_parity_certified(5, "merged"));
+    }
+
+    #[test]
+    fn stage7_merged_is_parity_certified() {
+        assert!(native_stage_is_parity_certified(7, "merged"));
     }
 }
