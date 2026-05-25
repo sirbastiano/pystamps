@@ -397,3 +397,38 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - The MAT helper is still 2-D oriented, so Stage 2 stores flattened grid stack payloads through the existing writer surface rather than adding new MAT dimensional semantics in this story.
   - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
 ---
+## [2026-05-25 10:04:15 UTC] - US-012: Port Stage 6 unwrap
+Thread:
+Run: 20260525-092407-245878 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: e407300 feat(native-stage6): port unwrap stage
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage6 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `cargo run -p pystamps-core --bin pystamps-native -- coverage --start-step 6 --end-step 6` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt --all -- --check` -> FAIL (rustfmt component is not installed for the active stable toolchain)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-core/src/native_stage6.rs
+  - crates/pystamps-stages/src/lib.rs
+- What was implemented
+  - Added Rust-native Stage 6 merged unwrap orchestration that reads `ps2.mat`, `ph2.mat`, `pm2.mat`, `bp2.mat`, `ifgstd2.mat`, and optional `scla_smooth2.mat`.
+  - Replaced Stage 6 external `triangle`/`snaphu` responsibilities with Rust-native grid graph generation, Delaunay-seeded edge tables, and deterministic graph phase unwrapping.
+  - Wrote `phuw2.mat`, `uw_phaseuw.mat`, `uw_grid.mat`, and `uw_interp.mat` with Python-compatible variables and MAT v5 shapes.
+  - Added synthetic unwrap fixture coverage for `ph_uw` and interpolation artifacts plus a structured disconnected-graph Stage 6 error.
+  - Wired `pystamps-native stage 6 --dataset PATH` / `stage6 --dataset PATH`, advertised `stage6_graph_unwrap`, and marked Stage 6 merged coverage parity-certified.
+- **Learnings for future iterations:**
+  - `bp2.bperp_mat` for single-master merged artifacts may omit the master column; Stage 6 expands it before applying topographic and SCLA phase terms.
+  - `uw_grid.grid_ij` maps original PS rows back to resampled grid cells, so final `phuw2.ph_uw` must backproject grid unwrapped phase and then restore the per-PS residual phase.
+  - The native graph path avoids all temporary `snaphu.*` and `unwrap.*.node` sidecars on the synthetic fixture, which keeps the Rust path below the external-tool overhead floor.
+  - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
+---
