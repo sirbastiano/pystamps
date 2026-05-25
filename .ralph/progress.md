@@ -87,6 +87,43 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Unsupported char/logical/sparse payloads should remain structured errors until a stage story specifically needs them.
   - `rustfmt` is still unavailable in this environment; keep code manually formatted or install the component outside this run.
 ---
+## [2026-05-25 09:45:37 UTC] - US-011: Port Stage 4 weed orchestration
+Thread:
+Run: 20260525-092407-245878 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 48371b9 feat(stage4): add native weed orchestration
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage4 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt --all -- --check` -> FAIL (rustfmt component is not installed for the active stable toolchain)
+- Files changed:
+  - Cargo.lock
+  - crates/pystamps-core/Cargo.toml
+  - crates/pystamps-core/src/native_stage4.rs
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-stages/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Added Rust-native Stage 4 patch orchestration that reads `select1.mat`, `ps1.mat`, `ph1.mat`, `pm1.mat`, optional `hgt1.mat`, and `parms.mat`.
+  - Ported Stage 4 masks for Stage 3 keep rows, neighboring-pixel weeding, zero-elevation filtering, duplicate coordinate removal, noisy-edge filtering, and final `weed1.mat` writing.
+  - Replaced triangle execution with Rust-native Delaunay graph construction through `delaunator`, with collinear nearest-neighbor fallback and structured edge-topology validation.
+  - Reused the existing Rust Stage 4 edge-stat algorithm in `pystamps-core`, including single-master temporal smoothing, baseline slope removal, and small-baseline handling.
+  - Added synthetic Python/native-kernel versus Rust parity and performance coverage for `weed1.mat`, plus a structured invalid-edge topology error test.
+  - Wired `pystamps-native stage 4 --patch PATH` / `stage4 --patch PATH` and marked Stage 4 patch coverage parity-certified.
+- **Learnings for future iterations:**
+  - Python Stage 4 indexes `ifg_index` directly against the full `ph1.ph` width; unlike Stage 3 selection, it does not remap single-master IFG ids around `master_ix`.
+  - `weed1.ix_weed` is a mask over `select1.ix[keep_ix]`, while `weed1.ix_weed2` is a mask over the pre-noise weeded subset.
+  - A simple empty-circumcircle graph prototype was too expensive for realistic Stage 4 counts; `delaunator` keeps the Rust graph construction in the expected Delaunay performance class.
+  - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
+---
 ## [2026-05-24 01:05:36 UTC] - US-007: Port Stage 5 merge
 Thread:
 Run: 20260523-233954-88106 (iteration 7)
