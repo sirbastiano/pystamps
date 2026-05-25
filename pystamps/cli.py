@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 
 from pystamps.compat.legacy import discover_legacy_commands
@@ -14,6 +16,71 @@ from pystamps.pipeline.stages import run_pipeline
 from pystamps.pipeline.types import PipelineContext
 from pystamps.status import collect_status
 from pystamps.verify import verify_run_against_golden
+
+
+def _native_binary_command() -> tuple[list[str], Path | None]:
+    repo_root = Path(__file__).resolve().parents[1]
+    if value := os.environ.get("PYSTAMPS_NATIVE_BIN"):
+        return [value], None
+
+    binary = shutil.which("pystamps-native")
+    if binary:
+        return [binary], None
+
+    candidates = [repo_root / "target" / "debug" / "pystamps-native", repo_root / "target" / "release" / "pystamps-native"]
+    for candidate in candidates:
+        if candidate.exists():
+            return [str(candidate)], None
+
+    fallback_command = ["cargo", "run", "-p", "pystamps-core", "--bin", "pystamps-native", "--"]
+    return fallback_command, repo_root
+
+
+def _run_native_pipeline(
+    args: argparse.Namespace,
+    run_config: RunConfig,
+) -> list[dict[str, object]]:
+    command, cwd = _native_binary_command()
+    command.extend(
+        [
+            "run",
+            "--dataset",
+            str(Path(args.dataset).resolve()),
+            "--start-step",
+            str(args.start_step),
+            "--end-step",
+            str(args.end_step),
+        ]
+    )
+    if args.dry_run:
+        command.append("--dry-run")
+
+    backend = str(getattr(run_config.runtime, "backend", "auto"))
+    command.extend(["--backend", backend])
+
+    stage2_kernel_backend = str(getattr(run_config.runtime, "stage2_kernel_backend", "auto"))
+    command.extend(["--stage2-kernel-backend", stage2_kernel_backend])
+
+    command.extend(["--io-workers", str(run_config.runtime.io_workers)])
+    command.extend(["--cpu-workers", str(run_config.runtime.cpu_workers)])
+    stage2_native_threads = str(getattr(run_config.runtime, "stage2_native_threads", 0))
+    command.extend(["--stage2-native-threads", stage2_native_threads])
+
+    completed = subprocess.run(
+        command,
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout).strip() or f"exit code {completed.returncode}"
+        raise SystemExit(f"Rust execution failed: {detail}")
+
+    try:
+        return json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise SystemExit("Rust execution returned malformed JSON payload") from exc
 
 
 def _parse_args() -> argparse.Namespace:
@@ -98,6 +165,11 @@ def _cmd_run(args: argparse.Namespace, run_config: RunConfig) -> int:
         run_config.runtime.io_workers = args.io_workers
     if args.cpu_workers is not None:
         run_config.runtime.cpu_workers = args.cpu_workers
+
+    if str(getattr(run_config.runtime, "backend", "auto")) == "native":
+        payload = _run_native_pipeline(args, run_config)
+        print(json.dumps(payload, indent=2))
+        return 1 if any(result["status"] == "failed" for result in payload) else 0
 
     context = PipelineContext(
         dataset_root=Path(args.dataset).resolve(),

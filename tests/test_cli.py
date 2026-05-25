@@ -21,6 +21,19 @@ def _run_config() -> SimpleNamespace:
     )
 
 
+def _run_native_config() -> SimpleNamespace:
+    return SimpleNamespace(
+        runtime=SimpleNamespace(
+            backend="native",
+            io_workers=2,
+            cpu_workers=4,
+            stage2_kernel_backend="auto",
+            stage2_native_threads=0,
+        ),
+        tolerance=SimpleNamespace(rtol=1e-6, atol=1e-8),
+    )
+
+
 def test_cmd_status_prints_dataset_summary(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     status = SimpleNamespace(
         dataset=Path("/tmp/run"),
@@ -134,6 +147,126 @@ def test_cmd_run_returns_failure_when_pipeline_reports_failures(
     assert exit_code == 1
     assert _payload(capsys)[0]["status"] == "failed"
 
+
+def test_cmd_run_delegates_to_native_engine_when_configured(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = argparse.Namespace(
+        dataset=str(tmp_path / "dataset"),
+        start_step=1,
+        end_step=2,
+        dry_run=False,
+        io_workers=None,
+        cpu_workers=None,
+    )
+    captured: dict[str, object] = {}
+    run_config = _run_native_config()
+
+    def fake_binary_command() -> tuple[list[str], Path | None]:
+        captured["command_prefix"] = ["native-binary"]
+        return ["native-binary"], None
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        text: bool = True,
+        capture_output: bool = True,
+        check: bool = False,
+    ) -> SimpleNamespace:
+        captured["command"] = command
+        captured["cwd"] = cwd
+        return SimpleNamespace(
+            returncode=0,
+            stdout='[{"stage": 1, "scope": "patch", "target": "PATCH_1", "status": "completed", "details": "ok", "duration_sec": 0.5}]',
+            stderr="",
+        )
+
+    monkeypatch.setattr(cli, "_native_binary_command", fake_binary_command)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    exit_code = cli._cmd_run(args, run_config)
+
+    assert exit_code == 0
+    assert _payload(capsys) == [
+        {"stage": 1, "scope": "patch", "target": "PATCH_1", "status": "completed", "details": "ok", "duration_sec": 0.5}
+    ]
+    assert captured["command_prefix"] == ["native-binary"]
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert command[:2] == ["native-binary", "run"]
+    assert "--backend" in command
+    assert "native" in command
+
+
+def test_cmd_run_returns_failure_code_from_native_rust_status(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    args = argparse.Namespace(
+        dataset=str(tmp_path / "dataset"),
+        start_step=1,
+        end_step=2,
+        dry_run=False,
+        io_workers=None,
+        cpu_workers=None,
+    )
+    run_config = _run_native_config()
+
+    def fake_binary_command() -> tuple[list[str], Path | None]:
+        return ["native-binary"], None
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        text: bool = True,
+        capture_output: bool = True,
+        check: bool = False,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(
+            returncode=0,
+            stdout='[{"stage": 1, "scope": "patch", "target": "PATCH_1", "status": "failed", "details": "error", "duration_sec": 2.5}]',
+            stderr="",
+        )
+
+    monkeypatch.setattr(cli, "_native_binary_command", fake_binary_command)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    exit_code = cli._cmd_run(args, run_config)
+
+    assert exit_code == 1
+    assert _payload(capsys)[0]["status"] == "failed"
+
+
+def test_cmd_run_returns_rust_config_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    args = argparse.Namespace(
+        dataset=str(tmp_path / "dataset"),
+        start_step=1,
+        end_step=2,
+        dry_run=False,
+        io_workers=None,
+        cpu_workers=None,
+    )
+    run_config = _run_native_config()
+
+    def fake_binary_command() -> tuple[list[str], Path | None]:
+        return ["native-binary"], None
+
+    def fake_run(
+        command: list[str],
+        *,
+        cwd: Path | None = None,
+        text: bool = True,
+        capture_output: bool = True,
+        check: bool = False,
+    ) -> SimpleNamespace:
+        return SimpleNamespace(returncode=1, stdout="", stderr="error: unsupported runtime backend 'bogus'")
+
+    monkeypatch.setattr(cli, "_native_binary_command", fake_binary_command)
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+
+    with pytest.raises(SystemExit, match="Rust execution failed: error: unsupported runtime backend 'bogus'"):
+        cli._cmd_run(args, run_config)
 
 def test_cmd_verify_prints_success_payload(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
     report = SimpleNamespace(

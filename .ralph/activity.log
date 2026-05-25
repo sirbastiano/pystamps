@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-25 10:05:06 | run=20260525-092407-245878 | iter=2 | mode=build | story=US-012 | duration=1072s | status=success
 - 2026-05-25 09:47:11 | run=20260525-092407-245878 | iter=1 | mode=build | story=US-011 | duration=1383s | status=success
 - 2026-05-24 01:44:45 | run=20260523-233954-88106 | iter=10 | mode=build | story=US-010 | duration=939s | status=success
 - 2026-05-24 01:29:04 | run=20260523-233954-88106 | iter=9 | mode=build | story=US-009 | duration=641s | status=success
@@ -105,3 +106,10 @@
 [2026-05-25 10:03:44] Final verification passed for US-012: cargo test workspace and accelerated kernel pytest
 [2026-05-25 10:03:56] Completed security performance regression review for US-012 Stage 6 changes
 [2026-05-25 10:04:38] Updated progress log for US-012 Stage 6 unwrap
+[2026-05-25 10:05:05] ITERATION 2 end (duration=1072s)
+[2026-05-25 10:05:09] ITERATION 3 start (mode=build story=US-013)
+[2026-05-25 10:05:27] Start US-013: begin investigation of Python CLI and Rust engine delegation
+[2026-05-25 10:07:07] US-013: start implementing Rust-engine delegation in Python CLI
+[2026-05-25 10:08:05] US-013: Python _cmd_run now routes runtime.backend=native to pystamps-native run command and validates/forwards runtime kernel settings
+[2026-05-25 10:14:18] US-013 verification: required gates passed; also ran tests/test_cli.py and native_cli tests
+[2026-05-25 10:16:53] US-013 verification complete: cargo test --workspace; uv run pytest -q tests/test_kernels_accelerated.py; uv run pytest -q tests/test_cli.py
