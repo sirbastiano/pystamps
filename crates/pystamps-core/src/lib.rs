@@ -12,6 +12,7 @@ pub mod native_stage2;
 pub mod native_stage3;
 pub mod native_stage4;
 pub mod native_stage5;
+pub mod native_stage6;
 pub mod native_stage7;
 pub mod native_stage8;
 
@@ -408,6 +409,7 @@ fn native_kernel_acceleration(stage_id: u8, scope: StageScope) -> &'static [&'st
             "stage2_topofit_coh_row_invariant",
         ],
         (4, StageScope::Patch) => &["stage4_edge_stats"],
+        (6, StageScope::Merged) => &["stage6_graph_unwrap"],
         (7, StageScope::Merged) => &["stage7_scla"],
         (8, StageScope::Merged) => &["stage8_edge_noise"],
         _ => &[],
@@ -645,12 +647,8 @@ mod tests {
     }
 
     #[test]
-    fn full_native_chain_verification_fails_until_remaining_stage_ports_exist() {
-        let err = verify_full_native_processing_chain(1, 8).unwrap_err();
-        let message = err.to_string();
-
-        assert!(message.contains("stage 6 merged"));
-        assert!(!message.contains("stage 4 patch"));
+    fn full_native_chain_verification_passes_when_all_stage_ports_exist() {
+        verify_full_native_processing_chain(1, 8).unwrap();
     }
 
     #[test]

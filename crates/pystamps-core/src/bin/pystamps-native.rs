@@ -3,6 +3,7 @@ use pystamps_core::native_stage2::run_stage2_native;
 use pystamps_core::native_stage3::run_stage3_native;
 use pystamps_core::native_stage4::run_stage4_native;
 use pystamps_core::native_stage5::{run_stage5_merge_native, run_stage5_patch_native};
+use pystamps_core::native_stage6::run_stage6_native;
 use pystamps_core::native_stage7::run_stage7_native;
 use pystamps_core::native_stage8::run_stage8_native;
 use pystamps_core::processing_chain_coverage;
@@ -69,6 +70,12 @@ fn run(args: Vec<String>) -> Result<(), String> {
             println!("{details}");
             Ok(())
         }
+        "stage6" => {
+            let dataset = parse_dataset_arg(rest)?;
+            let details = run_stage6_native(dataset).map_err(|err| err.to_string())?;
+            println!("{details}");
+            Ok(())
+        }
         "stage7" => {
             let dataset = parse_dataset_arg(rest)?;
             let details = run_stage7_native(dataset).map_err(|err| err.to_string())?;
@@ -92,7 +99,7 @@ fn run_stage(args: &[String]) -> Result<(), String> {
     let stage = stage
         .parse::<u8>()
         .map_err(|err| format!("invalid stage number '{stage}': {err}"))?;
-    if !matches!(stage, 1 | 2 | 3 | 4 | 5 | 7 | 8) {
+    if !matches!(stage, 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8) {
         return Err(format!("stage {stage} is not native-executable yet"));
     }
 
@@ -105,6 +112,7 @@ fn run_stage(args: &[String]) -> Result<(), String> {
             run_stage5_merge_native(parse_dataset_arg(rest)?).map_err(|err| err.to_string())?
         }
         5 => run_stage5_patch_native(parse_patch_arg(rest)?).map_err(|err| err.to_string())?,
+        6 => run_stage6_native(parse_dataset_arg(rest)?).map_err(|err| err.to_string())?,
         7 => run_stage7_native(parse_dataset_arg(rest)?).map_err(|err| err.to_string())?,
         8 => run_stage8_native(parse_dataset_arg(rest)?).map_err(|err| err.to_string())?,
         _ => unreachable!("stage was validated above"),
@@ -168,6 +176,7 @@ fn usage() {
   pystamps-native stage 4 --patch PATH
   pystamps-native stage 5 --patch PATH
   pystamps-native stage 5 --dataset PATH
+  pystamps-native stage 6 --dataset PATH
   pystamps-native stage 7 --dataset PATH
   pystamps-native stage1 --patch PATH
   pystamps-native stage2 --patch PATH
@@ -175,6 +184,7 @@ fn usage() {
   pystamps-native stage4 --patch PATH
   pystamps-native stage5 --patch PATH
   pystamps-native stage5-merge --dataset PATH
+  pystamps-native stage6 --dataset PATH
   pystamps-native stage7 --dataset PATH
   pystamps-native stage8 --dataset PATH"
     );

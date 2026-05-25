@@ -90,10 +90,10 @@ const INVENTORY: [StageImplementation; 9] = [
     StageImplementation {
         stage: 6,
         scope: "merged",
-        crate_name: "pystamps-stages",
-        entrypoint: "planned_stage_port",
-        readiness: NativeReadiness::Planned,
-        details: "Stage 6 full native semantics are not implemented yet.",
+        crate_name: "pystamps-core",
+        entrypoint: "native_stage6::run_stage6_native",
+        readiness: NativeReadiness::ParityCertified,
+        details: "Stage 6 merged unwrap is native for MAT artifact loading, Rust grid graph generation, graph-based phase unwrapping, and phuw2/uw_phaseuw/uw_grid/uw_interp writes with synthetic parity coverage.",
     },
     StageImplementation {
         stage: 7,
@@ -159,6 +159,11 @@ mod tests {
     fn stage5_patch_is_parity_certified() {
         assert!(native_stage_is_parity_certified(5, "patch"));
         assert!(native_stage_is_parity_certified(5, "merged"));
+    }
+
+    #[test]
+    fn stage6_merged_is_parity_certified() {
+        assert!(native_stage_is_parity_certified(6, "merged"));
     }
 
     #[test]
