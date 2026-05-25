@@ -468,7 +468,7 @@ Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/
 Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-4.md
 - Guardrails reviewed: yes
 - No-commit run: false
-- Commit: 5692add fix(core): gate native coverage by stage readiness
+- Commit: 5692add fix(core): gate native coverage by stage readiness; e2bf693 fix(core): trim disabled-stage env tokens for coverage
 - Post-commit status: `clean`
 - Verification:
   - Command: cargo test --workspace -> PASS

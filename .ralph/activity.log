@@ -123,3 +123,4 @@
 [2026-05-25 10:23:18] Progress log fixed after initial append interpolation issue for US-014 entry
 [2026-05-25 10:23:41] Hardening native-stage disable env parser to trim scope/stage whitespace fragments
 [2026-05-25 10:26:33] Retested US-014 gates and pytest after final parser trim adjustment
+[2026-05-25 10:26:42] Updated US-014 progress entry to record final parser-hardening commit hash
