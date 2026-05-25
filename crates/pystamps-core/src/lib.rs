@@ -139,6 +139,16 @@ impl fmt::Display for StageScope {
     }
 }
 
+impl StageScope {
+    fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_lowercase().as_str() {
+            "patch" => Some(Self::Patch),
+            "merged" => Some(Self::Merged),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StageStatus {
@@ -335,24 +345,59 @@ pub fn execute_pipeline_cli_bridge(
 }
 
 pub fn processing_chain_coverage(start_step: u8, end_step: u8) -> Result<Vec<StageCoverage>, CoreError> {
+    processing_chain_coverage_with_disabled(
+        start_step,
+        end_step,
+        &disabled_native_stages_from_env(),
+    )
+}
+
+pub fn processing_chain_coverage_with_disabled(
+    start_step: u8,
+    end_step: u8,
+    disabled_stages: &[(u8, StageScope)],
+) -> Result<Vec<StageCoverage>, CoreError> {
     validate_stage_range(start_step, end_step)?;
     let mut coverage = Vec::new();
     for stage in selected_stages(start_step, end_step) {
         match stage.scope {
             StageScope::Patch => {
-                coverage.push(stage_coverage(stage.stage_id, StageScope::Patch, "PATCH_*"));
+                coverage.push(stage_coverage(
+                    stage.stage_id,
+                    StageScope::Patch,
+                    "PATCH_*",
+                    disabled_stages,
+                ));
                 if stage.stage_id == 5 {
-                    coverage.push(stage_coverage(5, StageScope::Merged, "dataset root"));
+                    coverage.push(stage_coverage(
+                        5,
+                        StageScope::Merged,
+                        "dataset root",
+                        disabled_stages,
+                    ));
                 }
             }
-            StageScope::Merged => coverage.push(stage_coverage(stage.stage_id, StageScope::Merged, "dataset root")),
+            StageScope::Merged => coverage.push(stage_coverage(
+                stage.stage_id,
+                StageScope::Merged,
+                "dataset root",
+                disabled_stages,
+            )),
         }
     }
     Ok(coverage)
 }
 
 pub fn verify_full_native_processing_chain(start_step: u8, end_step: u8) -> Result<(), CoreError> {
-    let missing: Vec<String> = processing_chain_coverage(start_step, end_step)?
+    verify_full_native_processing_chain_with_disabled(start_step, end_step, &[])
+}
+
+pub fn verify_full_native_processing_chain_with_disabled(
+    start_step: u8,
+    end_step: u8,
+    disabled_stages: &[(u8, StageScope)],
+) -> Result<(), CoreError> {
+    let missing: Vec<String> = processing_chain_coverage_with_disabled(start_step, end_step, disabled_stages)?
         .into_iter()
         .filter(|coverage| !coverage.native_stage)
         .map(|coverage| format!("stage {} {} ({})", coverage.stage, coverage.scope, coverage.target))
@@ -380,9 +425,15 @@ fn selected_stages(start_step: u8, end_step: u8) -> impl Iterator<Item = StageDe
         .filter(move |stage| start_step <= stage.stage_id && stage.stage_id <= end_step)
 }
 
-fn stage_coverage(stage_id: u8, scope: StageScope, target: &'static str) -> StageCoverage {
+fn stage_coverage(
+    stage_id: u8,
+    scope: StageScope,
+    target: &'static str,
+    disabled_stages: &[(u8, StageScope)],
+) -> StageCoverage {
     let scope_name = scope.to_string();
-    let native_stage = pystamps_stages::native_stage_is_parity_certified(stage_id, &scope_name);
+    let native_stage =
+        !disabled_stages.contains(&(stage_id, scope)) && pystamps_stages::native_stage_is_parity_certified(stage_id, &scope_name);
     StageCoverage {
         stage: stage_id,
         scope,
@@ -397,6 +448,23 @@ fn stage_coverage(stage_id: u8, scope: StageScope, target: &'static str) -> Stag
 fn stage_coverage_details(stage_id: u8, scope: StageScope) -> &'static str {
     let scope_name = scope.to_string();
     pystamps_stages::native_stage_details(stage_id, &scope_name)
+}
+
+fn disabled_native_stages_from_env() -> Vec<(u8, StageScope)> {
+    std::env::var("PYSTAMPS_DISABLE_NATIVE_STAGES")
+        .ok()
+        .map(|raw| {
+            raw.split(',')
+                .filter_map(disable_token_to_stage_scope)
+                .collect::<Vec<(u8, StageScope)>>()
+        })
+        .unwrap_or_default()
+}
+
+fn disable_token_to_stage_scope(token: &str) -> Option<(u8, StageScope)> {
+    let token = token.trim();
+    let (stage, scope) = token.split_once(':')?;
+    Some((stage.parse::<u8>().ok()?, StageScope::parse(scope)?))
 }
 
 fn native_kernel_acceleration(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
@@ -647,8 +715,39 @@ mod tests {
     }
 
     #[test]
+    fn full_chain_coverage_reports_true_native_stage_for_all_required_scopes() {
+        let coverage = processing_chain_coverage(1, 8).unwrap();
+        assert!(
+            coverage.iter().all(|row| row.native_stage),
+            "Expected all required scopes to be fully native-stage covered."
+        );
+    }
+
+    #[test]
     fn full_native_chain_verification_passes_when_all_stage_ports_exist() {
         verify_full_native_processing_chain(1, 8).unwrap();
+    }
+
+    #[test]
+    fn verify_full_native_chain_fails_when_any_scope_is_disabled() {
+        let disabled = [(3, StageScope::Patch)];
+        let err = verify_full_native_processing_chain_with_disabled(1, 8, &disabled).unwrap_err();
+        let message = err.to_string();
+        assert!(
+            message.contains("stage 3 patch"),
+            "expected disabled scope to be reported as blocking verification, got: {message}"
+        );
+    }
+
+    #[test]
+    fn processing_chain_report_includes_stage_5_merged_scope() {
+        let coverage = processing_chain_coverage(1, 8).unwrap();
+        let stage5_merged = coverage
+            .iter()
+            .find(|row| row.stage == 5 && row.scope == StageScope::Merged)
+            .expect("expected stage 5 merged scope");
+        assert_eq!(stage5_merged.target, "dataset root");
+        assert_eq!(stage5_merged.native_stage, true);
     }
 
     #[test]
