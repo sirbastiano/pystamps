@@ -124,3 +124,4 @@
 [2026-05-25 10:23:41] Hardening native-stage disable env parser to trim scope/stage whitespace fragments
 [2026-05-25 10:26:33] Retested US-014 gates and pytest after final parser trim adjustment
 [2026-05-25 10:26:42] Updated US-014 progress entry to record final parser-hardening commit hash
+[2026-05-25 10:27:05] US-014 progress and logs now fully committed; tree is clean
