@@ -461,3 +461,29 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: unsupported `stage2_native_threads` must be rejected when kernel backend is Python, and subprocess stderr/stdout handling should surface Rust errors verbatim for easier operator debugging.
   - Useful context: existing Python CLI tests benefit from defaulting optional runtime attributes to avoid fixture fragility when new delegation paths are introduced.
 ---
+## [2026-05-25 10:23:11 UTC] - US-014: Finalize native coverage truth
+Thread: 
+Run: 20260525-092407-245878 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 5692add fix(core): gate native coverage by stage readiness
+- Post-commit status: `clean`
+- Verification:
+  - Command: cargo test --workspace -> PASS
+  - Command: uv run pytest -q tests/test_kernels_accelerated.py -> PASS
+- Files changed:
+  - crates/pystamps-core/src/lib.rs
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Updated coverage truthing to derive `native_stage` from gate-aware stage readiness and a shared disabled-scope override path.
+  - Added environment-driven disable support (`PYSTAMPS_DISABLE_NATIVE_STAGES`) for stage/scope pairs used by verification and coverage calculations.
+  - Added override-based coverage/verification variants so verifier behavior can be tested without mutating global runtime state.
+  - Added tests that cover full chain native coverage, stage-5 merged scope presence, and disabled-scope verification failure.
+- **Learnings for future iterations:**
+  - Patterns discovered: coverage truth and full-chain verification now use one shared function path (`processing_chain_coverage_with_disabled`), which prevents skew between CLI reports and verifier checks.
+  - Gotchas encountered: keep scope parsing strict (`patch`/`merged`) so malformed disable inputs are ignored rather than partially disabling unknown scope entries.
+  - Useful context: full chain coverage currently returns all rows as native because all stage implementations are parity/performance-certified; disable hooks are now available for negative-path validation.
+---
