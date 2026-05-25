@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-25 10:27:28 | run=20260525-092407-245878 | iter=4 | mode=build | story=US-014 | duration=580s | status=success
 - 2026-05-25 10:17:44 | run=20260525-092407-245878 | iter=3 | mode=build | story=US-013 | duration=754s | status=success
 - 2026-05-25 10:05:06 | run=20260525-092407-245878 | iter=2 | mode=build | story=US-012 | duration=1072s | status=success
 - 2026-05-25 09:47:11 | run=20260525-092407-245878 | iter=1 | mode=build | story=US-011 | duration=1383s | status=success
@@ -125,3 +126,8 @@
 [2026-05-25 10:26:33] Retested US-014 gates and pytest after final parser trim adjustment
 [2026-05-25 10:26:42] Updated US-014 progress entry to record final parser-hardening commit hash
 [2026-05-25 10:27:05] US-014 progress and logs now fully committed; tree is clean
+[2026-05-25 10:27:27] ITERATION 4 end (duration=580s)
+[2026-05-25 10:27:31] ITERATION 5 start (mode=build story=US-015)
+[2026-05-25 10:27:53] Starting US-015: Document full Rust execution
+[2026-05-25 10:28:36] US-015: updated README and architecture.md for full Rust execution documentation, native coverage inspection, and unsupported configuration behavior
+[2026-05-25 10:30:48] US-015 verification complete: cargo test --workspace PASS; uv run pytest -q tests/test_kernels_accelerated.py PASS

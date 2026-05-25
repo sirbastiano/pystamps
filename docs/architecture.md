@@ -15,11 +15,11 @@ For the full teaching guide, read [pipeline_science_guide.md](pipeline_science_g
 | Scientific stages | `pystamps.pipeline.ported` | Implement StaMPS-style stage behavior in Python |
 | Kernels | `pystamps.kernels` | Dispatch hot numerical kernels to Python, native Rust/CPU, or CUDA providers |
 | Runtime execution | `pystamps.runtime` | Provide hybrid thread/process execution primitives |
-| Native Rust core | `crates/pystamps-core` | Mirror dataset discovery, own native execution planning, and expose the native CLI |
+| Native Rust core | `crates/pystamps-core` | Own native dataset planning, full-stage execution driver, coverage matrix, and CLI entrypoint |
 | MAT artifact I/O | `crates/pystamps-mat` | Write MATLAB v5 artifacts from Rust-owned stage code |
 | Native stage registry | `crates/pystamps-stages` | Track stage-scope ownership and parity certification status |
 | Parity harness types | `crates/pystamps-parity` | Share comparison result records between future Rust/Python parity runners |
-| HTML frontend | `crates/pystamps-web` | Serve the local Rust execution console and launch pipeline runs |
+| HTML frontend | `crates/pystamps-web` | Serve the local Rust execution console, submit runs, and expose `/api/native-coverage` |
 | Verification | `pystamps.verify`, `scripts/validate_audit.py` | Compare run outputs against golden datasets and audit manifests |
 
 ## Pipeline model
@@ -95,30 +95,61 @@ The local Rust web console starts with:
 make web
 ```
 
-It serves `http://127.0.0.1:8787`. Dry-run planning uses `pystamps-core` directly. Full execution is also submitted through `pystamps-core`; the core execution driver currently uses a CLI bridge to preserve the Python runtime contract while native stage execution is expanded.
+It serves `http://127.0.0.1:8787`. Dry-run planning uses `pystamps-core` directly.
+Full execution is submitted through `pystamps-core` via the Python compatibility wrapper so JSON
+report semantics stay stable.
 
 `pystamps-core` includes two separate verification concepts:
 
 - Rust driver coverage: the selected stage chain can be planned or launched from Rust.
-- Full native stage coverage: every selected stage/scope has Rust-owned stage semantics.
+- Full native stage coverage: every selected stage/scope has Rust-owned stage semantics and parity certification.
 
 Inspect current native coverage from the Rust CLI:
 
 ```bash
-cargo run -p pystamps-core --bin pystamps-native -- coverage
+cargo run -p pystamps-core --bin pystamps-native -- coverage --start-step 1 --end-step 8
 ```
 
-Stage execution is also routed through the Rust CLI. The canonical raw single-master Stage 1 path is scaffolded for direct execution:
+Stage execution is also routed through the Rust CLI:
 
 ```bash
 cargo run -p pystamps-core --bin pystamps-native -- stage 1 --patch DATASET/PATCH_1
+cargo run -p pystamps-core --bin pystamps-native -- stage5-merge --dataset DATASET
 ```
 
-That path writes MAT v5 artifacts directly from Rust for `ps1.mat`, `ph1.mat`, `bp1.mat`, `psver.mat`, and optional `da1.mat` / `hgt1.mat`. It remains marked `native_stage=false` in the coverage matrix until the Stage 1 parity story certifies it.
+That path writes MATLAB v5 artifacts directly from Rust for all Rust-owned stage scopes. As of this release,
+coverage for stages 1 through 8 and the Stage-5 merged scope reports `native_stage=true` when enabled.
 
-The full native verification gate intentionally fails until stages 1 through 8, including the stage-5 merged step, are parity-certified beyond the current kernel acceleration layer.
+The full native verification gate is enforced in core via
+`verify_full_native_processing_chain(start_step, end_step)`, which returns an error if any required
+scope in the requested span is not `native_stage=true`.
 
 The running web server exposes the current coverage matrix at `GET /api/native-coverage`.
+The same payload format can be checked from CLI:
+
+```bash
+curl http://127.0.0.1:8787/api/native-coverage | jq '.[0:3]'
+```
+
+Example payload object shape:
+
+```json
+{
+  "stage": 2,
+  "scope": "patch",
+  "target": "PATCH_1",
+  "rust_driver": true,
+  "native_stage": true,
+  "native_kernels": [
+    "stage2_grid_accumulate",
+    "stage2_histogram",
+    "stage2_topofit",
+    "stage2_topofit_row_invariant",
+    "stage2_topofit_coh_row_invariant"
+  ],
+  "details": "Stage 2 patch coherence estimation is native for MAT artifact loading, CLAP grid preparation/checkpoint writes, iterative weighting, topofit-compatible output variables, and synthetic parity coverage."
+}
+```
 
 ## Config flow
 
@@ -168,6 +199,7 @@ The audit dataset list is owned by `pystamps/data/audited_workflow_manifest.json
 
 - The package implements stages 1 through 8 in `pystamps.pipeline.ported`.
 - The optimized native extension accelerates selected hot kernels, not every line of the pipeline.
-- External tools such as `triangle` and `snaphu` are still required for relevant unwrapping workflows.
-- Parity should be claimed from `verify` or audit evidence, not from command completion alone.
-- Speed should be claimed from `make benchmark` or `scripts/benchmark_backends.py`, not from a skipped pipeline run.
+- `triangle` and `snaphu` are no longer required for the native Stage 6 path, but Python fallback
+  remains available for non-native backends.
+- Parity claims should come from `verify` + audited gate status, not from command success alone.
+- Speed should be claimed from `make benchmark` or `scripts/benchmark_backends.py`, not from incomplete runs.

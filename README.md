@@ -72,26 +72,101 @@ Use `--dry-run` to preview actions without writing:
 uv run pystamps run --dataset "$DATASET_COPY" --start-step 1 --end-step 8 --dry-run
 ```
 
-## Native web execution console
+## Native execution
 
-Start the Rust HTML frontend:
+### Run the full native chain with Python compatibility mode
+
+The Python CLI stays the compatibility entrypoint, but it only delegates to Rust when
+`runtime.backend` is set to `native` in config.
+
+```bash
+cat > native-rust.yaml <<'YAML'
+runtime:
+  backend: native
+  stage2_kernel_backend: auto
+  io_workers: 8
+  cpu_workers: 0
+  stage2_native_threads: 0
+YAML
+
+uv run pystamps --config native-rust.yaml run --dataset "$DATASET_COPY" --start-step 1 --end-step 8
+```
+
+Expected output is a JSON array of stage reports from the Rust pipeline driver:
+
+```json
+[
+  {
+    "stage": 1,
+    "scope": "patch",
+    "target": "PATCH_1",
+    "status": "completed",
+    "details": "written: ps1.mat, ph1.mat, bp1.mat, psver.mat",
+    "duration_sec": 0.84
+  },
+  {
+    "stage": 1,
+    "scope": "patch",
+    "target": "PATCH_2",
+    "status": "completed",
+    "details": "written: ps1.mat, ph1.mat, bp1.mat, psver.mat",
+    "duration_sec": 0.81
+  }
+]
+```
+
+`uv run pystamps run` with `--dry-run` returns the same schema with each entry in `planned` status.
+
+### Native CLI and web console inspection
+
+Start the Rust HTML frontend for manual runs and coverage checks:
 
 ```bash
 make web
 ```
 
-Then open `http://127.0.0.1:8787`. Dry runs are planned in the native Rust core. Full runs are launched from the Rust web process through the existing `pystamps` CLI so artifact semantics and parity behavior stay aligned with the command-line runtime.
+Then open `http://127.0.0.1:8787`.
 
-Inspect the native Rust coverage matrix:
+Inspect raw coverage from the Rust core:
 
 ```bash
-cargo run -p pystamps-core --bin pystamps-native -- coverage
+cargo run -p pystamps-core --bin pystamps-native -- coverage --start-step 1 --end-step 8
 ```
 
-The native stage execution entrypoint is scaffolded for direct stage runs. The canonical raw Stage 1 patch path can be exercised directly, but it is not reported as full native coverage until the parity story certifies it:
+Use the coverage HTTP API:
+
+```bash
+curl http://127.0.0.1:8787/api/native-coverage
+```
+
+Both paths return `StageCoverage[]` objects with:
+- `rust_driver`: the chain can be planned/launched from Rust for that scope
+- `native_stage`: Python execution is not needed for that scope
+- `native_kernels`: accelerated kernel labels used inside the Rust stage
+
+You can also exercise direct stage entry points (for debugging/validation):
 
 ```bash
 cargo run -p pystamps-core --bin pystamps-native -- stage 1 --patch "$DATASET_COPY/PATCH_1"
+cargo run -p pystamps-core --bin pystamps-native -- stage5-merge --dataset "$DATASET_COPY"
+```
+
+### Unsupported native configurations
+
+Both wrappers fail fast when a requested mode is not supported:
+
+- Rust wrapper backend values are limited to `auto`, `threads`, `processes`, `gpu`, or `native`.
+- Rust `--stage2-kernel-backend` accepts only `auto`, `python`, or `native`.
+- Python config normalizer also rejects `runtime.stage2_kernel_backend: cuda` because stage-2 native execution does not expose CUDA.
+
+```bash
+cargo run -p pystamps-core --bin pystamps-native -- run --dataset "$DATASET_COPY" --backend bogus
+```
+
+returns exit code 2 with:
+
+```text
+error: unsupported runtime backend 'bogus'
 ```
 
 ## Verify a run
