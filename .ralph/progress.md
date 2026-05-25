@@ -487,3 +487,30 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: keep scope parsing strict (`patch`/`merged`) so malformed disable inputs are ignored rather than partially disabling unknown scope entries.
   - Useful context: full chain coverage currently returns all rows as native because all stage implementations are parity/performance-certified; disable hooks are now available for negative-path validation.
 ---
+## [2026-05-25 10:32:29 UTC] - US-015: Document full Rust execution
+Thread: 019e5ead-0c76-7113-a4c6-d2f12daa5974
+Run: 20260525-092407-245878 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: c5babf6 docs: document full rust execution and compatibility gates
+- Post-commit status: `clean` after reconciliation commit
+- Verification:
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+- Files changed:
+  - README.md
+  - docs/architecture.md
+  - .ralph/activity.log
+  - .ralph/progress.md
+- What was implemented
+  - Updated README with the native Rust execution path through the Python compatibility wrapper when `runtime.backend: native`.
+  - Documented a full run command, dry-run/JSON report behavior, direct Rust coverage inspection, and `/api/native-coverage`.
+  - Updated architecture docs with native crate responsibilities, parity gate semantics, Stage-5 merged coverage, and web coverage API payload shape.
+  - Added explicit unsupported-configuration notes for invalid Rust runtime backends and unsupported Stage-2 CUDA configuration.
+- **Learnings for future iterations:**
+  - Patterns discovered: user-facing docs should distinguish Python compatibility entrypoints from Rust-native stage ownership, since both remain valid surfaces.
+  - Gotchas encountered: Ralph exhausted its own context after committing the story, so the progress entry had to be appended manually from the clean docs commit and activity log.
+  - Useful context: `GET /api/native-coverage` and `pystamps-native coverage --start-step 1 --end-step 8` share the same core coverage matrix.
+---

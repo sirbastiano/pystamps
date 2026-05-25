@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-25 10:31:47 | run=20260525-092407-245878 | iter=5 | mode=build | story=US-015 | duration=255s | status=error
 - 2026-05-25 10:27:28 | run=20260525-092407-245878 | iter=4 | mode=build | story=US-014 | duration=580s | status=success
 - 2026-05-25 10:17:44 | run=20260525-092407-245878 | iter=3 | mode=build | story=US-013 | duration=754s | status=success
 - 2026-05-25 10:05:06 | run=20260525-092407-245878 | iter=2 | mode=build | story=US-012 | duration=1072s | status=success
@@ -131,3 +132,5 @@
 [2026-05-25 10:27:53] Starting US-015: Document full Rust execution
 [2026-05-25 10:28:36] US-015: updated README and architecture.md for full Rust execution documentation, native coverage inspection, and unsupported configuration behavior
 [2026-05-25 10:30:48] US-015 verification complete: cargo test --workspace PASS; uv run pytest -q tests/test_kernels_accelerated.py PASS
+[2026-05-25 10:31:46] ITERATION 5 end (duration=255s)
+[2026-05-25 10:32:36] US-015 manually reconciled after Ralph context-limit failure; docs commit c5babf6 verified and progress entry appended
