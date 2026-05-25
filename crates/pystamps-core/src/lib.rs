@@ -464,7 +464,10 @@ fn disabled_native_stages_from_env() -> Vec<(u8, StageScope)> {
 fn disable_token_to_stage_scope(token: &str) -> Option<(u8, StageScope)> {
     let token = token.trim();
     let (stage, scope) = token.split_once(':')?;
-    Some((stage.parse::<u8>().ok()?, StageScope::parse(scope)?))
+    Some((
+        stage.trim().parse::<u8>().ok()?,
+        StageScope::parse(scope.trim())?,
+    ))
 }
 
 fn native_kernel_acceleration(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
