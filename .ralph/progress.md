@@ -432,3 +432,32 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - The native graph path avoids all temporary `snaphu.*` and `unwrap.*.node` sidecars on the synthetic fixture, which keeps the Rust path below the external-tool overhead floor.
   - `rustfmt` remains unavailable in this toolchain, so `git diff --check` is the available formatting sanity gate.
 ---
+## [2026-05-25 10:17:05 UTC] - US-013: Wire Rust engine into Python CLI
+Thread: 
+Run: 20260525-092407-245878 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260525-092407-245878-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 0ef38f7 feat(cli): delegate run to native pipeline
+- Post-commit status: `clean`
+- Verification:
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `uv run pytest -q tests/test_cli.py` -> PASS
+- Files changed:
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/tests/native_cli.rs
+  - pystamps/cli.py
+  - tests/test_cli.py
+  - .ralph/activity.log
+- What was implemented
+  - Added a new `run` subcommand to `pystamps-native` that accepts start/end step, dry-run, and runtime/kernel options, executes the same `RunRequest` plan, runs native stage handlers for stages 1-8, updates result status/duration/details, and outputs JSON in the existing schema.
+  - Added runtime config validation in Rust (`backend`, `stage2_kernel_backend`, worker flags, and thread constraints) with structured errors for unsupported combinations.
+  - Wired Python CLI `run` execution to delegate when `runtime.backend == "native"` to the Rust binary, including config passthrough, fallback resolution, and transparent JSON output parsing.
+  - Added regression tests for Python/native delegation behavior, Rust CLI run dry-run planning, and Rust config validation failures.
+- **Learnings for future iterations:**
+  - Patterns discovered: `pystamps-native` can reuse `plan_pipeline` for shared scheduling semantics and keep CLI compatibility, then execute selected stage functions directly for output parity.
+  - Gotchas encountered: unsupported `stage2_native_threads` must be rejected when kernel backend is Python, and subprocess stderr/stdout handling should surface Rust errors verbatim for easier operator debugging.
+  - Useful context: existing Python CLI tests benefit from defaulting optional runtime attributes to avoid fixture fragility when new delegation paths are introduced.
+---

@@ -113,3 +113,4 @@
 [2026-05-25 10:08:05] US-013: Python _cmd_run now routes runtime.backend=native to pystamps-native run command and validates/forwards runtime kernel settings
 [2026-05-25 10:14:18] US-013 verification: required gates passed; also ran tests/test_cli.py and native_cli tests
 [2026-05-25 10:16:53] US-013 verification complete: cargo test --workspace; uv run pytest -q tests/test_kernels_accelerated.py; uv run pytest -q tests/test_cli.py
+[2026-05-25 10:17:22] US-013 progress entry appended with commit hash and verification results
