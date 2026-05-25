@@ -10,6 +10,7 @@ pub mod mat_v5;
 pub mod native_stage1;
 pub mod native_stage2;
 pub mod native_stage3;
+pub mod native_stage4;
 pub mod native_stage5;
 pub mod native_stage7;
 pub mod native_stage8;
@@ -648,8 +649,8 @@ mod tests {
         let err = verify_full_native_processing_chain(1, 8).unwrap_err();
         let message = err.to_string();
 
-        assert!(message.contains("stage 4 patch"));
         assert!(message.contains("stage 6 merged"));
+        assert!(!message.contains("stage 4 patch"));
     }
 
     #[test]

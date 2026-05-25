@@ -66,10 +66,10 @@ const INVENTORY: [StageImplementation; 9] = [
     StageImplementation {
         stage: 4,
         scope: "patch",
-        crate_name: "pystamps-stages",
-        entrypoint: "planned_stage_port",
-        readiness: NativeReadiness::Planned,
-        details: "Stage 4 full native semantics are not implemented yet.",
+        crate_name: "pystamps-core",
+        entrypoint: "native_stage4::run_stage4_native",
+        readiness: NativeReadiness::ParityCertified,
+        details: "Stage 4 patch weeding is native for selected artifact loading, neighbor/height/duplicate masks, Rust graph construction, Rust edge-stat reduction, and weed1 parity coverage.",
     },
     StageImplementation {
         stage: 5,
