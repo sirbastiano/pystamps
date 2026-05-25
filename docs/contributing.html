@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Contributing - pySTAMPS Docs</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script defer src="assets/scripts.js"></script>
+</head>
+<body>
+<div class="site">
+  <aside class="sidebar">
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>How to improve the project.</small>
+    <nav>
+      <div class="nav-group">
+        <h2>Guide</h2>
+        <ul class="nav-list">
+          <li><a href="index.html">Introduction</a></li>
+          <li><a href="pipeline-science-guide.html">Pipeline Guide</a></li>
+          <li><a href="getting-started.html">Getting Started</a></li>
+          <li><a href="installation.html">Installation</a></li>
+          <li><a href="quickstart.html">Quick Start</a></li>
+          <li><a href="architecture.html">Architecture</a></li>
+          <li><a href="configuration.html">Configuration</a></li>
+          <li><a href="usage.html">Usage</a></li>
+          <li><a href="testing.html">Testing</a></li>
+          <li><a href="verification.html">Verification</a></li>
+          <li><a class="active" href="contributing.html">Contributing</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="nav-group">
+        <h2>API</h2>
+        <ul class="nav-list">
+          <li><a href="api/pystamps.html">Package</a></li>
+          <li><a href="api/configuration.html">config</a></li>
+          <li><a href="api/cli.html">cli</a></li>
+          <li><a href="api/status.html">status</a></li>
+          <li><a href="api/verify.html">verify</a></li>
+          <li><a href="api/parity_contract.html">parity_contract</a></li>
+          <li><a href="api/io_dataset.html">io.dataset</a></li>
+          <li><a href="api/io_mat.html">io.mat</a></li>
+          <li><a href="api/runtime.html">runtime</a></li>
+          <li><a href="api/kernels.html">kernels</a></li>
+          <li><a href="api/pipeline_types.html">pipeline.types</a></li>
+          <li><a href="api/pipeline_stages.html">pipeline.stages</a></li>
+          <li><a href="api/pipeline_ported.html">pipeline.ported</a></li>
+          <li><a href="api/compat_legacy.html">compat.legacy</a></li>
+        </ul>
+      </div>
+    </nav>
+  </aside>
+  <main class="content">
+    <div class="breadcrumb">Home / Contributing</div>
+    <h1>Contributing to pySTAMPS</h1>
+    <p class="callout tip">Use this process for code, docs, tests, and docs-site cleanup. Keep changes scoped, reproducible, and parity-safe where relevant.</p>
+
+    <section class="card">
+      <h2>Repository setup</h2>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">git clone git@github.com:sirbastiano/pystamps.git
+cd pystamps
+uv sync
+python -m pip install -e ".[dev]"</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Code quality expectations</h2>
+      <ul>
+        <li>Keep public behavior deterministic and explicit.</li>
+        <li>Use typed APIs and module-local exception types.</li>
+        <li>Keep parity-sensitive changes scoped and include targeted validation evidence.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Standard PR workflow</h2>
+      <ol>
+        <li>Keep each PR focused on one intent.</li>
+        <li>Run relevant tests before asking for review.</li>
+        <li>Include reproducible commands in the PR description.</li>
+        <li>Run parity checks when touching pipeline math or kernel behavior.</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>Branching model</h2>
+      <p>Use short-lived feature branches with one purpose per branch. Merge after validation gates pass.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">git checkout -b feat/your-change
+git add .
+git commit -m "docs: add contributing page"</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Documentation updates</h2>
+      <p>When docs change, update both narrative pages and generated API references so nav and cross-links stay valid.</p>
+      <p>For repository-wide guidance, see <a href="https://github.com/sirbastiano/pystamps/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>
