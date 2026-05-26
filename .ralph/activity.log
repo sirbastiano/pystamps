@@ -191,3 +191,4 @@
 [2026-05-26 22:16:34] US-006: added Stage 3 HDF5 ps1/parms fallbacks and threshold tie/NaN regression test
 [2026-05-26 23:29:50] US-006 verification: cargo workspace, release build, accelerated kernels, and diff check passed; Stage 3/full parity gates still fail on select1 C_ps2/count deltas
 [2026-05-26 23:30:05] US-006 review: security performance regression audit completed; residual blockers are Stage 3 reestimated C_ps2 parity and upstream Stage 2 drift
+[2026-05-26 23:31:09] US-006: updated progress log with incomplete parity outcome and verification details

@@ -87,6 +87,39 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Unsupported char/logical/sparse payloads should remain structured errors until a stage story specifically needs them.
   - `rustfmt` is still unavailable in this environment; keep code manually formatted or install the component outside this run.
 ---
+## [2026-05-26 23:30:38 UTC] - US-006: Restore Stage 3 selection parity
+Thread: 019e6645-7045-78d3-a900-fa638a9f8a0b
+Run: 20260526-142844-454144 (iteration 6)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-6.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-6.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bbab181 fix(stage3): restore hdf5 selection inputs
+- Post-commit status: `clean` before progress entry; final status clean after follow-up progress commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage3::tests -- --nocapture` -> PASS
+  - Command: `make native-full-chain-verify START_STEP=3 END_STEP=3 THREADS=8 RUN=inputs_and_outputs/validation_runs/us006-stage3-after-bin-edges` -> FAIL (native Stage 3 completed all patches; stage-only budget exceeded on PATCH_2/PATCH_3/PATCH_4)
+  - Command: `PYTHONPATH=. uv run python -m pystamps.cli verify --run inputs_and_outputs/validation_runs/us006-stage3-after-bin-edges --golden inputs_and_outputs/InSAR_dataset_test` -> FAIL (`select1.mat` still fails on reestimated `C_ps2` values and PATCH_2/PATCH_4 count deltas)
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `make native-full-chain-verify THREADS=8 RUN=inputs_and_outputs/validation_runs/us006-full-verify` -> FAIL (native execution and performance budgets passed; verifier checked 47 artifacts and failed 38, starting at Stage 2/3 artifacts)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - crates/pystamps-core/src/native_stage3.rs
+- What was implemented
+  - Added Stage 3 local HDF5 fallback reading for MATLAB v7.3 `ps1.mat`, `pm1.mat`, `da1.mat`, and `parms.mat` fields used by native selection.
+  - Restored density-selection parameter loading for HDF5 `parms.mat`, which fixes the large PATCH_1 shrink path caused by silently defaulting to `PERCENT`.
+  - Matched MATLAB one-based `D_A_sort(bin_size:bin_size:end-bin_size)` interior bin edges in native Stage 3.
+  - Added focused regressions for strict threshold tie rejection, NaN candidate rejection, HDF5 Stage 3 inputs, and MATLAB D_A bin edges.
+  - Story remains incomplete: native Stage 3 still does not reproduce original reestimated `C_ps2` values, and PATCH_2/PATCH_4 selection counts remain off by small amounts under direct Stage 3 verification.
+- **Learnings for future iterations:**
+  - Patterns discovered: validation Stage 3 inputs mix MAT v5 and MATLAB v7.3/HDF5 across patches and artifacts; Stage 3 must not rely on the v5 reader alone.
+  - Gotchas encountered: `select1.mat/C_ps2` in the golden data is reestimated and does not equal `pm1.mat/C_ps` at selected rows, so copying Stage 2 coefficients cannot satisfy final `select1.mat` numeric parity.
+  - Useful context: full-chain Stage 3 runtime is within budget after native Stage 2 rewrites `pm1.mat`; isolated Stage 3 on the golden v5 `pm1.mat` files is slower because it reads the large existing MAT payloads.
+---
 ## [2026-05-26 17:16:06 UTC] - US-003: Add native telemetry and performance budgets
 Thread:
 Run: 20260526-142844-454144 (iteration 3)
