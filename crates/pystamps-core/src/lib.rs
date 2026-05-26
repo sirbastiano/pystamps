@@ -1,3 +1,4 @@
+use pystamps_mat::MatData;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fmt;
@@ -110,6 +111,50 @@ pub struct StageResult {
     pub status: StageStatus,
     pub details: String,
     pub duration_sec: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_artifact_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_artifact_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rows_processed: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub memory_peak_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_grid_ps: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_grid_rows: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_grid_cols: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub n_edges: Option<usize>,
+}
+
+impl StageResult {
+    pub fn new(
+        stage: u8,
+        scope: StageScope,
+        target: impl Into<String>,
+        status: StageStatus,
+        details: impl Into<String>,
+        duration_sec: Option<f64>,
+    ) -> Self {
+        Self {
+            stage,
+            scope,
+            target: target.into(),
+            status,
+            details: details.into(),
+            duration_sec,
+            input_artifact_count: None,
+            output_artifact_count: None,
+            rows_processed: None,
+            memory_peak_bytes: None,
+            n_grid_ps: None,
+            n_grid_rows: None,
+            n_grid_cols: None,
+            n_edges: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -409,6 +454,26 @@ pub fn verify_full_native_processing_chain_with_disabled(
     }
 }
 
+pub fn enrich_stage_result_telemetry(dataset_root: impl AsRef<Path>, result: &mut StageResult) {
+    let dataset_root = dataset_root.as_ref();
+    let target_dir = stage_target_dir(dataset_root, result);
+    result.input_artifact_count = Some(count_stage_input_artifacts(
+        dataset_root,
+        &target_dir,
+        result.stage,
+        result.scope,
+    ));
+    result.output_artifact_count = Some(count_existing_artifacts(
+        &target_dir,
+        stage_output_artifacts(result.stage, result.scope),
+    ));
+    result.rows_processed = rows_processed_for_stage(&target_dir, result.stage, result.scope);
+    result.memory_peak_bytes = current_process_peak_rss_bytes();
+    if result.stage == 6 && result.scope == StageScope::Merged {
+        enrich_stage6_grid_telemetry(&target_dir, result);
+    }
+}
+
 fn validate_stage_range(start_step: u8, end_step: u8) -> Result<(), CoreError> {
     if start_step == 0 || end_step == 0 || start_step > end_step || end_step > 8 {
         return Err(CoreError::InvalidStageRange {
@@ -546,28 +611,28 @@ fn plan_single_scope(
     dry_run: bool,
 ) -> StageResult {
     let Some(expected) = expected_stage_artifact(stage_id, scope) else {
-        return StageResult {
-            stage: stage_id,
+        return StageResult::new(
+            stage_id,
             scope,
-            target: target_name.to_string(),
-            status: StageStatus::Skipped,
-            details: "No expected artifact mapping".to_string(),
-            duration_sec: None,
-        };
+            target_name,
+            StageStatus::Skipped,
+            "No expected artifact mapping",
+            None,
+        );
     };
 
     if expected_bundle(stage_id, scope)
         .iter()
         .all(|filename| target_dir.join(filename).exists())
     {
-        return StageResult {
-            stage: stage_id,
+        return StageResult::new(
+            stage_id,
             scope,
-            target: target_name.to_string(),
-            status: StageStatus::SkippedExisting,
-            details: format!("{expected} present"),
-            duration_sec: None,
-        };
+            target_name,
+            StageStatus::SkippedExisting,
+            format!("{expected} present"),
+            None,
+        );
     }
 
     let status = if dry_run {
@@ -576,14 +641,7 @@ fn plan_single_scope(
         StageStatus::PendingExecution
     };
     let verb = if dry_run { "Would produce" } else { "Will produce" };
-    StageResult {
-        stage: stage_id,
-        scope,
-        target: target_name.to_string(),
-        status,
-        details: format!("{verb} {expected}"),
-        duration_sec: None,
-    }
+    StageResult::new(stage_id, scope, target_name, status, format!("{verb} {expected}"), None)
 }
 
 fn dataset_name(path: &Path) -> &str {
@@ -638,9 +696,151 @@ fn expected_bundle(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
     }
 }
 
+fn stage_target_dir(dataset_root: &Path, result: &StageResult) -> PathBuf {
+    match result.scope {
+        StageScope::Patch => dataset_root.join(&result.target),
+        StageScope::Merged => dataset_root.to_path_buf(),
+    }
+}
+
+fn stage_input_artifacts(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
+    match (stage_id, scope) {
+        (1, StageScope::Patch) => &["pscands.1.ij", "pscands.1.ll", "pscands.1.ph"],
+        (2, StageScope::Patch) => &["ps1.mat", "ph1.mat", "bp1.mat"],
+        (3, StageScope::Patch) => &["ps1.mat", "pm1.mat"],
+        (4, StageScope::Patch) => &["ps1.mat", "pm1.mat", "select1.mat"],
+        (5, StageScope::Patch) => &[
+            "ps1.mat",
+            "ph1.mat",
+            "pm1.mat",
+            "bp1.mat",
+            "select1.mat",
+            "weed1.mat",
+        ],
+        (6, StageScope::Merged) => &["ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "ifgstd2.mat"],
+        (7, StageScope::Merged) => &["ps2.mat", "phuw2.mat", "ifgstd2.mat"],
+        (8, StageScope::Merged) => &[
+            "ps2.mat",
+            "phuw2.mat",
+            "scla2.mat",
+            "uw_grid.mat",
+            "uw_interp.mat",
+        ],
+        _ => &[],
+    }
+}
+
+fn stage_output_artifacts(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
+    match (stage_id, scope) {
+        (1, StageScope::Patch) => &["ps1.mat", "ph1.mat", "bp1.mat", "psver.mat"],
+        (2, StageScope::Patch) => &["pm1.mat"],
+        (3, StageScope::Patch) => &["select1.mat"],
+        (4, StageScope::Patch) => &["weed1.mat"],
+        (5, StageScope::Patch) => &[
+            "ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "hgt2.mat", "la2.mat", "rc2.mat",
+            "psver.mat",
+        ],
+        (5, StageScope::Merged) => &[
+            "ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "hgt2.mat", "la2.mat", "rc2.mat",
+            "psver.mat", "ifgstd2.mat",
+        ],
+        (6, StageScope::Merged) => &["phuw2.mat", "uw_phaseuw.mat", "uw_grid.mat", "uw_interp.mat"],
+        (7, StageScope::Merged) => &["scla2.mat", "scla_smooth2.mat"],
+        (8, StageScope::Merged) => &["mean_v.mat", "uw_space_time.mat"],
+        _ => &[],
+    }
+}
+
+fn count_stage_input_artifacts(
+    dataset_root: &Path,
+    target_dir: &Path,
+    stage_id: u8,
+    scope: StageScope,
+) -> usize {
+    if stage_id == 5 && scope == StageScope::Merged {
+        return discover_dataset(dataset_root)
+            .map(|layout| {
+                layout
+                    .patches
+                    .iter()
+                    .map(|patch| {
+                        count_existing_artifacts(patch, stage_output_artifacts(5, StageScope::Patch))
+                    })
+                    .sum()
+            })
+            .unwrap_or(0);
+    }
+    count_existing_artifacts(target_dir, stage_input_artifacts(stage_id, scope))
+}
+
+fn count_existing_artifacts(target_dir: &Path, artifacts: &[&str]) -> usize {
+    artifacts
+        .iter()
+        .filter(|filename| target_dir.join(filename).is_file())
+        .count()
+}
+
+fn rows_processed_for_stage(target_dir: &Path, stage_id: u8, scope: StageScope) -> Option<usize> {
+    let artifact = match (stage_id, scope) {
+        (1, StageScope::Patch) | (2, StageScope::Patch) | (3, StageScope::Patch) | (4, StageScope::Patch) => {
+            "ps1.mat"
+        }
+        (5, StageScope::Patch) | (5, StageScope::Merged) | (6, StageScope::Merged) | (7, StageScope::Merged)
+        | (8, StageScope::Merged) => "ps2.mat",
+        _ => return None,
+    };
+    read_mat_scalar_usize(&target_dir.join(artifact), "n_ps")
+}
+
+fn enrich_stage6_grid_telemetry(target_dir: &Path, result: &mut StageResult) {
+    if let Ok(grid) = MatData::read(target_dir.join("uw_grid.mat")) {
+        result.n_grid_ps = mat_scalar_usize(&grid, "n_ps");
+        if let Ok(nzix) = grid.get("nzix") {
+            result.n_grid_rows = Some(nzix.rows);
+            result.n_grid_cols = Some(nzix.cols);
+        }
+    }
+    if let Ok(interp) = MatData::read(target_dir.join("uw_interp.mat")) {
+        result.n_edges = mat_scalar_usize(&interp, "n_edge")
+            .or_else(|| interp.get("edgs").ok().map(|edgs| edgs.rows));
+    }
+}
+
+fn read_mat_scalar_usize(path: &Path, name: &str) -> Option<usize> {
+    MatData::read(path)
+        .ok()
+        .and_then(|mat| mat_scalar_usize(&mat, name))
+}
+
+fn mat_scalar_usize(mat: &MatData, name: &str) -> Option<usize> {
+    let values = mat.get_f64_matrix(name).ok()?;
+    let value = *values.values.first()?;
+    if value.is_finite() && value >= 0.0 {
+        Some(value.round() as usize)
+    } else {
+        None
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn current_process_peak_rss_bytes() -> Option<u64> {
+    let status = fs::read_to_string("/proc/self/status").ok()?;
+    status.lines().find_map(|line| {
+        let value = line.strip_prefix("VmHWM:")?.trim();
+        let kb = value.split_whitespace().next()?.parse::<u64>().ok()?;
+        Some(kb * 1024)
+    })
+}
+
+#[cfg(not(target_os = "linux"))]
+fn current_process_peak_rss_bytes() -> Option<u64> {
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pystamps_mat::MatFile;
     use std::fs::{self, File};
 
     #[test]
@@ -779,6 +979,54 @@ mod tests {
         assert_eq!(execution.exit_code, Some(0));
         assert_eq!(execution.results.len(), 1);
         assert_eq!(execution.results[0].status, StageStatus::Completed);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stage6_telemetry_reports_grid_shape_and_edges() {
+        let root = temp_dataset("pystamps-core-telemetry");
+        let mut ps2 = MatFile::new(root.join("ps2.mat"));
+        ps2.add_f64_scalar("n_ps", 10.0).unwrap();
+        ps2.write().unwrap();
+
+        let mut uw_grid = MatFile::new(root.join("uw_grid.mat"));
+        uw_grid.add_f64_scalar("n_ps", 4.0).unwrap();
+        uw_grid
+            .add_u8_matrix("nzix", 2, 3, vec![1, 0, 1, 0, 1, 1])
+            .unwrap();
+        uw_grid.write().unwrap();
+
+        let mut uw_interp = MatFile::new(root.join("uw_interp.mat"));
+        uw_interp.add_f64_scalar("n_edge", 5.0).unwrap();
+        uw_interp
+            .add_f64_matrix(
+                "edgs",
+                5,
+                3,
+                vec![
+                    1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 1.0, 5.0, 1.0,
+                    3.0,
+                ],
+            )
+            .unwrap();
+        uw_interp.write().unwrap();
+
+        let mut result = StageResult::new(
+            6,
+            StageScope::Merged,
+            "dataset",
+            StageStatus::Completed,
+            "ok",
+            Some(1.25),
+        );
+
+        enrich_stage_result_telemetry(&root, &mut result);
+
+        assert_eq!(result.rows_processed, Some(10));
+        assert_eq!(result.n_grid_ps, Some(4));
+        assert_eq!(result.n_grid_rows, Some(2));
+        assert_eq!(result.n_grid_cols, Some(3));
+        assert_eq!(result.n_edges, Some(5));
         fs::remove_dir_all(root).unwrap();
     }
 

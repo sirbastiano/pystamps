@@ -7,7 +7,8 @@ use pystamps_core::native_stage6::run_stage6_native;
 use pystamps_core::native_stage7::run_stage7_native;
 use pystamps_core::native_stage8::run_stage8_native;
 use pystamps_core::{
-    plan_pipeline, processing_chain_coverage, RunRequest, StageResult, StageScope, StageStatus,
+    enrich_stage_result_telemetry, plan_pipeline, processing_chain_coverage, RunRequest,
+    StageResult, StageScope, StageStatus,
 };
 use std::path::Path;
 use std::path::PathBuf;
@@ -158,6 +159,10 @@ fn execute_run_pipeline(request: &RunRequest, runtime: &RunTimeConfig) -> Result
                 result.duration_sec = Some(start.elapsed().as_secs_f64());
             }
         }
+    }
+
+    for result in &mut results {
+        enrich_stage_result_telemetry(request.dataset_root.as_path(), result);
     }
 
     let json = serde_json::to_string_pretty(&results).map_err(|err| err.to_string())?;

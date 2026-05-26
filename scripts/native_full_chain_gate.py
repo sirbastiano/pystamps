@@ -15,6 +15,7 @@ from typing import Any
 
 PATCH_PREFIX = "PATCH_"
 REPORT_DIR_NAME = "_native_gate_reports"
+DEFAULT_BUDGET_MANIFEST = Path(__file__).resolve().parents[1] / "pystamps" / "data" / "native_performance_budgets.json"
 
 STAGE_CLEAN_PATTERNS: dict[int, tuple[str, ...]] = {
     1: (
@@ -248,15 +249,26 @@ def _stage_status(result: dict[str, Any]) -> str:
 def _stage_durations(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for result in results:
-        rows.append(
-            {
-                "stage": result.get("stage"),
-                "scope": result.get("scope"),
-                "target": result.get("target"),
-                "status": result.get("status"),
-                "duration_sec": result.get("duration_sec"),
-            }
-        )
+        row = {
+            "stage": result.get("stage"),
+            "scope": result.get("scope"),
+            "target": result.get("target"),
+            "status": result.get("status"),
+            "duration_sec": result.get("duration_sec"),
+        }
+        for key in (
+            "input_artifact_count",
+            "output_artifact_count",
+            "rows_processed",
+            "memory_peak_bytes",
+            "n_grid_ps",
+            "n_grid_rows",
+            "n_grid_cols",
+            "n_edges",
+        ):
+            if key in result:
+                row[key] = result.get(key)
+        rows.append(row)
     return rows
 
 
@@ -269,6 +281,190 @@ def _print_stage_durations(rows: list[dict[str, Any]]) -> None:
             "  "
             f"stage {row.get('stage')} {row.get('scope')} {row.get('target')}: "
             f"{duration_text} {row.get('status')}"
+        )
+
+
+def load_performance_budget_manifest(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        raise GateError(f"performance budget manifest does not exist: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise GateError(f"performance budget manifest is invalid JSON: {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise GateError(f"performance budget manifest must be a JSON object: {path}")
+    payload = dict(payload)
+    payload["manifest_path"] = str(path)
+    return payload
+
+
+def evaluate_performance_budgets(
+    manifest: dict[str, Any],
+    elapsed_sec: float,
+    stage_rows: list[dict[str, Any]],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    now = now or datetime.now(timezone.utc)
+    violations: list[dict[str, Any]] = []
+    waivers: list[dict[str, Any]] = []
+
+    release = manifest.get("release", {})
+    if isinstance(release, dict):
+        max_total = _number_or_none(release.get("max_total_duration_sec"))
+        if max_total is not None and elapsed_sec > max_total:
+            _record_budget_result(
+                violations,
+                waivers,
+                release,
+                now,
+                {
+                    "kind": "release_runtime",
+                    "scope": "run",
+                    "observed": elapsed_sec,
+                    "ceiling": max_total,
+                    "message": f"release runtime {elapsed_sec:.3f}s exceeds {max_total:.3f}s",
+                },
+            )
+
+    for row in stage_rows:
+        budget = _matching_stage_budget(manifest, row)
+        if budget is None:
+            continue
+        duration = _number_or_none(row.get("duration_sec"))
+        max_duration = _number_or_none(budget.get("max_duration_sec"))
+        if duration is not None and max_duration is not None and duration > max_duration:
+            _record_budget_result(
+                violations,
+                waivers,
+                budget,
+                now,
+                {
+                    "kind": "stage_duration",
+                    "stage": row.get("stage"),
+                    "scope": row.get("scope"),
+                    "target": row.get("target"),
+                    "observed": duration,
+                    "ceiling": max_duration,
+                    "message": (
+                        f"stage {row.get('stage')} {row.get('scope')} {row.get('target')} "
+                        f"duration {duration:.3f}s exceeds {max_duration:.3f}s"
+                    ),
+                },
+            )
+        memory_peak = _number_or_none(row.get("memory_peak_bytes"))
+        max_memory = _number_or_none(budget.get("max_peak_rss_bytes"))
+        if memory_peak is not None and max_memory is not None and memory_peak > max_memory:
+            _record_budget_result(
+                violations,
+                waivers,
+                budget,
+                now,
+                {
+                    "kind": "stage_memory",
+                    "stage": row.get("stage"),
+                    "scope": row.get("scope"),
+                    "target": row.get("target"),
+                    "observed": memory_peak,
+                    "ceiling": max_memory,
+                    "message": (
+                        f"stage {row.get('stage')} {row.get('scope')} {row.get('target')} "
+                        f"peak RSS {int(memory_peak)} bytes exceeds {int(max_memory)} bytes"
+                    ),
+                },
+            )
+
+    return {
+        "ok": not violations,
+        "manifest_path": manifest.get("manifest_path"),
+        "violations": violations,
+        "waivers": waivers,
+        "checked_stage_count": len(stage_rows),
+    }
+
+
+def _record_budget_result(
+    violations: list[dict[str, Any]],
+    waivers: list[dict[str, Any]],
+    budget: dict[str, Any],
+    now: datetime,
+    item: dict[str, Any],
+) -> None:
+    waiver = budget.get("temporary_waiver")
+    if _documented_temporary_waiver(waiver, now):
+        waived = dict(item)
+        waived["waiver"] = waiver
+        waivers.append(waived)
+    else:
+        violations.append(item)
+
+
+def _documented_temporary_waiver(value: Any, now: datetime) -> bool:
+    if not isinstance(value, dict):
+        return False
+    reason = str(value.get("reason", "")).strip()
+    owner = str(value.get("owner", "")).strip()
+    expires_raw = str(value.get("expires_at_utc", "")).strip()
+    if not reason or not owner or not expires_raw:
+        return False
+    expires = _parse_utc_datetime(expires_raw)
+    return expires is not None and expires > now
+
+
+def _parse_utc_datetime(value: str) -> datetime | None:
+    try:
+        normalized = value[:-1] + "+00:00" if value.endswith("Z") else value
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _matching_stage_budget(manifest: dict[str, Any], row: dict[str, Any]) -> dict[str, Any] | None:
+    stages = manifest.get("stages", [])
+    if not isinstance(stages, list):
+        return None
+    for budget in stages:
+        if not isinstance(budget, dict):
+            continue
+        if int(budget.get("stage", -1)) != int(row.get("stage", -2)):
+            continue
+        if str(budget.get("scope", "")).lower() != str(row.get("scope", "")).lower():
+            continue
+        if _target_matches(str(budget.get("target", "*")), str(row.get("target", ""))):
+            return budget
+    return None
+
+
+def _target_matches(pattern: str, target: str) -> bool:
+    if pattern in {"*", ""}:
+        return True
+    if pattern.endswith("*"):
+        return target.startswith(pattern[:-1])
+    return pattern == target
+
+
+def _number_or_none(value: Any) -> float | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _print_budget_report(report: dict[str, Any]) -> None:
+    print(f"Performance budget status: {'ok' if report.get('ok') else 'failed'}")
+    for violation in report.get("violations", []):
+        print(f"  budget violation: {violation.get('message')}")
+    for waiver in report.get("waivers", []):
+        waiver_info = waiver.get("waiver", {})
+        print(
+            "  budget waiver: "
+            f"{waiver.get('message')} "
+            f"(owner={waiver_info.get('owner')}, expires={waiver_info.get('expires_at_utc')})"
         )
 
 
@@ -290,9 +486,12 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
 
     stage_failed = any(_stage_status(result) == "failed" for result in results if isinstance(result, dict))
     skipped_existing = any(_stage_status(result) == "skipped_existing" for result in results if isinstance(result, dict))
-    ok = completed.returncode == 0 and not stage_failed and not skipped_existing
     duration_rows = _stage_durations([result for result in results if isinstance(result, dict)])
+    budget_manifest = load_performance_budget_manifest(Path(args.budget_manifest).expanduser())
+    budget_report = evaluate_performance_budgets(budget_manifest, elapsed, duration_rows)
 
+    native_ok = completed.returncode == 0 and not stage_failed and not skipped_existing
+    ok = native_ok and bool(budget_report["ok"])
     run_report = {
         "generated_at_utc": _now_utc(),
         "ok": ok,
@@ -304,12 +503,14 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         "stdout": completed.stdout,
         "stderr": completed.stderr,
         "results": results,
+        "performance_budget": budget_report,
     }
     timing_report = {
         "generated_at_utc": run_report["generated_at_utc"],
         "run_root": str(run_root),
         "elapsed_sec": elapsed,
         "stages": duration_rows,
+        "performance_budget": budget_report,
     }
     run_report_path = report_dir / "native-run-report.json"
     timing_report_path = report_dir / "native-run-timings.json"
@@ -317,6 +518,7 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     _write_json(timing_report_path, timing_report)
 
     _print_stage_durations(duration_rows)
+    _print_budget_report(budget_report)
     print(f"Native run status: {'ok' if ok else 'failed'}")
     print(f"Native run report: {run_report_path}")
     print(f"Native timing report: {timing_report_path}")
@@ -392,6 +594,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         subparser.add_argument("--threads", type=int, default=0)
         subparser.add_argument("--start-step", type=int, default=1)
         subparser.add_argument("--end-step", type=int, default=8)
+        subparser.add_argument("--budget-manifest", default=str(DEFAULT_BUDGET_MANIFEST))
 
     run_parser = subparsers.add_parser("run", help="Create a clean run copy and execute native stages")
     add_common(run_parser)

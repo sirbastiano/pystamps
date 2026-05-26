@@ -1,0 +1,101 @@
+{
+  "manifest_version": 1,
+  "purpose": "Release performance budgets for the native full-chain validation gate.",
+  "dataset": "inputs_and_outputs/InSAR_dataset_test",
+  "runtime_profile": {
+    "binary": "target/release/pystamps-native",
+    "gate": "make native-full-chain-verify",
+    "stage2_native_threads": "THREADS make variable; default 0 lets the native runner use its CPU budget"
+  },
+  "release": {
+    "max_total_duration_sec": 600.0,
+    "temporary_waiver": null
+  },
+  "defaults": {
+    "max_peak_rss_bytes": 51539607552,
+    "temporary_waiver": null
+  },
+  "stages": [
+    {
+      "stage": 1,
+      "scope": "patch",
+      "target": "PATCH_*",
+      "max_duration_sec": 30.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "Raw candidate loading must remain linear in candidate rows and interferogram columns.",
+      "temporary_waiver": null
+    },
+    {
+      "stage": 2,
+      "scope": "patch",
+      "target": "PATCH_*",
+      "max_duration_sec": 120.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "CLAP filtering and topofit iteration must avoid dense all-pairs candidate work.",
+      "temporary_waiver": null
+    },
+    {
+      "stage": 3,
+      "scope": "patch",
+      "target": "PATCH_*",
+      "max_duration_sec": 12.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "Selection must stream over candidate rows without materializing unnecessary dense history.",
+      "temporary_waiver": null
+    },
+    {
+      "stage": 4,
+      "scope": "patch",
+      "target": "PATCH_*",
+      "max_duration_sec": 10.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "Weeding graph construction must stay sparse and avoid complete PS edge lists.",
+      "temporary_waiver": null
+    },
+    {
+      "stage": 5,
+      "scope": "patch",
+      "target": "PATCH_*",
+      "max_duration_sec": 20.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "Patch promotion must copy selected rows directly without reorder-expanding full patch history.",
+      "temporary_waiver": null
+    },
+    {
+      "stage": 5,
+      "scope": "merged",
+      "target": "*",
+      "max_duration_sec": 30.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "Merged aggregation must preserve patch order and avoid quadratic overlap scans.",
+      "temporary_waiver": null
+    },
+    {
+      "stage": 6,
+      "scope": "merged",
+      "target": "*",
+      "max_duration_sec": 30.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "Interpolation must use grid labels or sparse graph neighborhoods, not grid-by-PS brute force.",
+      "temporary_waiver": null
+    },
+    {
+      "stage": 7,
+      "scope": "merged",
+      "target": "*",
+      "max_duration_sec": 20.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "SCLA smoothing must keep arc neighborhoods sparse and avoid complete PS edge materialization.",
+      "temporary_waiver": null
+    },
+    {
+      "stage": 8,
+      "scope": "merged",
+      "target": "*",
+      "max_duration_sec": 25.0,
+      "max_peak_rss_bytes": 51539607552,
+      "algorithmic_guard": "Space-time filtering must operate on existing edge tables without dense all-pairs expansion.",
+      "temporary_waiver": null
+    }
+  ]
+}

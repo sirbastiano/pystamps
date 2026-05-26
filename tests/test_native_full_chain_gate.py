@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -63,3 +64,140 @@ def test_authoritative_patch_manifest_rejects_subset_without_legacy_manifest(tmp
 
     with pytest.raises(module.GateError, match="patch.list lists 1 patch"):
         module.authoritative_patch_manifest(dataset)
+
+
+def test_performance_budget_manifest_is_packaged_and_release_capped() -> None:
+    module = _load_gate_module()
+
+    manifest = module.load_performance_budget_manifest(module.DEFAULT_BUDGET_MANIFEST)
+
+    assert manifest["dataset"] == "inputs_and_outputs/InSAR_dataset_test"
+    assert manifest["release"]["max_total_duration_sec"] == 600.0
+    assert {(entry["stage"], entry["scope"]) for entry in manifest["stages"]} >= {
+        (1, "patch"),
+        (5, "merged"),
+        (6, "merged"),
+        (8, "merged"),
+    }
+    assert all("max_duration_sec" in entry and "max_peak_rss_bytes" in entry for entry in manifest["stages"])
+
+
+def test_budget_evaluation_fails_release_runtime_without_waiver() -> None:
+    module = _load_gate_module()
+    manifest = {
+        "release": {"max_total_duration_sec": 600.0, "temporary_waiver": None},
+        "stages": [],
+    }
+
+    report = module.evaluate_performance_budgets(
+        manifest,
+        601.0,
+        [],
+        now=datetime(2026, 5, 26, tzinfo=timezone.utc),
+    )
+
+    assert report["ok"] is False
+    assert report["violations"][0]["kind"] == "release_runtime"
+
+
+def test_budget_evaluation_accepts_documented_temporary_runtime_waiver() -> None:
+    module = _load_gate_module()
+    manifest = {
+        "release": {
+            "max_total_duration_sec": 600.0,
+            "temporary_waiver": {
+                "reason": "validation VM maintenance window",
+                "owner": "native-parity",
+                "expires_at_utc": "2026-05-27T00:00:00+00:00",
+            },
+        },
+        "stages": [],
+    }
+
+    report = module.evaluate_performance_budgets(
+        manifest,
+        601.0,
+        [],
+        now=datetime(2026, 5, 26, tzinfo=timezone.utc),
+    )
+
+    assert report["ok"] is True
+    assert report["waivers"][0]["kind"] == "release_runtime"
+
+
+def test_budget_evaluation_fails_slow_or_memory_heavy_stage() -> None:
+    module = _load_gate_module()
+    manifest = {
+        "release": {"max_total_duration_sec": 600.0, "temporary_waiver": None},
+        "stages": [
+            {
+                "stage": 6,
+                "scope": "merged",
+                "target": "*",
+                "max_duration_sec": 10.0,
+                "max_peak_rss_bytes": 100,
+                "temporary_waiver": None,
+            }
+        ],
+    }
+
+    report = module.evaluate_performance_budgets(
+        manifest,
+        20.0,
+        [
+            {
+                "stage": 6,
+                "scope": "merged",
+                "target": "native-full-chain",
+                "status": "completed",
+                "duration_sec": 11.0,
+                "memory_peak_bytes": 101,
+            }
+        ],
+        now=datetime(2026, 5, 26, tzinfo=timezone.utc),
+    )
+
+    assert report["ok"] is False
+    assert {violation["kind"] for violation in report["violations"]} == {"stage_duration", "stage_memory"}
+
+
+def test_stage_duration_rows_preserve_native_telemetry_fields() -> None:
+    module = _load_gate_module()
+
+    rows = module._stage_durations(
+        [
+            {
+                "stage": 6,
+                "scope": "merged",
+                "target": "run",
+                "status": "completed",
+                "duration_sec": 1.0,
+                "input_artifact_count": 5,
+                "output_artifact_count": 4,
+                "rows_processed": 10,
+                "memory_peak_bytes": 4096,
+                "n_grid_ps": 4,
+                "n_grid_rows": 2,
+                "n_grid_cols": 3,
+                "n_edges": 5,
+            }
+        ]
+    )
+
+    assert rows == [
+        {
+            "stage": 6,
+            "scope": "merged",
+            "target": "run",
+            "status": "completed",
+            "duration_sec": 1.0,
+            "input_artifact_count": 5,
+            "output_artifact_count": 4,
+            "rows_processed": 10,
+            "memory_peak_bytes": 4096,
+            "n_grid_ps": 4,
+            "n_grid_rows": 2,
+            "n_grid_cols": 3,
+            "n_edges": 5,
+        }
+    ]

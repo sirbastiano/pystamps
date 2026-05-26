@@ -10,6 +10,7 @@ THREADS ?= 0
 START_STEP ?= 1
 END_STEP ?= 8
 NATIVE_BIN ?= target/release/pystamps-native
+PERFORMANCE_BUDGETS ?= pystamps/data/native_performance_budgets.json
 BENCHMARK_DATASET = inputs_and_outputs/InSAR_dataset_test_stage8diag
 PYPI_PROJECT ?= pystamps-insar
 VERSION ?=
@@ -143,7 +144,8 @@ native-full-chain-run: native-release-bin
 		--native-bin "$(NATIVE_BIN)" \
 		--threads "$(THREADS)" \
 		--start-step "$(START_STEP)" \
-		--end-step "$(END_STEP)"
+		--end-step "$(END_STEP)" \
+		--budget-manifest "$(PERFORMANCE_BUDGETS)"
 
 native-full-chain-verify: native-release-bin
 	$(PARITY_ENV) uv run python scripts/native_full_chain_gate.py verify \
@@ -153,7 +155,8 @@ native-full-chain-verify: native-release-bin
 		--native-bin "$(NATIVE_BIN)" \
 		--threads "$(THREADS)" \
 		--start-step "$(START_STEP)" \
-		--end-step "$(END_STEP)"
+		--end-step "$(END_STEP)" \
+		--budget-manifest "$(PERFORMANCE_BUDGETS)"
 
 benchmark:
 	uv run python scripts/benchmark_backends.py \
