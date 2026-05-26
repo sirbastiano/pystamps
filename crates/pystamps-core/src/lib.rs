@@ -283,6 +283,28 @@ pub fn discover_dataset(path: impl AsRef<Path>) -> Result<DatasetLayout, CoreErr
         return Err(CoreError::DatasetNotDirectory(root));
     }
 
+    let patch_list = root.join("patch.list");
+    if patch_list.exists() {
+        let text = fs::read_to_string(&patch_list).map_err(|source| CoreError::FileIo {
+            path: patch_list.clone(),
+            source,
+        })?;
+        let mut patches = Vec::new();
+        for name in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
+            if name.starts_with('#') {
+                continue;
+            }
+            let patch = root.join(name);
+            if !valid_patch_name(name) || !patch.is_dir() {
+                return Err(CoreError::DatasetNotDirectory(patch));
+            }
+            patches.push(patch);
+        }
+        if !patches.is_empty() {
+            return Ok(DatasetLayout { root, patches });
+        }
+    }
+
     let mut patches = Vec::new();
     let entries = fs::read_dir(&root).map_err(|source| CoreError::ReadDataset {
         path: root.clone(),
@@ -304,13 +326,23 @@ pub fn discover_dataset(path: impl AsRef<Path>) -> Result<DatasetLayout, CoreErr
             patches.push(path);
         }
     }
-    patches.sort_by(|left, right| {
-        let left_name = left.file_name().unwrap_or_default();
-        let right_name = right.file_name().unwrap_or_default();
-        left_name.cmp(right_name)
-    });
+    patches.sort_by_key(|path| patch_sort_key(path));
 
     Ok(DatasetLayout { root, patches })
+}
+
+fn patch_sort_key(path: &Path) -> (u64, String) {
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    let suffix = name.strip_prefix("PATCH_").unwrap_or(name);
+    let numeric = suffix.parse::<u64>().unwrap_or(u64::MAX);
+    (numeric, name.to_string())
+}
+
+fn valid_patch_name(name: &str) -> bool {
+    name.starts_with("PATCH_") && !name.contains('/') && !name.contains('\\')
 }
 
 pub fn plan_pipeline(request: &RunRequest) -> Result<Vec<StageResult>, CoreError> {
@@ -862,6 +894,25 @@ mod tests {
         assert_eq!(results[0].status, StageStatus::Planned);
         assert_eq!(results[2].scope, StageScope::Merged);
         assert_eq!(results[2].details, "Would produce ifgstd2.mat");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn discover_dataset_prefers_patch_list_order_and_bounds() {
+        let root = temp_dataset("pystamps-core-patch-list");
+        fs::create_dir(root.join("PATCH_1")).unwrap();
+        fs::create_dir(root.join("PATCH_2")).unwrap();
+        fs::create_dir(root.join("PATCH_3")).unwrap();
+        fs::write(root.join("patch.list"), "PATCH_2\nPATCH_1\n").unwrap();
+
+        let layout = discover_dataset(&root).unwrap();
+        let names = layout
+            .patches
+            .iter()
+            .map(|path| path.file_name().unwrap().to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(names, vec!["PATCH_2", "PATCH_1"]);
         fs::remove_dir_all(root).unwrap();
     }
 

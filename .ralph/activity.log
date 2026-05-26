@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-26 17:17:48 | run=20260526-142844-454144 | iter=3 | mode=build | story=US-003 | duration=3524s | status=success
 - 2026-05-26 16:18:56 | run=20260526-142844-454144 | iter=2 | mode=build | story=US-002 | duration=3712s | status=success
 - 2026-05-26 15:16:48 | run=20260526-142844-454144 | iter=1 | mode=build | story=US-001 | duration=2875s | status=success
 - 2026-05-25 10:31:47 | run=20260525-092407-245878 | iter=5 | mode=build | story=US-015 | duration=255s | status=error
@@ -158,3 +159,11 @@
 [2026-05-26 17:08:40] US-003 verification: focused tests and required gates run; native budget gate passed, parity verifier remains failing on existing 47 artifacts
 [2026-05-26 17:13:56] US-003 review: security performance regression audit completed before commit
 [2026-05-26 17:16:53] US-003 progress entry appended with implementation commit and verification results
+[2026-05-26 17:17:44] ITERATION 3 end (duration=3524s)
+[2026-05-26 17:17:53] ITERATION 4 start (mode=build story=US-004)
+[2026-05-26 17:19:24] Resolved activity logger command for US-004; required context read complete
+[2026-05-26 17:31:55] Implemented Stage 1 single-precision sort parity and patch.list discovery for US-004
+[2026-05-26 17:42:16] Focused US-004 Stage 1 parity and negative shift tests passed
+[2026-05-26 18:09:04] Completed US-004 verification gates; Stage 1 ps1 parity passes and full-chain verify fails only on downstream artifacts
+[2026-05-26 18:30:11] Tightened US-004 negative ij shift test before final commit
+[2026-05-26 18:33:09] Final US-004 Rust workspace gate and diff check passed before commit

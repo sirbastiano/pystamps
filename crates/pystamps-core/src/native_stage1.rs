@@ -77,11 +77,15 @@ pub fn run_stage1_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         .collect();
     let heading_deg = stage1_heading_deg(patch_dir);
     let (xy_local, ll0) = local_xy_from_lonlat(&lonlat, heading_deg);
+    let xy_sort = xy_local
+        .iter()
+        .map(|pair| [pair[0] as f32, pair[1] as f32])
+        .collect::<Vec<_>>();
     let mut sort_ix: Vec<usize> = (0..n_ps).collect();
     sort_ix.sort_by(|&left, &right| {
-        xy_local[left][1]
-            .total_cmp(&xy_local[right][1])
-            .then_with(|| xy_local[left][0].total_cmp(&xy_local[right][0]))
+        xy_sort[left][1]
+            .total_cmp(&xy_sort[right][1])
+            .then_with(|| xy_sort[left][0].total_cmp(&xy_sort[right][0]))
     });
 
     let mut ij_sorted = Vec::with_capacity(n_ps * ij[0].len());
@@ -98,8 +102,8 @@ pub fn run_stage1_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         }
         lonlat_sorted.extend_from_slice(&lonlat[src_row]);
         xy_out.push((out_row + 1) as f32);
-        xy_out.push(quantize_mm(xy_local[src_row][0] as f32));
-        xy_out.push(quantize_mm(xy_local[src_row][1] as f32));
+        xy_out.push(quantize_mm(xy_sort[src_row][0]));
+        xy_out.push(quantize_mm(xy_sort[src_row][1]));
         for col in 0..day_full.len() {
             ph_sorted[out_row * day_full.len() + col] = ph_reordered[src_row * day_full.len() + col];
         }
@@ -1003,6 +1007,67 @@ mod tests {
     }
 
     #[test]
+    fn validation_stage1_ps1_ij_matches_golden_for_representative_patches() {
+        let golden_root = workspace_validation_root();
+        assert!(
+            golden_root.join("PATCH_1/ps1.mat").is_file(),
+            "validation golden dataset is missing at {}",
+            golden_root.display()
+        );
+        let root = prepare_validation_stage1_fixture(&golden_root, &["PATCH_1", "PATCH_2"]);
+
+        for patch_name in ["PATCH_1", "PATCH_2"] {
+            let patch_dir = root.join(patch_name);
+            run_stage1_native(&patch_dir).unwrap();
+        }
+        assert_stage1_ps1_matches_golden_with_python(&golden_root, &root, &["PATCH_1", "PATCH_2"]);
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn validation_stage1_ij_parity_rejects_zero_based_shifts() {
+        let golden_root = workspace_validation_root();
+        let script = r#"
+import sys
+from pathlib import Path
+
+import numpy as np
+
+from pystamps.io.mat import read_mat
+
+root = Path(sys.argv[1])
+ij = np.asarray(read_mat(root / "PATCH_1" / "ps1.mat")["ij"], dtype=np.float64)
+
+def expect_ij_mismatch(label, shifted):
+    try:
+        np.testing.assert_array_equal(ij, shifted)
+    except AssertionError:
+        return
+    raise AssertionError(f"{label} unexpectedly passed exact ij parity")
+
+row_shifted = ij.copy()
+row_shifted[:, 0] -= 1
+expect_ij_mismatch("zero-based row indices", row_shifted)
+
+column_shifted = ij.copy()
+column_shifted[:, 1] -= 1
+expect_ij_mismatch("zero-based coordinate columns", column_shifted)
+"#;
+        let output = Command::new("uv")
+            .args(["run", "python", "-c", script])
+            .arg(&golden_root)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "negative ij shift check failed: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
     fn stage1_reuses_existing_ps1_metadata_without_text_files() {
         let root = temp_root("existing");
         let patch = root.join("PATCH_1");
@@ -1156,6 +1221,161 @@ heading: 12
         )
         .unwrap();
         bp1.write().unwrap();
+    }
+
+    fn workspace_validation_root() -> PathBuf {
+        workspace_root().join("inputs_and_outputs/InSAR_dataset_test")
+    }
+
+    fn workspace_root() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(Path::parent)
+            .unwrap()
+            .to_path_buf()
+    }
+
+    fn prepare_validation_stage1_fixture(golden_root: &Path, patch_names: &[&str]) -> PathBuf {
+        let root = temp_workspace_root("validation-parity");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        for filename in ["width.txt", "len.txt"] {
+            link_or_copy(&golden_root.join(filename), &root.join(filename));
+        }
+
+        copy_matching_files(&golden_root.join("diff0"), &root.join("diff0"), "base");
+        copy_matching_files(&golden_root.join("rslc"), &root.join("rslc"), "par");
+        fs::write(
+            root.join("patch.list"),
+            patch_names
+                .iter()
+                .map(|name| format!("{name}\n"))
+                .collect::<String>(),
+        )
+        .unwrap();
+
+        for patch_name in patch_names {
+            let golden_patch = golden_root.join(patch_name);
+            let patch = root.join(patch_name);
+            fs::create_dir_all(&patch).unwrap();
+            for filename in [
+                "pscands.1.ij",
+                "pscands.1.ll",
+                "pscands.1.ph",
+                "pscands.1.da",
+                "pscands.1.hgt",
+                "pscands.1.la",
+            ] {
+                let source = golden_patch.join(filename);
+                if source.exists() {
+                    link_or_copy(&source, &patch.join(filename));
+                }
+            }
+        }
+        root
+    }
+
+    fn copy_matching_files(source_dir: &Path, target_dir: &Path, extension: &str) {
+        fs::create_dir_all(target_dir).unwrap();
+        for entry in fs::read_dir(source_dir).unwrap() {
+            let source = entry.unwrap().path();
+            if source.extension().and_then(|value| value.to_str()) == Some(extension) {
+                link_or_copy(&source, &target_dir.join(source.file_name().unwrap()));
+            }
+        }
+    }
+
+    fn link_or_copy(source: &Path, target: &Path) {
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        if fs::hard_link(source, target).is_err() {
+            fs::copy(source, target).unwrap();
+        }
+    }
+
+    fn assert_stage1_ps1_matches_golden_with_python(golden_root: &Path, observed_root: &Path, patch_names: &[&str]) {
+        let script = r#"
+import sys
+from pathlib import Path
+
+import numpy as np
+
+from pystamps.io.mat import read_mat
+
+golden_root = Path(sys.argv[1])
+observed_root = Path(sys.argv[2])
+patches = sys.argv[3:]
+keys = [
+    "bperp",
+    "day",
+    "ij",
+    "ll0",
+    "lonlat",
+    "master_day",
+    "master_ix",
+    "mean_incidence",
+    "mean_range",
+    "n_ifg",
+    "n_image",
+    "n_ps",
+    "sort_ix",
+    "xy",
+]
+tolerances = {
+    "bperp": (1.0e-4, 1.0e-5),
+    "xy": (1.0e-4, 1.0e-5),
+    "ll0": (1.0e-6, 1.0e-8),
+    "lonlat": (1.0e-6, 1.0e-8),
+    "mean_incidence": (1.0e-6, 1.0e-8),
+    "mean_range": (1.0e-6, 1.0e-8),
+}
+
+for patch in patches:
+    golden = read_mat(golden_root / patch / "ps1.mat")
+    observed = read_mat(observed_root / patch / "ps1.mat")
+    if sorted(golden) != sorted(observed):
+        raise AssertionError(f"{patch} ps1.mat keys differ: {sorted(observed)} != {sorted(golden)}")
+    for key in keys:
+        expected = np.asarray(golden[key])
+        actual = np.asarray(observed[key])
+        if actual.shape != expected.shape:
+            raise AssertionError(f"{patch}/{key} shape {actual.shape} != {expected.shape}")
+        atol, rtol = tolerances.get(key, (0.0, 0.0))
+        if atol == 0.0 and rtol == 0.0:
+            ok = np.array_equal(expected, actual)
+        else:
+            ok = np.allclose(expected, actual, atol=atol, rtol=rtol, equal_nan=True)
+        if not ok:
+            max_abs = float(np.nanmax(np.abs(expected.astype(np.float64) - actual.astype(np.float64))))
+            raise AssertionError(f"{patch}/{key} max_abs={max_abs} exceeds atol={atol} rtol={rtol}")
+    np.testing.assert_array_equal(golden["ij"][0, :], observed["ij"][0, :])
+    np.testing.assert_array_equal(golden["ij"][-1, :], observed["ij"][-1, :])
+"#;
+        let output = Command::new("uv")
+            .args(["run", "python", "-c", script])
+            .arg(golden_root)
+            .arg(observed_root)
+            .args(patch_names)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "Stage 1 validation parity check failed: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn temp_workspace_root(name: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        workspace_root().join("target").join(format!(
+            "pystamps-stage1-{name}-{}-{nanos}",
+            std::process::id()
+        ))
     }
 
     fn temp_root(name: &str) -> PathBuf {
