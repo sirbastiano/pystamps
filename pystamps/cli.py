@@ -15,7 +15,7 @@ from pystamps.notebooks.dataset_inspection import inspect_stage1_inputs
 from pystamps.pipeline.stages import run_pipeline
 from pystamps.pipeline.types import PipelineContext
 from pystamps.status import collect_status
-from pystamps.verify import verify_run_against_golden
+from pystamps.verify import comparison_failure_payload, verify_run_against_golden
 
 
 def _native_binary_command() -> tuple[list[str], Path | None]:
@@ -201,9 +201,7 @@ def _cmd_verify(run: str, golden: str, run_config: RunConfig) -> int:
     payload = {
         "ok": report.ok,
         "checked": len(report.comparisons),
-        "failed": [
-            {"path": c.relative_path, "message": c.message} for c in report.comparisons if not c.ok
-        ],
+        "failed": [comparison_failure_payload(c) for c in report.comparisons if not c.ok],
     }
     print(json.dumps(payload, indent=2))
     return 0 if report.ok else 1

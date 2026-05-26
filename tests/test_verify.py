@@ -1,6 +1,12 @@
 from types import SimpleNamespace
 
+import numpy as np
+from scipy import sparse
+
+from pystamps.io.mat import write_mat
+from pystamps.tolerance_manifest import load_artifact_tolerance_manifest
 from pystamps.verify import (
+    DEFAULT_GLOBS,
     FileComparison,
     VerificationReport,
     classify_failures,
@@ -119,3 +125,124 @@ def test_verify_uses_patch_list_old_when_patch_list_is_subset(tmp_path) -> None:
     assert not report.ok
     assert any(comparison.failure_kind == "patch_manifest_mismatch" for comparison in report.comparisons)
     assert any(comparison.relative_path == "PATCH_2/artifact.txt" for comparison in report.comparisons)
+
+
+def test_tolerance_manifest_covers_core_artifacts_and_modes() -> None:
+    manifest = load_artifact_tolerance_manifest()
+    paths = {spec.path for spec in manifest.artifacts}
+
+    assert {
+        "PATCH_*/ps1.mat",
+        "PATCH_*/pm1.mat",
+        "PATCH_*/select1.mat",
+        "PATCH_*/weed1.mat",
+        "PATCH_*/ps2.mat",
+        "PATCH_*/ph2.mat",
+        "PATCH_*/pm2.mat",
+        "PATCH_*/bp2.mat",
+        "ps2.mat",
+        "ph2.mat",
+        "pm2.mat",
+        "bp2.mat",
+        "ifgstd2.mat",
+        "phuw2.mat",
+        "uw_grid.mat",
+        "uw_interp.mat",
+        "scla2.mat",
+        "mean_v.mat",
+        "uw_space_time.mat",
+    }.issubset(paths)
+    assert set(DEFAULT_GLOBS) == paths
+
+    modes = {rule.comparison_mode for spec in manifest.artifacts for rule in spec.rules}
+    assert {"exact_structural", "numeric_f32", "numeric_f64", "phase_modulo_f32", "sparse_exact"}.issubset(modes)
+
+    ph2_rule = manifest.spec_for_path("ph2.mat").rule_for_key("ph")
+    assert ph2_rule is not None
+    assert ph2_rule.dtype == "complex64"
+    assert ph2_rule.comparison_mode == "phase_modulo_f32"
+    assert ph2_rule.atol == 0.0001
+    assert manifest.spec_for_path("ph2.mat").shape_policy == "exact"
+
+
+def test_verify_reports_tolerance_rule_id_for_manifest_numeric_failure(tmp_path) -> None:
+    golden = tmp_path / "golden"
+    run = tmp_path / "run"
+    golden.mkdir()
+    run.mkdir()
+    write_mat(golden / "ph2.mat", {"ph": np.asarray([[1.0 + 0.0j]], dtype=np.complex64)})
+    write_mat(run / "ph2.mat", {"ph": np.asarray([[np.exp(1j * 0.01)]], dtype=np.complex64)})
+
+    report = verify_run_against_golden(
+        run,
+        golden,
+        SimpleNamespace(rtol=1e-12, atol=1e-12, wrap_equivalence=False),
+        patterns=("ph2.mat",),
+    )
+
+    assert not report.ok
+    failure = report.failures[0]
+    assert failure.failing_key == "ph"
+    assert failure.failure_kind == "wrap_mismatch"
+    assert failure.tolerance_rule_id == "merged_ph2.ph.phase_modulo_f32"
+    assert failure.comparison_mode == "phase_modulo_f32"
+    assert "merged_ph2.ph.phase_modulo_f32" in failure.message
+
+
+def _write_uw_space_time(path, *, include_ifreq: bool = True, spread_shape: tuple[int, int] = (1, 1)) -> None:
+    payload = {
+        "G": np.zeros((1, 1), dtype=np.float64),
+        "dph_noise": np.zeros((1, 1), dtype=np.float32),
+        "dph_space_uw": np.zeros((1, 1), dtype=np.float32),
+        "jfreq_ij": np.empty((0, 0), dtype=np.float64),
+        "predef_ix": np.empty((0, 0), dtype=np.float64),
+        "shaky_ix": np.empty((0, 0), dtype=np.float64),
+        "spread": sparse.csc_matrix(spread_shape, dtype=np.float64),
+    }
+    if include_ifreq:
+        payload["ifreq_ij"] = np.empty((0, 0), dtype=np.float64)
+    write_mat(path, payload)
+
+
+def test_verify_manifest_missing_uw_space_time_key_fails_even_when_numeric_values_match(tmp_path) -> None:
+    golden = tmp_path / "golden"
+    run = tmp_path / "run"
+    golden.mkdir()
+    run.mkdir()
+    _write_uw_space_time(golden / "uw_space_time.mat")
+    _write_uw_space_time(run / "uw_space_time.mat", include_ifreq=False)
+
+    report = verify_run_against_golden(
+        run,
+        golden,
+        SimpleNamespace(rtol=1e-12, atol=1e-12, wrap_equivalence=False),
+        patterns=("uw_space_time.mat",),
+    )
+
+    assert not report.ok
+    failure = report.failures[0]
+    assert failure.failure_kind == "missing_required_keys"
+    assert failure.failing_key == "ifreq_ij"
+    assert failure.tolerance_rule_id == "merged_uw_space_time.ifreq_ij.exact_structural"
+
+
+def test_verify_manifest_enforces_sparse_structural_parity(tmp_path) -> None:
+    golden = tmp_path / "golden"
+    run = tmp_path / "run"
+    golden.mkdir()
+    run.mkdir()
+    _write_uw_space_time(golden / "uw_space_time.mat", spread_shape=(1, 1))
+    _write_uw_space_time(run / "uw_space_time.mat", spread_shape=(2, 1))
+
+    report = verify_run_against_golden(
+        run,
+        golden,
+        SimpleNamespace(rtol=1e-12, atol=1e-12, wrap_equivalence=False),
+        patterns=("uw_space_time.mat",),
+    )
+
+    assert not report.ok
+    failure = report.failures[0]
+    assert failure.failure_kind == "shape_mismatch"
+    assert failure.failing_key == "spread"
+    assert failure.tolerance_rule_id == "merged_uw_space_time.spread.sparse_exact"

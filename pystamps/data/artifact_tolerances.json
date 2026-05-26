@@ -1,0 +1,326 @@
+{
+  "manifest_version": 1,
+  "purpose": "Artifact-specific parity rules for native stage 1-8 verification.",
+  "tolerance_defaults": {
+    "exact_structural": {"atol": 0.0, "rtol": 0.0},
+    "numeric_f32": {"atol": 0.0001, "rtol": 0.00001},
+    "numeric_f64": {"atol": 0.000001, "rtol": 0.00000001},
+    "phase_modulo_f32": {"atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586},
+    "sparse_exact": {"atol": 0.0, "rtol": 0.0}
+  },
+  "artifacts": [
+    {
+      "path": "PATCH_*/ps1.mat",
+      "stage": 1,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["bperp", "day", "ij", "ll0", "lonlat", "master_day", "master_ix", "mean_incidence", "mean_range", "n_ifg", "n_image", "n_ps", "sort_ix", "xy"],
+      "rules": [
+        {"id": "patch_ps1.bperp.numeric_f32", "key": "bperp", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_ps1.day.exact_structural", "key": "day", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps1.ij.exact_structural", "key": "ij", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps1.ll0.numeric_f64", "key": "ll0", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_ps1.lonlat.numeric_f64", "key": "lonlat", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_ps1.master_day.exact_structural", "key": "master_day", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps1.master_ix.exact_structural", "key": "master_ix", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps1.mean_incidence.numeric_f64", "key": "mean_incidence", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_ps1.mean_range.numeric_f64", "key": "mean_range", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_ps1.n_ifg.exact_structural", "key": "n_ifg", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps1.n_image.exact_structural", "key": "n_image", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps1.n_ps.exact_structural", "key": "n_ps", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps1.sort_ix.exact_structural", "key": "sort_ix", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps1.xy.numeric_f32", "key": "xy", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "PATCH_*/ph1.mat",
+      "stage": 1,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["ph"],
+      "rules": [
+        {"id": "patch_ph1.ph.phase_modulo_f32", "key": "ph", "dtype": "complex64", "comparison_mode": "phase_modulo_f32", "atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586}
+      ]
+    },
+    {
+      "path": "PATCH_*/pm1.mat",
+      "stage": 2,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["C_ps", "K_ps", "N_opt", "Nr", "Nr_max_nz_ix", "coh_bins", "coh_ps", "coh_ps_save", "gamma_change_save", "grid_ij", "grid_size", "i_loop", "low_pass", "n_trial_wraps", "ph_grid", "ph_patch", "ph_res", "ph_weight", "step_number"],
+      "rules": [
+        {"id": "patch_pm1.C_ps.numeric_f64", "key": "C_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.K_ps.numeric_f64", "key": "K_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.N_opt.numeric_f64", "key": "N_opt", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.Nr.numeric_f64", "key": "Nr", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.Nr_max_nz_ix.exact_structural", "key": "Nr_max_nz_ix", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_pm1.coh_bins.numeric_f64", "key": "coh_bins", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.coh_ps.numeric_f64", "key": "coh_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.coh_ps_save.numeric_f64", "key": "coh_ps_save", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.gamma_change_save.numeric_f64", "key": "gamma_change_save", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.grid_ij.exact_structural", "key": "grid_ij", "dtype": "f32", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_pm1.grid_size.exact_structural", "key": "grid_size", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_pm1.i_loop.exact_structural", "key": "i_loop", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_pm1.low_pass.numeric_f64", "key": "low_pass", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm1.n_trial_wraps.numeric_f32", "key": "n_trial_wraps", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_pm1.ph_grid.numeric_f32", "key": "ph_grid", "dtype": "complex64", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_pm1.ph_patch.numeric_f32", "key": "ph_patch", "dtype": "complex64", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_pm1.ph_res.numeric_f32", "key": "ph_res", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_pm1.ph_weight.numeric_f32", "key": "ph_weight", "dtype": "complex64", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_pm1.step_number.exact_structural", "key": "step_number", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0}
+      ]
+    },
+    {
+      "path": "PATCH_*/select1.mat",
+      "stage": 3,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["C_ps2", "K_ps2", "clap_alpha", "clap_beta", "coh_ps2", "coh_thresh", "coh_thresh_coeffs", "gamma_stdev_reject", "ifg_index", "ix", "keep_ix", "max_percent_rand", "n_win", "ph_patch2", "ph_res2", "small_baseline_flag"],
+      "rules": [
+        {"id": "patch_select1.C_ps2.numeric_f64", "key": "C_ps2", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_select1.K_ps2.numeric_f64", "key": "K_ps2", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_select1.clap_alpha.exact_structural", "key": "clap_alpha", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_select1.clap_beta.exact_structural", "key": "clap_beta", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_select1.coh_ps2.numeric_f64", "key": "coh_ps2", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_select1.coh_thresh.numeric_f64", "key": "coh_thresh", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_select1.coh_thresh_coeffs.numeric_f64", "key": "coh_thresh_coeffs", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_select1.gamma_stdev_reject.exact_structural", "key": "gamma_stdev_reject", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_select1.ifg_index.exact_structural", "key": "ifg_index", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_select1.ix.exact_structural", "key": "ix", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_select1.keep_ix.exact_structural", "key": "keep_ix", "dtype": "u8", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_select1.max_percent_rand.numeric_f64", "key": "max_percent_rand", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_select1.n_win.exact_structural", "key": "n_win", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_select1.ph_patch2.numeric_f32", "key": "ph_patch2", "dtype": "complex64", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_select1.ph_res2.numeric_f32", "key": "ph_res2", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_select1.small_baseline_flag.exact_structural", "key": "small_baseline_flag", "dtype": "i64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0}
+      ]
+    },
+    {
+      "path": "PATCH_*/weed1.mat",
+      "stage": 4,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["ifg_index", "ix_weed", "ix_weed2", "ps_max", "ps_std"],
+      "rules": [
+        {"id": "patch_weed1.ifg_index.exact_structural", "key": "ifg_index", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_weed1.ix_weed.exact_structural", "key": "ix_weed", "dtype": "bool", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_weed1.ix_weed2.exact_structural", "key": "ix_weed2", "dtype": "bool", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_weed1.ps_max.numeric_f32", "key": "ps_max", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_weed1.ps_std.numeric_f32", "key": "ps_std", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "PATCH_*/ps2.mat",
+      "stage": 5,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["bperp", "day", "ij", "ll0", "lonlat", "master_day", "master_ix", "mean_incidence", "mean_range", "n_ifg", "n_image", "n_ps", "xy"],
+      "rules": [
+        {"id": "patch_ps2.bperp.numeric_f32", "key": "bperp", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_ps2.day.exact_structural", "key": "day", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps2.ij.exact_structural", "key": "ij", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps2.ll0.numeric_f64", "key": "ll0", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_ps2.lonlat.numeric_f64", "key": "lonlat", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_ps2.master_day.exact_structural", "key": "master_day", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps2.master_ix.exact_structural", "key": "master_ix", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps2.mean_incidence.numeric_f64", "key": "mean_incidence", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_ps2.mean_range.numeric_f64", "key": "mean_range", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_ps2.n_ifg.exact_structural", "key": "n_ifg", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps2.n_image.exact_structural", "key": "n_image", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps2.n_ps.exact_structural", "key": "n_ps", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "patch_ps2.xy.numeric_f32", "key": "xy", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "PATCH_*/ph2.mat",
+      "stage": 5,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["ph"],
+      "rules": [
+        {"id": "patch_ph2.ph.phase_modulo_f32", "key": "ph", "dtype": "complex64", "comparison_mode": "phase_modulo_f32", "atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586}
+      ]
+    },
+    {
+      "path": "PATCH_*/pm2.mat",
+      "stage": 5,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["C_ps", "K_ps", "coh_ps", "ph_patch", "ph_res"],
+      "rules": [
+        {"id": "patch_pm2.C_ps.numeric_f64", "key": "C_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm2.K_ps.numeric_f64", "key": "K_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm2.coh_ps.numeric_f64", "key": "coh_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "patch_pm2.ph_patch.numeric_f32", "key": "ph_patch", "dtype": "complex64", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "patch_pm2.ph_res.numeric_f32", "key": "ph_res", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "PATCH_*/bp2.mat",
+      "stage": 5,
+      "scope": "patch",
+      "shape_policy": "exact",
+      "required_keys": ["bperp_mat"],
+      "rules": [
+        {"id": "patch_bp2.bperp_mat.numeric_f32", "key": "bperp_mat", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "ps2.mat",
+      "stage": 5,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["bperp", "day", "ij", "ll0", "lonlat", "master_day", "master_ix", "mean_incidence", "mean_range", "n_ifg", "n_image", "n_ps", "xy"],
+      "rules": [
+        {"id": "merged_ps2.bperp.numeric_f32", "key": "bperp", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "merged_ps2.day.exact_structural", "key": "day", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_ps2.ij.exact_structural", "key": "ij", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_ps2.ll0.numeric_f64", "key": "ll0", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_ps2.lonlat.numeric_f64", "key": "lonlat", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_ps2.master_day.exact_structural", "key": "master_day", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_ps2.master_ix.exact_structural", "key": "master_ix", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_ps2.mean_incidence.numeric_f64", "key": "mean_incidence", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_ps2.mean_range.numeric_f64", "key": "mean_range", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_ps2.n_ifg.exact_structural", "key": "n_ifg", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_ps2.n_image.exact_structural", "key": "n_image", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_ps2.n_ps.exact_structural", "key": "n_ps", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_ps2.xy.numeric_f32", "key": "xy", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "ph2.mat",
+      "stage": 5,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["ph"],
+      "rules": [
+        {"id": "merged_ph2.ph.phase_modulo_f32", "key": "ph", "dtype": "complex64", "comparison_mode": "phase_modulo_f32", "atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586}
+      ]
+    },
+    {
+      "path": "pm2.mat",
+      "stage": 5,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["C_ps", "K_ps", "coh_ps", "ph_patch", "ph_res"],
+      "rules": [
+        {"id": "merged_pm2.C_ps.numeric_f64", "key": "C_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_pm2.K_ps.numeric_f64", "key": "K_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_pm2.coh_ps.numeric_f64", "key": "coh_ps", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_pm2.ph_patch.numeric_f32", "key": "ph_patch", "dtype": "complex64", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "merged_pm2.ph_res.numeric_f32", "key": "ph_res", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "bp2.mat",
+      "stage": 5,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["bperp_mat"],
+      "rules": [
+        {"id": "merged_bp2.bperp_mat.numeric_f32", "key": "bperp_mat", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "ifgstd2.mat",
+      "stage": 5,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["ifg_std"],
+      "rules": [
+        {"id": "merged_ifgstd2.ifg_std.numeric_f32", "key": "ifg_std", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "phuw2.mat",
+      "stage": 6,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["msd", "ph_uw"],
+      "rules": [
+        {"id": "merged_phuw2.msd.numeric_f32", "key": "msd", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "merged_phuw2.ph_uw.phase_modulo_f32", "key": "ph_uw", "dtype": "f32", "comparison_mode": "phase_modulo_f32", "atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586}
+      ]
+    },
+    {
+      "path": "uw_grid.mat",
+      "stage": 6,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["grid_ij", "grid_x_min", "grid_y_min", "ij", "n_i", "n_ifg", "n_j", "n_ps", "nzix", "ph", "ph_in", "ph_in_predef", "ph_lowpass", "ph_uw_predef", "pix_size", "xy"],
+      "rules": [
+        {"id": "merged_uw_grid.grid_ij.exact_structural", "key": "grid_ij", "dtype": "f32", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.grid_x_min.exact_structural", "key": "grid_x_min", "dtype": "f32", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.grid_y_min.exact_structural", "key": "grid_y_min", "dtype": "f32", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.ij.exact_structural", "key": "ij", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.n_i.exact_structural", "key": "n_i", "dtype": "f32", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.n_ifg.exact_structural", "key": "n_ifg", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.n_j.exact_structural", "key": "n_j", "dtype": "f32", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.n_ps.exact_structural", "key": "n_ps", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.nzix.exact_structural", "key": "nzix", "dtype": "bool", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.ph.phase_modulo_f32", "key": "ph", "dtype": "complex64", "comparison_mode": "phase_modulo_f32", "atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586},
+        {"id": "merged_uw_grid.ph_in.phase_modulo_f32", "key": "ph_in", "dtype": "complex64", "comparison_mode": "phase_modulo_f32", "atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586},
+        {"id": "merged_uw_grid.ph_in_predef.exact_structural", "key": "ph_in_predef", "dtype": "empty", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.ph_lowpass.exact_structural", "key": "ph_lowpass", "dtype": "empty", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.ph_uw_predef.exact_structural", "key": "ph_uw_predef", "dtype": "empty", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.pix_size.exact_structural", "key": "pix_size", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_grid.xy.exact_structural", "key": "xy", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0}
+      ]
+    },
+    {
+      "path": "uw_interp.mat",
+      "stage": 6,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["Z", "colix", "edgs", "n_edge", "rowix"],
+      "rules": [
+        {"id": "merged_uw_interp.Z.exact_structural", "key": "Z", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_interp.colix.exact_structural", "key": "colix", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_interp.edgs.exact_structural", "key": "edgs", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_interp.n_edge.exact_structural", "key": "n_edge", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_interp.rowix.exact_structural", "key": "rowix", "dtype": "f64", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0}
+      ]
+    },
+    {
+      "path": "scla2.mat",
+      "stage": 7,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["C_ps_uw", "K_ps_uw", "ifg_vcm", "ph_ramp", "ph_scla"],
+      "rules": [
+        {"id": "merged_scla2.C_ps_uw.numeric_f32", "key": "C_ps_uw", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
+        {"id": "merged_scla2.K_ps_uw.numeric_f64", "key": "K_ps_uw", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_scla2.ifg_vcm.numeric_f64", "key": "ifg_vcm", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_scla2.ph_ramp.numeric_f64", "key": "ph_ramp", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_scla2.ph_scla.numeric_f32", "key": "ph_scla", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "mean_v.mat",
+      "stage": 8,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["m"],
+      "rules": [
+        {"id": "merged_mean_v.m.numeric_f32", "key": "m", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
+      ]
+    },
+    {
+      "path": "uw_space_time.mat",
+      "stage": 8,
+      "scope": "merged",
+      "shape_policy": "exact",
+      "required_keys": ["G", "dph_noise", "dph_space_uw", "ifreq_ij", "jfreq_ij", "predef_ix", "shaky_ix", "spread"],
+      "rules": [
+        {"id": "merged_uw_space_time.G.numeric_f64", "key": "G", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_uw_space_time.dph_noise.phase_modulo_f32", "key": "dph_noise", "dtype": "f32", "comparison_mode": "phase_modulo_f32", "atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586},
+        {"id": "merged_uw_space_time.dph_space_uw.phase_modulo_f32", "key": "dph_space_uw", "dtype": "f32", "comparison_mode": "phase_modulo_f32", "atol": 0.0001, "rtol": 0.00001, "period": 6.283185307179586},
+        {"id": "merged_uw_space_time.ifreq_ij.exact_structural", "key": "ifreq_ij", "dtype": "empty", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_space_time.jfreq_ij.exact_structural", "key": "jfreq_ij", "dtype": "empty", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_space_time.predef_ix.exact_structural", "key": "predef_ix", "dtype": "empty", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_space_time.shaky_ix.exact_structural", "key": "shaky_ix", "dtype": "empty", "comparison_mode": "exact_structural", "atol": 0.0, "rtol": 0.0},
+        {"id": "merged_uw_space_time.spread.sparse_exact", "key": "spread", "dtype": "sparse_csc_f64", "comparison_mode": "sparse_exact", "atol": 0.0, "rtol": 0.0}
+      ]
+    }
+  ]
+}

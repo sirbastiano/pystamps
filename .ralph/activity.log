@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-26 15:16:48 | run=20260526-142844-454144 | iter=1 | mode=build | story=US-001 | duration=2875s | status=success
 - 2026-05-25 10:31:47 | run=20260525-092407-245878 | iter=5 | mode=build | story=US-015 | duration=255s | status=error
 - 2026-05-25 10:27:28 | run=20260525-092407-245878 | iter=4 | mode=build | story=US-014 | duration=580s | status=success
 - 2026-05-25 10:17:44 | run=20260525-092407-245878 | iter=3 | mode=build | story=US-013 | duration=754s | status=success
@@ -140,3 +141,11 @@
 [2026-05-26 15:09:59] US-001 verification: cargo test PASS, release build PASS, accelerated pytest PASS, native-full-chain-verify ran full chain and failed on verifier ok=false as designed
 [2026-05-26 15:11:51] US-001 post-hardening focused tests and git diff check passed
 [2026-05-26 15:14:31] Updated US-001 progress log with commit and verification results
+[2026-05-26 15:16:41] ITERATION 1 end (duration=2875s)
+[2026-05-26 15:16:56] ITERATION 2 start (mode=build story=US-002)
+[2026-05-26 15:31:35] US-002: added tolerance manifest and wired verifier to manifest rule IDs
+[2026-05-26 15:37:20] US-002: focused verifier, CLI, native gate, and validate_audit tests passed
+[2026-05-26 15:45:59] US-002 verification: cargo test, accelerated pytest, and git diff check passed
+[2026-05-26 15:58:36] US-002 verification: native-full-chain-verify completed native run but parity failed with manifest-backed failures
+[2026-05-26 16:14:04] US-002 final native-full-chain-verify rerun: native run ok, parity failed with 47 manifest-backed failures
+[2026-05-26 16:15:23] US-002 review: security/performance/regression audit completed before commit

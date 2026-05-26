@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from pystamps.config import RunConfig
-from pystamps.verify import verify_run_against_golden
+from pystamps.verify import comparison_failure_payload, verify_run_against_golden
 
 
 def _parse_args() -> argparse.Namespace:
@@ -33,7 +33,7 @@ def main() -> int:
         cfg.tolerance,
         patterns=tuple(args.patterns),
     )
-    failures = [{"path": c.relative_path, "message": c.message} for c in report.comparisons if not c.ok]
+    failures = [comparison_failure_payload(c) for c in report.comparisons if not c.ok]
     payload = {
         "label": args.label,
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),

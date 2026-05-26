@@ -11,23 +11,10 @@ from scipy import sparse
 from pystamps.config import ToleranceConfig
 from pystamps.io.dataset import PATCH_PREFIX, discover_dataset
 from pystamps.io.mat import read_mat
+from pystamps.tolerance_manifest import ArtifactToleranceSpec, ToleranceRule, load_artifact_tolerance_manifest
 
-DEFAULT_GLOBS: tuple[str, ...] = (
-    "PATCH_*/ps1.mat",
-    "PATCH_*/pm1.mat",
-    "PATCH_*/select1.mat",
-    "PATCH_*/weed1.mat",
-    "ps2.mat",
-    "pm2.mat",
-    "ph2.mat",
-    "phuw2.mat",
-    "scla2.mat",
-    "mean_v.mat",
-    "ifgstd2.mat",
-    "uw_space_time.mat",
-    "uw_grid.mat",
-    "uw_interp.mat",
-)
+_ARTIFACT_TOLERANCE_MANIFEST = load_artifact_tolerance_manifest()
+DEFAULT_GLOBS: tuple[str, ...] = _ARTIFACT_TOLERANCE_MANIFEST.verify_globs
 
 
 @dataclass(slots=True)
@@ -40,6 +27,9 @@ class FileComparison:
     shape_run: tuple[int, ...] | None = None
     shape_oracle: tuple[int, ...] | None = None
     max_abs: float | None = None
+    max_rel: float | None = None
+    tolerance_rule_id: str | None = None
+    comparison_mode: str | None = None
     matched_keys: int | None = None
 
 
@@ -77,6 +67,9 @@ class ClassifiedFailure:
     shape_run: tuple[int, ...] | None
     shape_oracle: tuple[int, ...] | None
     max_abs: float | None
+    max_rel: float | None
+    tolerance_rule_id: str | None
+    comparison_mode: str | None
 
 
 _KEY_PATTERN = re.compile(r"key '([^']+)'")
@@ -189,9 +182,291 @@ def _collect_numeric(payload: Any, prefix: str = "") -> dict[str, np.ndarray]:
     return out
 
 
-def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple[bool, str, dict[str, Any]]:
-    run_payload = read_mat(run_mat)
-    golden_payload = read_mat(golden_mat)
+def _shape_of(value: Any) -> tuple[int, ...]:
+    if value is None:
+        return ()
+    if sparse.issparse(value):
+        return tuple(int(v) for v in value.shape)
+    return tuple(int(v) for v in _to_array(value).shape)
+
+
+def _missing_required_keys(payload: dict[str, Any], spec: ArtifactToleranceSpec) -> list[str]:
+    return [key for key in spec.required_keys if key not in payload]
+
+
+def _failure_details(
+    *,
+    failure_kind: str,
+    failing_key: str | None = None,
+    rule: ToleranceRule | None = None,
+    shape_run: tuple[int, ...] | None = None,
+    shape_oracle: tuple[int, ...] | None = None,
+    max_abs: float | None = None,
+    max_rel: float | None = None,
+) -> dict[str, Any]:
+    return {
+        "failure_kind": failure_kind,
+        "failing_key": failing_key or (rule.key if rule is not None else None),
+        "shape_run": shape_run,
+        "shape_oracle": shape_oracle,
+        "max_abs": max_abs,
+        "max_rel": max_rel,
+        "tolerance_rule_id": rule.id if rule is not None else None,
+        "comparison_mode": rule.comparison_mode if rule is not None else None,
+    }
+
+
+def _shape_mismatch(
+    rule: ToleranceRule,
+    lhs: Any,
+    rhs: Any,
+) -> tuple[bool, str, dict[str, Any]] | None:
+    lhs_shape = _shape_of(lhs)
+    rhs_shape = _shape_of(rhs)
+    if lhs_shape == rhs_shape:
+        return None
+    return (
+        False,
+        (
+            f"Shape mismatch for key '{rule.key}' using tolerance rule '{rule.id}': "
+            f"{lhs_shape} != {rhs_shape}"
+        ),
+        _failure_details(
+            failure_kind="shape_mismatch",
+            rule=rule,
+            shape_run=lhs_shape,
+            shape_oracle=rhs_shape,
+        ),
+    )
+
+
+def _max_diff_stats(lhs: np.ndarray, rhs: np.ndarray) -> tuple[float, float | None]:
+    abs_diff = np.abs(lhs - rhs)
+    try:
+        both_nan = np.isnan(lhs) & np.isnan(rhs)
+        abs_diff = np.asarray(abs_diff)[~both_nan]
+        rhs_abs = np.asarray(np.abs(rhs))[~both_nan]
+    except TypeError:
+        rhs_abs = np.asarray(np.abs(rhs))
+    if abs_diff.size == 0:
+        return 0.0, 0.0
+    max_abs = float(np.nanmax(abs_diff))
+    rel = np.divide(
+        abs_diff,
+        rhs_abs,
+        out=np.full(abs_diff.shape, np.inf, dtype=np.float64),
+        where=rhs_abs != 0,
+    )
+    rel = np.where((rhs_abs == 0) & (abs_diff == 0), 0.0, rel)
+    max_rel = float(np.nanmax(rel)) if rel.size else 0.0
+    if not np.isfinite(max_rel):
+        return max_abs, None
+    return max_abs, max_rel
+
+
+def _exact_equal(lhs: Any, rhs: Any) -> bool:
+    if lhs is None or rhs is None:
+        return lhs is None and rhs is None
+    if sparse.issparse(lhs) or sparse.issparse(rhs):
+        return _sparse_exact_equal(lhs, rhs)
+    lhs_arr = _to_array(lhs)
+    rhs_arr = _to_array(rhs)
+    try:
+        return bool(np.array_equal(lhs_arr, rhs_arr, equal_nan=True))
+    except TypeError:
+        return bool(np.array_equal(lhs_arr, rhs_arr))
+
+
+def _sparse_exact_equal(lhs: Any, rhs: Any) -> bool:
+    if not (sparse.issparse(lhs) and sparse.issparse(rhs)):
+        return False
+    lhs_csc = lhs.tocsc()
+    rhs_csc = rhs.tocsc()
+    return (
+        lhs_csc.shape == rhs_csc.shape
+        and np.array_equal(lhs_csc.indices, rhs_csc.indices)
+        and np.array_equal(lhs_csc.indptr, rhs_csc.indptr)
+        and np.array_equal(lhs_csc.data, rhs_csc.data, equal_nan=True)
+    )
+
+
+def _compare_exact(rule: ToleranceRule, lhs: Any, rhs: Any) -> tuple[bool, str, dict[str, Any]] | None:
+    if _exact_equal(lhs, rhs):
+        return None
+    return (
+        False,
+        f"Structural mismatch for key '{rule.key}' using tolerance rule '{rule.id}'",
+        _failure_details(
+            failure_kind="structural_mismatch",
+            rule=rule,
+            shape_run=_shape_of(lhs),
+            shape_oracle=_shape_of(rhs),
+        ),
+    )
+
+
+def _compare_sparse_exact(rule: ToleranceRule, lhs: Any, rhs: Any) -> tuple[bool, str, dict[str, Any]] | None:
+    if _sparse_exact_equal(lhs, rhs):
+        return None
+    return (
+        False,
+        f"Sparse structure mismatch for key '{rule.key}' using tolerance rule '{rule.id}'",
+        _failure_details(
+            failure_kind="sparse_structure_mismatch",
+            rule=rule,
+            shape_run=_shape_of(lhs),
+            shape_oracle=_shape_of(rhs),
+        ),
+    )
+
+
+def _compare_numeric(rule: ToleranceRule, lhs: Any, rhs: Any) -> tuple[bool, str, dict[str, Any]] | None:
+    try:
+        lhs_arr = np.asarray(lhs)
+        rhs_arr = np.asarray(rhs)
+        close = np.allclose(lhs_arr, rhs_arr, rtol=rule.rtol, atol=rule.atol, equal_nan=True)
+    except (TypeError, ValueError):
+        return (
+            False,
+            f"Type mismatch for key '{rule.key}' using tolerance rule '{rule.id}'",
+            _failure_details(
+                failure_kind="type_mismatch",
+                rule=rule,
+                shape_run=_shape_of(lhs),
+                shape_oracle=_shape_of(rhs),
+            ),
+        )
+    if close:
+        return None
+    max_abs, max_rel = _max_diff_stats(lhs_arr, rhs_arr)
+    return (
+        False,
+        f"Value mismatch for key '{rule.key}' using tolerance rule '{rule.id}', max_abs={max_abs:.6g}",
+        _failure_details(
+            failure_kind="value_mismatch",
+            rule=rule,
+            shape_run=_shape_of(lhs),
+            shape_oracle=_shape_of(rhs),
+            max_abs=max_abs,
+            max_rel=max_rel,
+        ),
+    )
+
+
+def _phase_diff(rule: ToleranceRule, lhs: Any, rhs: Any) -> tuple[np.ndarray, np.ndarray]:
+    period = float(rule.period or (2.0 * np.pi))
+    if np.iscomplexobj(lhs) or np.iscomplexobj(rhs):
+        lhs_c = np.asarray(lhs, dtype=np.complex128)
+        rhs_c = np.asarray(rhs, dtype=np.complex128)
+        diff = np.angle(lhs_c * np.conj(rhs_c))
+        both_nan = np.isnan(lhs_c) & np.isnan(rhs_c)
+        return np.asarray(diff, dtype=np.float64), np.asarray(both_nan)
+    lhs_f = np.asarray(lhs, dtype=np.float64)
+    rhs_f = np.asarray(rhs, dtype=np.float64)
+    diff = (lhs_f - rhs_f + period / 2.0) % period - period / 2.0
+    both_nan = np.isnan(lhs_f) & np.isnan(rhs_f)
+    return np.asarray(diff, dtype=np.float64), np.asarray(both_nan)
+
+
+def _compare_phase_modulo(rule: ToleranceRule, lhs: Any, rhs: Any) -> tuple[bool, str, dict[str, Any]] | None:
+    try:
+        diff, both_nan = _phase_diff(rule, lhs, rhs)
+    except (TypeError, ValueError):
+        return (
+            False,
+            f"Type mismatch for key '{rule.key}' using tolerance rule '{rule.id}'",
+            _failure_details(
+                failure_kind="type_mismatch",
+                rule=rule,
+                shape_run=_shape_of(lhs),
+                shape_oracle=_shape_of(rhs),
+            ),
+        )
+    close = np.isclose(diff, 0.0, rtol=rule.rtol, atol=rule.atol, equal_nan=False)
+    if np.all(close | both_nan):
+        return None
+    residual = np.asarray(np.abs(diff))[~both_nan]
+    max_abs = float(np.nanmax(residual)) if residual.size else 0.0
+    return (
+        False,
+        f"Wrap mismatch for key '{rule.key}' using tolerance rule '{rule.id}', wrapped_max_abs={max_abs:.6g}",
+        _failure_details(
+            failure_kind="wrap_mismatch",
+            rule=rule,
+            shape_run=_shape_of(lhs),
+            shape_oracle=_shape_of(rhs),
+            max_abs=max_abs,
+        ),
+    )
+
+
+def _compare_manifest_rule(
+    rule: ToleranceRule,
+    lhs: Any,
+    rhs: Any,
+) -> tuple[bool, str, dict[str, Any]] | None:
+    shape_failure = _shape_mismatch(rule, lhs, rhs)
+    if shape_failure is not None:
+        return shape_failure
+    if rule.comparison_mode == "exact_structural":
+        return _compare_exact(rule, lhs, rhs)
+    if rule.comparison_mode == "sparse_exact":
+        return _compare_sparse_exact(rule, lhs, rhs)
+    if rule.comparison_mode in {"numeric_f32", "numeric_f64"}:
+        return _compare_numeric(rule, lhs, rhs)
+    if rule.comparison_mode == "phase_modulo_f32":
+        return _compare_phase_modulo(rule, lhs, rhs)
+    return (
+        False,
+        f"Unsupported comparison mode '{rule.comparison_mode}' for key '{rule.key}'",
+        _failure_details(failure_kind="unsupported_comparison_mode", rule=rule),
+    )
+
+
+def _compare_mat_with_manifest(
+    run_payload: dict[str, Any],
+    golden_payload: dict[str, Any],
+    spec: ArtifactToleranceSpec,
+) -> tuple[bool, str, dict[str, Any]]:
+    missing_oracle = _missing_required_keys(golden_payload, spec)
+    if missing_oracle:
+        key = missing_oracle[0]
+        return (
+            False,
+            f"Missing required keys in oracle for manifest artifact '{spec.path}': {', '.join(missing_oracle[:8])}",
+            _failure_details(
+                failure_kind="missing_oracle_required_keys",
+                failing_key=key,
+                rule=spec.rule_for_key(key),
+            ),
+        )
+
+    missing_run = _missing_required_keys(run_payload, spec)
+    if missing_run:
+        key = missing_run[0]
+        return (
+            False,
+            f"Missing required keys in run for manifest artifact '{spec.path}': {', '.join(missing_run[:8])}",
+            _failure_details(
+                failure_kind="missing_required_keys",
+                failing_key=key,
+                rule=spec.rule_for_key(key),
+            ),
+        )
+
+    for rule in spec.rules:
+        failure = _compare_manifest_rule(rule, run_payload[rule.key], golden_payload[rule.key])
+        if failure is not None:
+            return failure
+
+    return True, f"Matched {len(spec.rules)} tolerance rules", {"matched_keys": len(spec.rules)}
+
+
+def _compare_mat_with_default_tolerance(
+    run_payload: dict[str, Any],
+    golden_payload: dict[str, Any],
+    tol: ToleranceConfig,
+) -> tuple[bool, str, dict[str, Any]]:
     rtol = float(tol.rtol)
     atol = float(tol.atol)
 
@@ -276,6 +551,15 @@ def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple
             )
 
     return True, f"Matched {len(golden_keys)} numeric keys", {"matched_keys": len(golden_keys)}
+
+
+def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig, relative_path: str) -> tuple[bool, str, dict[str, Any]]:
+    run_payload = read_mat(run_mat)
+    golden_payload = read_mat(golden_mat)
+    spec = _ARTIFACT_TOLERANCE_MANIFEST.spec_for_path(relative_path)
+    if spec is not None:
+        return _compare_mat_with_manifest(run_payload, golden_payload, spec)
+    return _compare_mat_with_default_tolerance(run_payload, golden_payload, tol)
 
 
 def _patch_sort_key(name: str) -> tuple[int, str]:
@@ -374,6 +658,9 @@ def classify_failures(report: VerificationReport) -> list[ClassifiedFailure]:
                 shape_run=getattr(failure, "shape_run", None),
                 shape_oracle=getattr(failure, "shape_oracle", None),
                 max_abs=getattr(failure, "max_abs", None),
+                max_rel=getattr(failure, "max_rel", None),
+                tolerance_rule_id=getattr(failure, "tolerance_rule_id", None),
+                comparison_mode=getattr(failure, "comparison_mode", None),
             )
         )
     return classified
@@ -402,7 +689,7 @@ def _shape_json(shape: tuple[int, ...] | None) -> list[int] | None:
 
 
 def _failure_dict(failure: ClassifiedFailure) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "path": failure.relative_path,
         "message": failure.message,
         "stage_scope": failure.stage_scope,
@@ -415,6 +702,38 @@ def _failure_dict(failure: ClassifiedFailure) -> dict[str, Any]:
         "max_abs": failure.max_abs,
         "guidance": failure.guidance,
     }
+    if failure.max_rel is not None:
+        payload["max_rel"] = failure.max_rel
+    if failure.tolerance_rule_id is not None:
+        payload["tolerance_rule_id"] = failure.tolerance_rule_id
+    if failure.comparison_mode is not None:
+        payload["comparison_mode"] = failure.comparison_mode
+    return payload
+
+
+def comparison_failure_payload(comparison: FileComparison) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "path": comparison.relative_path,
+        "message": comparison.message,
+    }
+    optional_fields = (
+        "failure_kind",
+        "failing_key",
+        "shape_run",
+        "shape_oracle",
+        "max_abs",
+        "max_rel",
+        "tolerance_rule_id",
+        "comparison_mode",
+    )
+    for field_name in optional_fields:
+        value = getattr(comparison, field_name, None)
+        if value is None:
+            continue
+        if field_name in {"shape_run", "shape_oracle"}:
+            value = _shape_json(value)
+        payload[field_name] = value
+    return payload
 
 
 def summarize_failures(report: VerificationReport) -> dict[str, Any]:
@@ -527,7 +846,7 @@ def verify_run_against_golden(
             continue
 
         if golden_file.suffix.lower() == ".mat":
-            ok, message, details = _compare_mat(run_file, golden_file, tolerance)
+            ok, message, details = _compare_mat(run_file, golden_file, tolerance, str(rel))
             report.comparisons.append(FileComparison(str(rel), ok, message, **details))
         else:
             if run_file.stat().st_size == golden_file.stat().st_size:
