@@ -87,6 +87,48 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Unsupported char/logical/sparse payloads should remain structured errors until a stage story specifically needs them.
   - `rustfmt` is still unavailable in this environment; keep code manually formatted or install the component outside this run.
 ---
+## [2026-05-26 17:16:06 UTC] - US-003: Add native telemetry and performance budgets
+Thread:
+Run: 20260526-142844-454144 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: dc6f8f7 feat(native): add telemetry budgets
+- Post-commit status: `clean` after progress/log commit
+- Verification:
+  - Command: `python -m json.tool pystamps/data/native_performance_budgets.json >/tmp/native_performance_budgets.validated.json` -> PASS
+  - Command: `uv run python -m py_compile scripts/native_full_chain_gate.py` -> PASS
+  - Command: `cargo test -p pystamps-core stage6_telemetry_reports_grid_shape_and_edges -- --nocapture` -> PASS
+  - Command: `uv run pytest -q tests/test_native_full_chain_gate.py` -> PASS
+  - Command: `uv run pytest -q tests/test_cli.py tests/test_native_full_chain_gate.py` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `make native-full-chain-verify` -> FAIL (native run `ok: true`, performance budget `ok: true`, elapsed=396.832s; parity verifier `ok: false`, checked=47, failed=47)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - AGENTS.md
+  - Makefile
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/src/lib.rs
+  - pystamps/data/native_performance_budgets.json
+  - scripts/native_full_chain_gate.py
+  - tests/test_native_full_chain_gate.py
+- What was implemented
+  - Extended native `StageResult` JSON with per-stage input/output artifact counts, rows processed, process peak RSS when available, and Stage 6 grid/edge telemetry.
+  - Added `pystamps/data/native_performance_budgets.json` with release runtime, stage duration, memory ceilings, and algorithmic guards for the validation dataset.
+  - Wired `scripts/native_full_chain_gate.py` and Make targets to load and enforce the performance manifest, including documented temporary waiver support.
+  - Added budget negative-path tests and telemetry preservation tests for the full-chain gate.
+  - Updated AGENTS.md with the full native validation gate as an operational check.
+  - Completed security/performance/regression review: no secrets or network paths added; manifest reads are local JSON; telemetry adds bounded post-stage artifact reads; existing dry-run/planning JSON remains compatible through optional fields.
+- **Learnings for future iterations:**
+  - Patterns discovered: native CLI JSON is the source of truth for downstream gate timing reports, so telemetry belongs on `StageResult` before the Python wrapper summarizes it.
+  - Gotchas encountered: forcing `THREADS=8` made the validation run exceed the 600s release ceiling and Stage 2 patch budget; the final default `THREADS=0` path uses 16 native Stage 2 threads on this VM and produced budget-ok runtime.
+  - Useful context: final default full-chain gate reached parity verification with budget `ok: true`, but parity remains false on the existing 47 verifier failures from prior iterations.
+---
 ## [2026-05-25 09:45:37 UTC] - US-011: Port Stage 4 weed orchestration
 Thread:
 Run: 20260525-092407-245878 (iteration 1)
