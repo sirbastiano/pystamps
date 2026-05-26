@@ -635,3 +635,38 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: a progress entry cannot truthfully include its own final commit hash without a follow-up progress commit; use the implementation commit in the entry and then commit the progress/log update.
   - Useful context: final `make native-full-chain-verify` confirms the native run completes, but current parity remains false; the new verifier output includes rule IDs for all failed numeric comparisons.
 ---
+## [2026-05-26 18:33:32 UTC] - US-004: Restore Stage 1 patch artifact parity
+Thread:
+Run: 20260526-142844-454144 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: ef20461 fix(stage-1): restore ps1 row parity
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage1::tests::validation_stage1_ps1_ij_matches_golden_for_representative_patches` -> PASS
+  - Command: `cargo test -p pystamps-core native_stage1::tests::validation_stage1_ij_parity_rejects_zero_based_shifts` -> PASS
+  - Command: `cargo test -p pystamps-core discover_dataset_prefers_patch_list_order_and_bounds` -> PASS
+  - Command: `make native-full-chain-run START_STEP=1 END_STEP=1 RUN=inputs_and_outputs/validation_runs/us004-stage1-verify THREADS=0` -> PASS
+  - Command: `uv run python -c "from pathlib import Path; from pystamps.config import ToleranceConfig; from pystamps.verify import verify_run_against_golden; report=verify_run_against_golden(Path('inputs_and_outputs/validation_runs/us004-stage1-verify'), Path('inputs_and_outputs/InSAR_dataset_test'), ToleranceConfig(), patterns=('PATCH_*/ps1.mat',)); print(f'ok={report.ok} checked={len(report.comparisons)} failed={sum(not c.ok for c in report.comparisons)}'); raise SystemExit(0 if report.ok else 1)"` -> PASS (`ok=True checked=4 failed=0`)
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `make native-full-chain-verify` -> FAIL (native execution and budget passed; verifier checked 47 artifacts with 39 downstream failures, `ps1_failed=0`)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-core/src/native_stage1.rs
+- What was implemented
+  - Matched original STAMPS Stage 1 row ordering by sorting local `xy` after MATLAB-compatible single-precision casting, then writing `xy` from those single-precision coordinates before millimeter quantization.
+  - Made dataset discovery honor `patch.list` order and bounds when present, with guarded `PATCH_*` name validation and numeric fallback ordering for discovered patch directories.
+  - Added focused validation tests comparing native `PATCH_1` and `PATCH_2` `ps1.mat` outputs against golden structure, shapes, row order, and numeric tolerances, plus a negative `ij` shift test.
+  - Completed security/performance/regression review: no secrets or new external trust paths; `patch.list` entries are constrained to simple patch names; Stage 1 adds only a bounded single-precision sort vector; existing patch scanning fallback still passes.
+- **Learnings for future iterations:**
+  - Patterns discovered: original STAMPS casts `xy` to MATLAB `single` before `sortrows(xy, [2, 1])`, so f64 native sorting can change borderline row order even when numeric output is otherwise close.
+  - Gotchas encountered: Rust MAT reading helpers do not cover the compressed golden `ps1.mat` files used by validation, so focused golden tests should use `pystamps.io.mat.read_mat` through `uv run python`.
+  - Useful context: keep validation fixtures under workspace `target/` and hard-link large phase files where possible; `/tmp` can force copies and exhaust space.
+---

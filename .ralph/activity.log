@@ -167,3 +167,4 @@
 [2026-05-26 18:09:04] Completed US-004 verification gates; Stage 1 ps1 parity passes and full-chain verify fails only on downstream artifacts
 [2026-05-26 18:30:11] Tightened US-004 negative ij shift test before final commit
 [2026-05-26 18:33:09] Final US-004 Rust workspace gate and diff check passed before commit
+[2026-05-26 18:35:34] Updated progress log for US-004
