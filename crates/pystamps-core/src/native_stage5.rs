@@ -2,7 +2,12 @@ use crate::CoreError;
 use pystamps_mat::{ComplexMatrixF32, MatData, MatFile, Matrix};
 use std::collections::HashMap;
 use std::fs;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const HDF5_SIGNATURE: &[u8; 8] = b"\x89HDF\r\n\x1a\n";
+const HDF5_SIGNATURE_SCAN_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug)]
 struct Stage5Parms {
@@ -87,13 +92,24 @@ pub fn run_stage5_patch_native(patch_dir: impl AsRef<Path>) -> Result<String, Co
         ix2_pos += 1;
     }
     validate_one_based_indices(&final_ix1, n_ps1, "weed1.mat promoted PS indices")?;
-    let final_ix0: Vec<usize> = final_ix1.iter().map(|&value| (value - 1) as usize).collect();
+    let final_ix0: Vec<usize> = final_ix1
+        .iter()
+        .map(|&value| (value - 1) as usize)
+        .collect();
 
     let master_ix = scalar_from_mat(&ps1, "master_ix", 1.0);
     let mut ps2 = MatFile::new(patch_dir.join("ps2.mat"));
-    ps2.add_f32_col_vector("bperp", optional_vector_f32(&ps1, "bperp").unwrap_or_default())?;
+    ps2.add_f32_col_vector(
+        "bperp",
+        optional_vector_f32(&ps1, "bperp").unwrap_or_default(),
+    )?;
     ps2.add_f64_col_vector("day", optional_vector_f64(&ps1, "day").unwrap_or_default())?;
-    ps2.add_f64_matrix("ij", final_ix0.len(), ij1.cols, select_rows_f64(&ij1, &final_ix0))?;
+    ps2.add_f64_matrix(
+        "ij",
+        final_ix0.len(),
+        ij1.cols,
+        select_rows_f64(&ij1, &final_ix0),
+    )?;
     if let Some(ll0) = optional_matrix_f64(&ps1, "ll0") {
         ps2.add_f64_matrix("ll0", ll0.rows, ll0.cols, ll0.values)?;
     }
@@ -108,11 +124,20 @@ pub fn run_stage5_patch_native(patch_dir: impl AsRef<Path>) -> Result<String, Co
     ps2.add_f64_scalar("n_ifg", scalar_from_mat(&ps1, "n_ifg", ph1.cols as f64))?;
     ps2.add_f64_scalar("n_image", scalar_from_mat(&ps1, "n_image", ph1.cols as f64))?;
     ps2.add_f64_scalar("n_ps", final_ix0.len() as f64)?;
-    ps2.add_f32_matrix("xy", final_ix0.len(), xy1.cols, select_rows_f32(&xy1, &final_ix0))?;
-    if let Some(mean_incidence) = optional_vector_f64(&ps1, "mean_incidence").and_then(|values| values.first().copied()) {
+    ps2.add_f32_matrix(
+        "xy",
+        final_ix0.len(),
+        xy1.cols,
+        select_rows_f32(&xy1, &final_ix0),
+    )?;
+    if let Some(mean_incidence) =
+        optional_vector_f64(&ps1, "mean_incidence").and_then(|values| values.first().copied())
+    {
         ps2.add_f64_scalar("mean_incidence", mean_incidence)?;
     }
-    if let Some(mean_range) = optional_vector_f64(&ps1, "mean_range").and_then(|values| values.first().copied()) {
+    if let Some(mean_range) =
+        optional_vector_f64(&ps1, "mean_range").and_then(|values| values.first().copied())
+    {
         ps2.add_f64_scalar("mean_range", mean_range)?;
     }
     ps2.write()?;
@@ -159,7 +184,12 @@ pub fn run_stage5_patch_native(patch_dir: impl AsRef<Path>) -> Result<String, Co
         let bperp_mat = ps_matrix_f32(&bp1, "bperp_mat", n_ps1, "bp1.bperp_mat")?;
         let selected = select_rows_f32(&bperp_mat, &final_ix0);
         let mut bp2 = MatFile::new(patch_dir.join("bp2.mat"));
-        bp2.add_f32_matrix("bperp_mat", final_ix0.len(), bperp_mat.cols, selected.clone())?;
+        bp2.add_f32_matrix(
+            "bperp_mat",
+            final_ix0.len(),
+            bperp_mat.cols,
+            selected.clone(),
+        )?;
         bp2.write()?;
         Matrix {
             name: "bperp_mat".to_string(),
@@ -189,7 +219,10 @@ pub fn run_stage5_patch_native(patch_dir: impl AsRef<Path>) -> Result<String, Co
         master_ix.round() as usize,
     )?;
 
-    Ok(format!("Stage 5 promoted {} PS to version 2", final_ix0.len()))
+    Ok(format!(
+        "Stage 5 promoted {} PS to version 2",
+        final_ix0.len()
+    ))
 }
 
 pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreError> {
@@ -233,8 +266,12 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
 
     for bundle in &bundles {
         base_ps = Some(bundle.ps.clone());
-        let (keep_patch, remove_patch_ix) =
-            compute_patch_keep_mask(&bundle.ij_keys, &bundle.ij, bundle.patch_bounds, &merged_index_by_key);
+        let (keep_patch, remove_patch_ix) = compute_patch_keep_mask(
+            &bundle.ij_keys,
+            &bundle.ij,
+            bundle.patch_bounds,
+            &merged_index_by_key,
+        );
         remove_ix.extend(remove_patch_ix);
         let kept_ix: Vec<usize> = keep_patch
             .iter()
@@ -299,7 +336,9 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
                 keep[idx] = false;
             }
         }
-        (ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc) = apply_stage5_selector_all(
+        (
+            ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc,
+        ) = apply_stage5_selector_all(
             &keep,
             ij,
             lonlat,
@@ -324,7 +363,9 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
 
     let dedup_keep = dedup_lonlat_keep_highest_coh(&lonlat, &coh_ps);
     if dedup_keep.iter().any(|&keep| !keep) {
-        (ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc) = apply_stage5_selector_all(
+        (
+            ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc,
+        ) = apply_stage5_selector_all(
             &dedup_keep,
             ij,
             lonlat,
@@ -355,7 +396,9 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
             .then_with(|| xy_local[left * 2].total_cmp(&xy_local[right * 2]))
     });
     let xy_sorted = select_rows_plain(&xy_local, 2, &sort_ix);
-    (ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc) = apply_stage5_index_all(
+    (
+        ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc,
+    ) = apply_stage5_index_all(
         &sort_ix,
         ij,
         lonlat,
@@ -436,11 +479,15 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
     ifgstd.add_f32_col_vector("ifg_std", ifg_std)?;
     ifgstd.write()?;
 
-    Ok(format!("Merged {} patches into {n_ps} PS records", patch_dirs.len()))
+    Ok(format!(
+        "Merged {} patches into {n_ps} PS records",
+        patch_dirs.len()
+    ))
 }
 
 fn read_mat_stage5(patch_dir: &Path, filename: &str) -> Result<MatData, CoreError> {
-    MatData::read(patch_dir.join(filename)).map_err(|err| stage5_err_owned(format!("unable to read {filename}: {err}")))
+    MatData::read(patch_dir.join(filename))
+        .map_err(|err| stage5_err_owned(format!("unable to read {filename}: {err}")))
 }
 
 fn discover_stage5_patch_dirs(dataset_root: &Path) -> Result<Vec<PathBuf>, CoreError> {
@@ -492,7 +539,9 @@ fn load_stage5_patch_bundle(patch: &Path) -> Result<Stage5PatchBundle, CoreError
         .to_string();
     for filename in ["ps2.mat", "ph2.mat", "pm2.mat"] {
         if !patch.join(filename).exists() {
-            return stage5_err(format!("Patch missing stage-5 outputs: {patch_name}/{filename}"));
+            return stage5_err(format!(
+                "Patch missing stage-5 outputs: {patch_name}/{filename}"
+            ));
         }
     }
 
@@ -532,20 +581,37 @@ fn load_stage5_patch_bundle(patch: &Path) -> Result<Stage5PatchBundle, CoreError
     };
     let hgt = if patch.join("hgt2.mat").exists() {
         let mat = read_mat_stage5(patch, "hgt2.mat")?;
-        Some(ps_vector_f64(&mat, "hgt", n_ps, &format!("{patch_name}.hgt2.hgt"))?)
+        Some(ps_vector_f64(
+            &mat,
+            "hgt",
+            n_ps,
+            &format!("{patch_name}.hgt2.hgt"),
+        )?)
     } else {
         None
     };
     let la = if patch.join("la2.mat").exists() {
         let mat = read_mat_stage5(patch, "la2.mat")?;
-        Some(ps_vector_f64(&mat, "la", n_ps, &format!("{patch_name}.la2.la"))?)
+        Some(ps_vector_f64(
+            &mat,
+            "la",
+            n_ps,
+            &format!("{patch_name}.la2.la"),
+        )?)
     } else {
         None
     };
     let rc = if patch.join("rc2.mat").exists() {
         let mat = read_mat_stage5(patch, "rc2.mat")?;
-        match mat.get_complex_f32_matrix("ph_rc").or_else(|_| mat.get_complex_f32_matrix("rc")) {
-            Ok(rc) => Some(ps_complex_rows(rc, n_ps, &format!("{patch_name}.rc2.ph_rc"))?),
+        match mat
+            .get_complex_f32_matrix("ph_rc")
+            .or_else(|_| mat.get_complex_f32_matrix("rc"))
+        {
+            Ok(rc) => Some(ps_complex_rows(
+                rc,
+                n_ps,
+                &format!("{patch_name}.rc2.ph_rc"),
+            )?),
             Err(_) => None,
         }
     } else {
@@ -598,7 +664,10 @@ fn compute_patch_keep_mask(
         for (idx, row) in ij.values.chunks_exact(3).enumerate() {
             let col = row[1].round() as i64;
             let line = row[2].round() as i64;
-            keep_patch[idx] = col >= col_min - 1 && col <= col_max - 1 && line >= row_min - 1 && line <= row_max - 1;
+            keep_patch[idx] = col >= col_min - 1
+                && col <= col_max - 1
+                && line >= row_min - 1
+                && line <= row_max - 1;
         }
     }
 
@@ -642,8 +711,14 @@ fn write_merged_ps2(
 ) -> Result<(), CoreError> {
     let n_ps = ij.len() / 3;
     let mut ps2 = MatFile::new(dataset_root.join("ps2.mat"));
-    ps2.add_f32_col_vector("bperp", optional_vector_f32(base_ps, "bperp").unwrap_or_default())?;
-    ps2.add_f64_col_vector("day", optional_vector_f64(base_ps, "day").unwrap_or_default())?;
+    ps2.add_f32_col_vector(
+        "bperp",
+        optional_vector_f32(base_ps, "bperp").unwrap_or_default(),
+    )?;
+    ps2.add_f64_col_vector(
+        "day",
+        optional_vector_f64(base_ps, "day").unwrap_or_default(),
+    )?;
     ps2.add_f64_matrix("ij", n_ps, 3, ij.to_vec())?;
     if let Some(ll0) = optional_vector_f64(base_ps, "ll0") {
         ps2.add_f64_row_vector("ll0", ll0)?;
@@ -657,17 +732,26 @@ fn write_merged_ps2(
     ps2.add_f64_scalar("n_image", scalar_from_mat(base_ps, "n_image", 0.0))?;
     ps2.add_f64_scalar("n_ps", n_ps as f64)?;
     ps2.add_f32_matrix("xy", n_ps, 3, xy.to_vec())?;
-    if let Some(mean_incidence) = optional_vector_f64(base_ps, "mean_incidence").and_then(|values| values.first().copied()) {
+    if let Some(mean_incidence) =
+        optional_vector_f64(base_ps, "mean_incidence").and_then(|values| values.first().copied())
+    {
         ps2.add_f64_scalar("mean_incidence", mean_incidence)?;
     }
-    if let Some(mean_range) = optional_vector_f64(base_ps, "mean_range").and_then(|values| values.first().copied()) {
+    if let Some(mean_range) =
+        optional_vector_f64(base_ps, "mean_range").and_then(|values| values.first().copied())
+    {
         ps2.add_f64_scalar("mean_range", mean_range)?;
     }
     ps2.write()?;
     Ok(())
 }
 
-fn write_merged_ph2(dataset_root: &Path, rows: usize, cols: usize, ph2: &[(f32, f32)]) -> Result<(), CoreError> {
+fn write_merged_ph2(
+    dataset_root: &Path,
+    rows: usize,
+    cols: usize,
+    ph2: &[(f32, f32)],
+) -> Result<(), CoreError> {
     let mut mat = MatFile::new(dataset_root.join("ph2.mat"));
     mat.add_complex_f32_matrix("ph", rows, cols, ph2.to_vec())?;
     mat.write()?;
@@ -723,7 +807,9 @@ fn merged_ifg_std(
 
     let master_ix = scalar_from_mat(base_ps, "master_ix", 1.0).round() as usize;
     if !small_baseline && (master_ix == 0 || master_ix > ph_cols) {
-        return stage5_err(format!("ps2.master_ix must be 1-based within ph2 columns; got {master_ix}"));
+        return stage5_err(format!(
+            "ps2.master_ix must be 1-based within ph2 columns; got {master_ix}"
+        ));
     }
 
     let mut sums = vec![0.0f64; ph_cols];
@@ -790,7 +876,12 @@ fn promote_optional_vector_f32(
         return Ok(());
     }
     let source = read_mat_stage5(patch_dir, source_file)?;
-    let values = ps_vector_f32(&source, variable, n_ps, &format!("{source_file}.{variable}"))?;
+    let values = ps_vector_f32(
+        &source,
+        variable,
+        n_ps,
+        &format!("{source_file}.{variable}"),
+    )?;
     let mut mat = MatFile::new(patch_dir.join(dest_file));
     mat.add_f32_col_vector(variable, select_values_f32(&values, final_ix0))?;
     mat.write()?;
@@ -808,12 +899,115 @@ fn promote_optional_vector_f64(
     if !patch_dir.join(source_file).exists() {
         return Ok(());
     }
-    let source = read_mat_stage5(patch_dir, source_file)?;
-    let values = ps_vector_f64(&source, variable, n_ps, &format!("{source_file}.{variable}"))?;
+    let source_path = patch_dir.join(source_file);
+    let label = format!("{source_file}.{variable}");
+    let values = read_stage5_optional_vector_f64(&source_path, variable, n_ps, &label)?;
     let mut mat = MatFile::new(patch_dir.join(dest_file));
     mat.add_f64_col_vector(variable, select_values_f64(&values, final_ix0))?;
     mat.write()?;
     Ok(())
+}
+
+fn read_stage5_optional_vector_f64(
+    path: &Path,
+    variable: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Vec<f64>, CoreError> {
+    match MatData::read(path) {
+        Ok(source) => match ps_vector_f64(&source, variable, n_ps, label) {
+            Ok(values) => return Ok(values),
+            Err(mat_err) => match read_hdf5_vector_f64(path, variable, n_ps) {
+                Ok(values) => return Ok(values),
+                Err(hdf_err) => {
+                    return stage5_err(format!(
+                        "{label} is missing in MAT v5 reader ({mat_err}); HDF5 fallback failed for {}: {hdf_err}",
+                        path.display()
+                    ))
+                }
+            },
+        },
+        Err(mat_err) => match read_hdf5_vector_f64(path, variable, n_ps) {
+            Ok(values) => Ok(values),
+            Err(hdf_err) => stage5_err(format!(
+                "unable to read {label} from {} as MAT v5 ({mat_err}) or HDF5 ({hdf_err})",
+                path.display()
+            )),
+        },
+    }
+}
+
+fn read_hdf5_vector_f64(path: &Path, variable: &str, n_ps: usize) -> Result<Vec<f64>, String> {
+    match read_hdf5_vector_f64_direct(path, variable, n_ps) {
+        Ok(values) => return Ok(values),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_vector_f64_from_userblock_file(path, offset, variable, n_ps).map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_vector_f64_direct(
+    path: &Path,
+    variable: &str,
+    n_ps: usize,
+) -> Result<Vec<f64>, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset.read_raw::<f64>().map_err(|err| err.to_string())?;
+    if values.len() != n_ps {
+        return Err(format!(
+            "{variable} has incompatible length {} for n_ps={n_ps}",
+            values.len()
+        ));
+    }
+    Ok(values)
+}
+
+fn read_hdf5_vector_f64_from_userblock_file(
+    path: &Path,
+    offset: usize,
+    variable: &str,
+    n_ps: usize,
+) -> Result<Vec<f64>, String> {
+    let temp_path = std::env::temp_dir().join(format!(
+        "pystamps-stage5-hdf5-{}-{}.h5",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| err.to_string())?
+            .as_nanos()
+    ));
+    let mut input = fs::File::open(path).map_err(|err| err.to_string())?;
+    input
+        .seek(SeekFrom::Start(offset as u64))
+        .map_err(|err| err.to_string())?;
+    {
+        let mut output = fs::File::create(&temp_path).map_err(|err| err.to_string())?;
+        std::io::copy(&mut input, &mut output).map_err(|err| err.to_string())?;
+        output.flush().map_err(|err| err.to_string())?;
+    }
+    let result = read_hdf5_vector_f64_direct(&temp_path, variable, n_ps);
+    let _ = fs::remove_file(&temp_path);
+    result
+}
+
+fn find_hdf5_signature_offset(path: &Path) -> Result<usize, String> {
+    let mut file = fs::File::open(path).map_err(|err| err.to_string())?;
+    let mut buffer = vec![0_u8; HDF5_SIGNATURE_SCAN_BYTES];
+    let read_len = file.read(&mut buffer).map_err(|err| err.to_string())?;
+    buffer.truncate(read_len);
+    buffer
+        .windows(HDF5_SIGNATURE.len())
+        .position(|window| window == HDF5_SIGNATURE)
+        .ok_or_else(|| "HDF5 signature not found".to_string())
 }
 
 fn write_rc2(
@@ -853,7 +1047,9 @@ fn write_rc2(
         mat.add_complex_f32_matrix("ph_rc", rows, cols, ph_rc)?;
     } else {
         if master_ix == 0 || master_ix > cols {
-            return stage5_err(format!("ps2.master_ix must be 1-based within ph2 columns; got {master_ix}"));
+            return stage5_err(format!(
+                "ps2.master_ix must be 1-based within ph2 columns; got {master_ix}"
+            ));
         }
         if bperp_mat2.cols + 1 != cols {
             return stage5_err(format!(
@@ -932,7 +1128,12 @@ fn vector_i64(mat: &MatData, name: &str, label: &str) -> Result<Vec<i64>, CoreEr
         .collect())
 }
 
-fn bool_vector_or_default(mat: &MatData, name: &str, expected_len: usize, default_value: bool) -> Vec<bool> {
+fn bool_vector_or_default(
+    mat: &MatData,
+    name: &str,
+    expected_len: usize,
+    default_value: bool,
+) -> Vec<bool> {
     let Some(values) = optional_vector_f64(mat, name) else {
         return vec![default_value; expected_len];
     };
@@ -950,41 +1151,72 @@ fn bool_vector_exact(mat: &MatData, name: &str, expected_len: usize) -> Option<V
     Some(values.into_iter().map(|value| value != 0.0).collect())
 }
 
-fn ps_vector_f64(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Vec<f64>, CoreError> {
+fn ps_vector_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Vec<f64>, CoreError> {
     let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
         stage: 5,
         message: format!("{label} is missing"),
     })?;
     if values.len() != n_ps {
-        return stage5_err(format!("{label} has incompatible length {} for n_ps={n_ps}", values.len()));
+        return stage5_err(format!(
+            "{label} has incompatible length {} for n_ps={n_ps}",
+            values.len()
+        ));
     }
     Ok(values)
 }
 
-fn ps_vector_f32(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Vec<f32>, CoreError> {
+fn ps_vector_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Vec<f32>, CoreError> {
     let values = optional_vector_f32(mat, name).ok_or_else(|| CoreError::NativeStage {
         stage: 5,
         message: format!("{label} is missing"),
     })?;
     if values.len() != n_ps {
-        return stage5_err(format!("{label} has incompatible length {} for n_ps={n_ps}", values.len()));
+        return stage5_err(format!(
+            "{label} has incompatible length {} for n_ps={n_ps}",
+            values.len()
+        ));
     }
     Ok(values)
 }
 
-fn ps_matrix_f32(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
-    let source = mat.get_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 5,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_matrix_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
+    let source = mat
+        .get_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 5,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     orient_matrix_f32(source, n_ps, label)
 }
 
-fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str) -> Result<Matrix<f64>, CoreError> {
-    let source = mat.get_f64_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 5,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_dim_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
+    let source = mat
+        .get_f64_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 5,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -997,11 +1229,19 @@ fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str)
     ))
 }
 
-fn ps_dim_f32(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
-    let source = mat.get_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 5,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_dim_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
+    let source = mat
+        .get_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 5,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -1020,10 +1260,12 @@ fn ps_complex_matrix(
     n_ps: usize,
     label: &str,
 ) -> Result<ComplexMatrixF32, CoreError> {
-    let source = mat.get_complex_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 5,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+    let source = mat
+        .get_complex_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 5,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -1036,7 +1278,11 @@ fn ps_complex_matrix(
     ))
 }
 
-fn orient_matrix_f32(source: Matrix<f32>, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
+fn orient_matrix_f32(
+    source: Matrix<f32>,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -1242,7 +1488,11 @@ fn select_values_plain<T: Copy>(values: &[T], rows: &[usize]) -> Vec<T> {
     rows.iter().map(|&row| values[row]).collect()
 }
 
-fn ps_complex_rows(source: ComplexMatrixF32, n_ps: usize, label: &str) -> Result<ComplexMatrixF32, CoreError> {
+fn ps_complex_rows(
+    source: ComplexMatrixF32,
+    n_ps: usize,
+    label: &str,
+) -> Result<ComplexMatrixF32, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -1321,7 +1571,10 @@ fn quantize_xy_mm(value: f64) -> f32 {
     rounded / 1000.0
 }
 
-fn local_xy_from_lonlat(lonlat: &[f64], heading_deg: f64) -> Result<(Vec<f64>, Vec<f64>), CoreError> {
+fn local_xy_from_lonlat(
+    lonlat: &[f64],
+    heading_deg: f64,
+) -> Result<(Vec<f64>, Vec<f64>), CoreError> {
     let rows = lonlat.len() / 2;
     if rows == 0 {
         return Ok((Vec::new(), vec![0.0, 0.0]));
@@ -1387,7 +1640,8 @@ fn local_xy_from_lonlat(lonlat: &[f64], heading_deg: f64) -> Result<(Vec<f64>, V
 
 fn meridian_arc(a: f64, e: f64, lat: f64) -> f64 {
     a * ((1.0 - e.powi(2) / 4.0 - 3.0 * e.powi(4) / 64.0 - 5.0 * e.powi(6) / 256.0) * lat
-        - (3.0 * e.powi(2) / 8.0 + 3.0 * e.powi(4) / 32.0 + 45.0 * e.powi(6) / 1024.0) * (2.0 * lat).sin()
+        - (3.0 * e.powi(2) / 8.0 + 3.0 * e.powi(4) / 32.0 + 45.0 * e.powi(6) / 1024.0)
+            * (2.0 * lat).sin()
         + (15.0 * e.powi(4) / 256.0 + 45.0 * e.powi(6) / 1024.0) * (4.0 * lat).sin()
         - (35.0 * e.powi(6) / 3072.0) * (6.0 * lat).sin())
 }
@@ -1471,7 +1725,10 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
 fn resolve_file_optional(patch_dir: &Path, filename: &str) -> Option<PathBuf> {
     [
         patch_dir.join(filename),
-        patch_dir.parent().map(|parent| parent.join(filename)).unwrap_or_default(),
+        patch_dir
+            .parent()
+            .map(|parent| parent.join(filename))
+            .unwrap_or_default(),
         patch_dir
             .parent()
             .and_then(|parent| parent.parent())
@@ -1533,7 +1790,10 @@ mod tests {
                 ],
             ),
             ArtifactComparisonSpec::new("PATCH_1/ph2.mat", ["ph"]),
-            ArtifactComparisonSpec::new("PATCH_1/pm2.mat", ["K_ps", "C_ps", "coh_ps", "ph_patch", "ph_res"]),
+            ArtifactComparisonSpec::new(
+                "PATCH_1/pm2.mat",
+                ["K_ps", "C_ps", "coh_ps", "ph_patch", "ph_res"],
+            ),
             ArtifactComparisonSpec::new("PATCH_1/bp2.mat", ["bperp_mat"]),
             ArtifactComparisonSpec::new("PATCH_1/hgt2.mat", ["hgt"]),
             ArtifactComparisonSpec::new("PATCH_1/la2.mat", ["la"]),
@@ -1594,6 +1854,35 @@ mod tests {
     }
 
     #[test]
+    fn stage5_promotes_hdf5_la1_vector() {
+        let root = temp_root("stage5-hdf5-la");
+        create_stage5_fixture(&root, "n");
+        let patch = root.join("PATCH_1");
+        fs::remove_file(patch.join("la1.mat")).unwrap();
+        let raw_hdf5 = patch.join("la-raw.h5");
+        let h5 = rust_hdf5::H5File::create(&raw_hdf5).unwrap();
+        let ds = h5
+            .new_dataset::<f64>()
+            .shape(&[1usize, 5usize])
+            .create("la")
+            .unwrap();
+        ds.write_raw(&[0.1, 0.2, 0.3, 0.4, 0.5]).unwrap();
+        h5.close().unwrap();
+        let mut matlab_hdf5 = fs::File::create(patch.join("la1.mat")).unwrap();
+        matlab_hdf5.write_all(&vec![b' '; 512]).unwrap();
+        matlab_hdf5
+            .write_all(&fs::read(&raw_hdf5).unwrap())
+            .unwrap();
+        fs::remove_file(raw_hdf5).unwrap();
+
+        run_stage5_patch_native(&patch).unwrap();
+
+        let la2 = MatData::read(patch.join("la2.mat")).unwrap();
+        assert_eq!(la2.get_f64_matrix("la").unwrap().values, vec![0.1, 0.5]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn synthetic_stage5_merge_matches_python_and_is_faster() {
         let root = temp_root("stage5-merge");
         let python_root = root.join("python");
@@ -1628,7 +1917,10 @@ mod tests {
                 ],
             ),
             ArtifactComparisonSpec::new("ph2.mat", ["ph"]),
-            ArtifactComparisonSpec::new("pm2.mat", ["K_ps", "C_ps", "coh_ps", "ph_patch", "ph_res"]),
+            ArtifactComparisonSpec::new(
+                "pm2.mat",
+                ["K_ps", "C_ps", "coh_ps", "ph_patch", "ph_res"],
+            ),
             ArtifactComparisonSpec::new("bp2.mat", ["bperp_mat"]),
             ArtifactComparisonSpec::new("hgt2.mat", ["hgt"]),
             ArtifactComparisonSpec::new("la2.mat", ["la"]),
@@ -1703,8 +1995,12 @@ mod tests {
         select.add_u8_matrix("keep_ix", 2, 1, vec![1, 1]).unwrap();
         select.add_f64_col_vector("K_ps2", vec![0.1, 0.2]).unwrap();
         select.add_f64_col_vector("C_ps2", vec![0.2, 0.3]).unwrap();
-        select.add_f64_col_vector("coh_ps2", vec![0.8, 0.7]).unwrap();
-        select.add_f32_matrix("ph_res2", 2, 3, vec![0.0; 6]).unwrap();
+        select
+            .add_f64_col_vector("coh_ps2", vec![0.8, 0.7])
+            .unwrap();
+        select
+            .add_f32_matrix("ph_res2", 2, 3, vec![0.0; 6])
+            .unwrap();
         select.write().unwrap();
         let mut weed = MatFile::new(patch.join("weed1.mat"));
         weed.add_u8_matrix("ix_weed", 2, 1, vec![1, 1]).unwrap();
@@ -1763,7 +2059,8 @@ mod tests {
         mat.add_f64_scalar("n_image", 4.0).unwrap();
         mat.add_f64_scalar("master_day", 738_584.0).unwrap();
         mat.add_f64_scalar("master_ix", 2.0).unwrap();
-        mat.add_f64_row_vector("bperp", vec![-12.0, 0.0, 14.0, 28.0]).unwrap();
+        mat.add_f64_row_vector("bperp", vec![-12.0, 0.0, 14.0, 28.0])
+            .unwrap();
         mat.add_f64_row_vector("day", vec![738_572.0, 738_584.0, 738_596.0, 738_608.0])
             .unwrap();
         mat.add_f64_matrix("ij", 5, 3, ij).unwrap();
@@ -1797,26 +2094,37 @@ mod tests {
             }
         }
         let mut mat = MatFile::new(patch.join("pm1.mat"));
-        mat.add_complex_f32_matrix("ph_patch", 5, 3, ph_patch).unwrap();
+        mat.add_complex_f32_matrix("ph_patch", 5, 3, ph_patch)
+            .unwrap();
         mat.add_f32_matrix("ph_res", 5, 3, ph_res).unwrap();
-        mat.add_f64_row_vector("K_ps", vec![0.01, 0.02, 0.03, 0.04, 0.05]).unwrap();
-        mat.add_f64_row_vector("C_ps", vec![0.1, 0.2, 0.3, 0.4, 0.5]).unwrap();
-        mat.add_f64_row_vector("coh_ps", vec![0.9, 0.8, 0.7, 0.6, 0.5]).unwrap();
+        mat.add_f64_row_vector("K_ps", vec![0.01, 0.02, 0.03, 0.04, 0.05])
+            .unwrap();
+        mat.add_f64_row_vector("C_ps", vec![0.1, 0.2, 0.3, 0.4, 0.5])
+            .unwrap();
+        mat.add_f64_row_vector("coh_ps", vec![0.9, 0.8, 0.7, 0.6, 0.5])
+            .unwrap();
         mat.write().unwrap();
     }
 
     fn write_select1(patch: &Path) {
         let mut mat = MatFile::new(patch.join("select1.mat"));
-        mat.add_f64_col_vector("ix", vec![1.0, 3.0, 4.0, 5.0]).unwrap();
-        mat.add_u8_matrix("keep_ix", 4, 1, vec![1, 1, 0, 1]).unwrap();
-        mat.add_f64_col_vector("K_ps2", vec![0.11, 0.22, 0.33, 0.44]).unwrap();
-        mat.add_f64_col_vector("C_ps2", vec![0.15, 0.25, 0.35, 0.45]).unwrap();
-        mat.add_f64_col_vector("coh_ps2", vec![0.91, 0.82, 0.73, 0.64]).unwrap();
+        mat.add_f64_col_vector("ix", vec![1.0, 3.0, 4.0, 5.0])
+            .unwrap();
+        mat.add_u8_matrix("keep_ix", 4, 1, vec![1, 1, 0, 1])
+            .unwrap();
+        mat.add_f64_col_vector("K_ps2", vec![0.11, 0.22, 0.33, 0.44])
+            .unwrap();
+        mat.add_f64_col_vector("C_ps2", vec![0.15, 0.25, 0.35, 0.45])
+            .unwrap();
+        mat.add_f64_col_vector("coh_ps2", vec![0.91, 0.82, 0.73, 0.64])
+            .unwrap();
         mat.add_f32_matrix(
             "ph_res2",
             4,
             3,
-            vec![0.01, 0.02, 0.03, 0.11, 0.12, 0.13, 0.21, 0.22, 0.23, 0.31, 0.32, 0.33],
+            vec![
+                0.01, 0.02, 0.03, 0.11, 0.12, 0.13, 0.21, 0.22, 0.23, 0.31, 0.32, 0.33,
+            ],
         )
         .unwrap();
         mat.write().unwrap();
@@ -1848,15 +2156,18 @@ mod tests {
 
     fn write_optional_inputs(patch: &Path) {
         let mut hgt = MatFile::new(patch.join("hgt1.mat"));
-        hgt.add_f32_row_vector("hgt", vec![100.0, 110.0, 120.0, 130.0, 140.0]).unwrap();
+        hgt.add_f32_row_vector("hgt", vec![100.0, 110.0, 120.0, 130.0, 140.0])
+            .unwrap();
         hgt.write().unwrap();
 
         let mut la = MatFile::new(patch.join("la1.mat"));
-        la.add_f64_row_vector("la", vec![0.1, 0.2, 0.3, 0.4, 0.5]).unwrap();
+        la.add_f64_row_vector("la", vec![0.1, 0.2, 0.3, 0.4, 0.5])
+            .unwrap();
         la.write().unwrap();
 
         let mut da = MatFile::new(patch.join("da1.mat"));
-        da.add_f64_row_vector("D_A", vec![1.0, 1.1, 1.2, 1.3, 1.4]).unwrap();
+        da.add_f64_row_vector("D_A", vec![1.0, 1.1, 1.2, 1.3, 1.4])
+            .unwrap();
         da.write().unwrap();
     }
 
@@ -1934,7 +2245,8 @@ mod tests {
 
     fn write_root_parms(root: &Path) {
         let mut mat = MatFile::new(root.join("parms.mat"));
-        mat.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32]).unwrap();
+        mat.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32])
+            .unwrap();
         mat.add_f64_scalar("heading", 167.0).unwrap();
         mat.write().unwrap();
     }
@@ -1953,7 +2265,11 @@ mod tests {
         for (row_ix, row) in rows.iter().enumerate() {
             ij.extend_from_slice(&[(row_ix + 1) as f64, row.key.0, row.key.1]);
             lonlat.extend_from_slice(&[row.lonlat.0, row.lonlat.1]);
-            xy.extend_from_slice(&[(row_ix + 1) as f32, row.key.0 as f32 * 10.0, row.key.1 as f32 * 10.0]);
+            xy.extend_from_slice(&[
+                (row_ix + 1) as f32,
+                row.key.0 as f32 * 10.0,
+                row.key.1 as f32 * 10.0,
+            ]);
             for col in 0..4 {
                 let real = 1.0 + row_ix as f32 * 0.2 + col as f32 * 0.03;
                 let imag = 0.4 + row_ix as f32 * 0.1 - col as f32 * 0.02;
@@ -1968,7 +2284,8 @@ mod tests {
         }
 
         let mut ps2 = MatFile::new(patch.join("ps2.mat"));
-        ps2.add_f32_col_vector("bperp", vec![-12.0, 0.0, 14.0, 28.0]).unwrap();
+        ps2.add_f32_col_vector("bperp", vec![-12.0, 0.0, 14.0, 28.0])
+            .unwrap();
         ps2.add_f64_col_vector("day", vec![738_572.0, 738_584.0, 738_596.0, 738_608.0])
             .unwrap();
         ps2.add_f64_matrix("ij", n_ps, 3, ij).unwrap();
@@ -1989,10 +2306,14 @@ mod tests {
         ph2.write().unwrap();
 
         let mut pm2 = MatFile::new(patch.join("pm2.mat"));
-        pm2.add_f64_col_vector("K_ps", rows.iter().map(|row| row.k).collect()).unwrap();
-        pm2.add_f64_col_vector("C_ps", rows.iter().map(|row| row.c).collect()).unwrap();
-        pm2.add_f64_col_vector("coh_ps", rows.iter().map(|row| row.coh).collect()).unwrap();
-        pm2.add_complex_f32_matrix("ph_patch", n_ps, 3, ph_patch).unwrap();
+        pm2.add_f64_col_vector("K_ps", rows.iter().map(|row| row.k).collect())
+            .unwrap();
+        pm2.add_f64_col_vector("C_ps", rows.iter().map(|row| row.c).collect())
+            .unwrap();
+        pm2.add_f64_col_vector("coh_ps", rows.iter().map(|row| row.coh).collect())
+            .unwrap();
+        pm2.add_complex_f32_matrix("ph_patch", n_ps, 3, ph_patch)
+            .unwrap();
         pm2.add_f32_matrix("ph_res", n_ps, 3, ph_res).unwrap();
         pm2.write().unwrap();
 
@@ -2001,11 +2322,13 @@ mod tests {
         bp2.write().unwrap();
 
         let mut hgt2 = MatFile::new(patch.join("hgt2.mat"));
-        hgt2.add_f32_col_vector("hgt", rows.iter().map(|row| row.hgt as f32).collect()).unwrap();
+        hgt2.add_f32_col_vector("hgt", rows.iter().map(|row| row.hgt as f32).collect())
+            .unwrap();
         hgt2.write().unwrap();
 
         let mut la2 = MatFile::new(patch.join("la2.mat"));
-        la2.add_f64_col_vector("la", rows.iter().map(|row| row.la).collect()).unwrap();
+        la2.add_f64_col_vector("la", rows.iter().map(|row| row.la).collect())
+            .unwrap();
         la2.write().unwrap();
 
         let mut rc2 = MatFile::new(patch.join("rc2.mat"));

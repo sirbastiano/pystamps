@@ -1,4 +1,12 @@
-from pystamps.verify import FileComparison, VerificationReport, classify_failures, summarize_failures
+from types import SimpleNamespace
+
+from pystamps.verify import (
+    FileComparison,
+    VerificationReport,
+    classify_failures,
+    summarize_failures,
+    verify_run_against_golden,
+)
 
 
 def test_classify_failures_groups_downstream_residuals() -> None:
@@ -85,3 +93,29 @@ def test_summarize_failures_prioritizes_earliest_stage_boundary() -> None:
         ),
     }
     assert summary["trace"]["stage2_residual_present"] is True
+
+
+def test_verify_uses_patch_list_old_when_patch_list_is_subset(tmp_path) -> None:
+    golden = tmp_path / "golden"
+    run = tmp_path / "run"
+    (golden / "PATCH_1").mkdir(parents=True)
+    (golden / "PATCH_2").mkdir(parents=True)
+    (run / "PATCH_1").mkdir(parents=True)
+
+    (golden / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    (golden / "patch.list_old").write_text("PATCH_1\nPATCH_2\n", encoding="utf-8")
+    (run / "patch.list").write_text("PATCH_1\n", encoding="utf-8")
+    (golden / "PATCH_1" / "artifact.txt").write_text("same", encoding="utf-8")
+    (run / "PATCH_1" / "artifact.txt").write_text("same", encoding="utf-8")
+    (golden / "PATCH_2" / "artifact.txt").write_text("missing-from-run", encoding="utf-8")
+
+    report = verify_run_against_golden(
+        run,
+        golden,
+        SimpleNamespace(rtol=1e-6, atol=1e-8, wrap_equivalence=False),
+        patterns=("PATCH_*/artifact.txt",),
+    )
+
+    assert not report.ok
+    assert any(comparison.failure_kind == "patch_manifest_mismatch" for comparison in report.comparisons)
+    assert any(comparison.relative_path == "PATCH_2/artifact.txt" for comparison in report.comparisons)

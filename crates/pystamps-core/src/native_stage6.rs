@@ -5,6 +5,8 @@ use pystamps_mat::{ComplexMatrixF32, MatData, MatFile, Matrix};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::Path;
 
+const DIST_INF: usize = usize::MAX / 4;
+
 #[derive(Clone, Debug)]
 struct Stage6Parms {
     small_baseline_flag: String,
@@ -76,11 +78,15 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
     }
     let master_ix = scalar_from_mat(&ps2, "master_ix", 1.0).round() as usize;
     if master_ix == 0 || master_ix > n_ifg {
-        return stage6_err(format!("ps2.master_ix must be 1-based within ph2.ph columns; got {master_ix}"));
+        return stage6_err(format!(
+            "ps2.master_ix must be 1-based within ph2.ph columns; got {master_ix}"
+        ));
     }
     let small_baseline = parms.small_baseline_flag.eq_ignore_ascii_case("y");
     if small_baseline {
-        return stage6_err("Stage 6 native unwrap currently supports single-master merged artifacts");
+        return stage6_err(
+            "Stage 6 native unwrap currently supports single-master merged artifacts",
+        );
     }
 
     let drop_set: BTreeSet<i64> = parms.drop_ifg_index.iter().copied().collect();
@@ -92,7 +98,16 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
     }
 
     let bperp_full = expand_bperp_matrix(&bp2, &ps2, n_ps, n_ifg, master_ix)?;
-    let wrapped = build_wrapped_phase(dataset_root, &ph2, &pm2, &bperp_full, n_ps, n_ifg, master_ix, &parms)?;
+    let wrapped = build_wrapped_phase(
+        dataset_root,
+        &ph2,
+        &pm2,
+        &bperp_full,
+        n_ps,
+        n_ifg,
+        master_ix,
+        &parms,
+    )?;
     let uw_grid = if dataset_root.join("uw_grid.mat").exists() {
         read_uw_grid(dataset_root, n_ps)?
     } else {
@@ -111,7 +126,13 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
 
     let ph_uw_some = unwrap_grid_phase(&uw_grid, &uw_interp)?;
     let msd_some = grid_msd(&ph_uw_some, uw_grid.n_ps, unwrap_cols.len(), &uw_interp);
-    write_uw_phaseuw(dataset_root, &ph_uw_some, uw_grid.n_ps, unwrap_cols.len(), &msd_some)?;
+    write_uw_phaseuw(
+        dataset_root,
+        &ph_uw_some,
+        uw_grid.n_ps,
+        unwrap_cols.len(),
+        &msd_some,
+    )?;
     write_phuw2(
         dataset_root,
         &uw_grid,
@@ -153,16 +174,24 @@ fn build_wrapped_phase(
                     continue;
                 }
                 let src_col = if col < master_ix - 1 { col } else { col - 1 };
-                values[row * n_ifg + col] = tuple_to_complex(ph_patch.values[row * ph_patch.cols + src_col]);
+                values[row * n_ifg + col] =
+                    tuple_to_complex(ph_patch.values[row * ph_patch.cols + src_col]);
             }
         }
         values
     } else if dataset_root.join("rc2.mat").exists() {
         let rc2 = read_mat_stage6(dataset_root, "rc2.mat")?;
         let ph_rc = complex_ps_matrix(&rc2, "ph_rc", n_ps, "rc2.ph_rc")?;
-        ph_rc.values.iter().map(|&value| tuple_to_complex(value)).collect()
+        ph_rc
+            .values
+            .iter()
+            .map(|&value| tuple_to_complex(value))
+            .collect()
     } else {
-        ph2.values.iter().map(|&value| tuple_to_complex(value)).collect()
+        ph2.values
+            .iter()
+            .map(|&value| tuple_to_complex(value))
+            .collect()
     };
 
     if !parms.unwrap_patch_phase.eq_ignore_ascii_case("y") {
@@ -284,7 +313,9 @@ fn build_uw_grid(
     let mut ph_in = vec![(0.0f32, 0.0f32); n_ps * n_unwrap];
     for row in 0..n_ps {
         let lin = (grid_j[row] - 1) * n_i + (grid_i[row] - 1);
-        let entry = grouped.entry(lin).or_insert_with(|| vec![Complex64::new(0.0, 0.0); n_unwrap]);
+        let entry = grouped
+            .entry(lin)
+            .or_insert_with(|| vec![Complex64::new(0.0, 0.0); n_unwrap]);
         for (out_col, &src_col) in unwrap_cols.iter().enumerate() {
             let value = wrapped.values[row * wrapped.cols + src_col];
             entry[out_col] += value;
@@ -296,7 +327,11 @@ fn build_uw_grid(
     let mut ph_values = Vec::new();
     let mut nz_lins = Vec::new();
     for (lin, values) in grouped {
-        if values.first().map(|value| value.norm() > 0.0).unwrap_or(false) {
+        if values
+            .first()
+            .map(|value| value.norm() > 0.0)
+            .unwrap_or(false)
+        {
             nz_flat[lin] = true;
             nz_lins.push(lin);
             for value in values {
@@ -381,14 +416,7 @@ fn build_uw_grid(
 
 fn build_uw_interp(uw_grid: &UwGrid) -> Result<UwInterp, CoreError> {
     let points = grid_points(uw_grid)?;
-    let mut z = vec![0usize; uw_grid.n_i * uw_grid.n_j];
-    for row in 0..uw_grid.n_i {
-        for col in 0..uw_grid.n_j {
-            let target = ((col + 1) as f64, (row + 1) as f64);
-            let nearest = nearest_point(&points, target) + 1;
-            z[row * uw_grid.n_j + col] = nearest;
-        }
-    }
+    let z = nearest_grid_labels(uw_grid)?;
 
     let mut edge_ids = BTreeMap::<(usize, usize), usize>::new();
     for (a, b) in native_graph_edges(&points) {
@@ -397,14 +425,22 @@ fn build_uw_interp(uw_grid: &UwGrid) -> Result<UwInterp, CoreError> {
     let mut rowix = vec![0.0; uw_grid.n_i.saturating_sub(1) * uw_grid.n_j];
     for row in 0..uw_grid.n_i.saturating_sub(1) {
         for col in 0..uw_grid.n_j {
-            let value = edge_id_signed(&mut edge_ids, z[row * uw_grid.n_j + col], z[(row + 1) * uw_grid.n_j + col]);
+            let value = edge_id_signed(
+                &mut edge_ids,
+                z[row * uw_grid.n_j + col],
+                z[(row + 1) * uw_grid.n_j + col],
+            );
             rowix[row * uw_grid.n_j + col] = value as f64;
         }
     }
     let mut colix = vec![0.0; uw_grid.n_i * uw_grid.n_j.saturating_sub(1)];
     for row in 0..uw_grid.n_i {
         for col in 0..uw_grid.n_j.saturating_sub(1) {
-            let value = edge_id_signed(&mut edge_ids, z[row * uw_grid.n_j + col], z[row * uw_grid.n_j + col + 1]);
+            let value = edge_id_signed(
+                &mut edge_ids,
+                z[row * uw_grid.n_j + col],
+                z[row * uw_grid.n_j + col + 1],
+            );
             colix[row * uw_grid.n_j.saturating_sub(1) + col] = value as f64;
         }
     }
@@ -444,6 +480,137 @@ fn build_uw_interp(uw_grid: &UwGrid) -> Result<UwInterp, CoreError> {
     })
 }
 
+fn nearest_grid_labels(uw_grid: &UwGrid) -> Result<Vec<usize>, CoreError> {
+    let rows = uw_grid.n_i;
+    let cols = uw_grid.n_j;
+    let len = rows * cols;
+    let mut vertical_dist = vec![DIST_INF; len];
+    let mut vertical_label = vec![0usize; len];
+    let mut f = vec![DIST_INF; rows.max(cols)];
+    let mut labels = vec![0usize; rows.max(cols)];
+    let mut dist = vec![DIST_INF; rows.max(cols)];
+    let mut out_labels = vec![0usize; rows.max(cols)];
+    let mut next_label = 1usize;
+
+    for col in 0..cols {
+        f[..rows].fill(DIST_INF);
+        labels[..rows].fill(0);
+        for row in 0..rows {
+            let ix = row * cols + col;
+            if uw_grid.nzix.values[ix] != 0 {
+                f[row] = 0;
+                labels[row] = next_label;
+                next_label += 1;
+            }
+        }
+        distance_transform_1d(
+            &f[..rows],
+            &labels[..rows],
+            &mut dist[..rows],
+            &mut out_labels[..rows],
+        );
+        for row in 0..rows {
+            let ix = row * cols + col;
+            vertical_dist[ix] = dist[row];
+            vertical_label[ix] = out_labels[row];
+        }
+    }
+
+    let mut z = vec![0usize; len];
+    for row in 0..rows {
+        for col in 0..cols {
+            let ix = row * cols + col;
+            f[col] = vertical_dist[ix];
+            labels[col] = vertical_label[ix];
+        }
+        distance_transform_1d(
+            &f[..cols],
+            &labels[..cols],
+            &mut dist[..cols],
+            &mut out_labels[..cols],
+        );
+        for col in 0..cols {
+            z[row * cols + col] = out_labels[col];
+        }
+    }
+    if next_label - 1 != uw_grid.n_ps {
+        return Err(CoreError::NativeStage {
+            stage: 6,
+            message: format!(
+                "uw_grid.nzix labels {} occupied points but uw_grid.n_ps is {}",
+                next_label - 1,
+                uw_grid.n_ps
+            ),
+        });
+    }
+    Ok(z)
+}
+
+fn distance_transform_1d(
+    f: &[usize],
+    labels: &[usize],
+    dist_out: &mut [usize],
+    label_out: &mut [usize],
+) {
+    let n = f.len();
+    let mut sites = Vec::with_capacity(n);
+    for (idx, (&value, &label)) in f.iter().zip(labels.iter()).enumerate() {
+        if value < DIST_INF && label != 0 {
+            sites.push(idx);
+        }
+    }
+    if sites.is_empty() {
+        dist_out.fill(DIST_INF);
+        label_out.fill(0);
+        return;
+    }
+
+    let mut v = vec![0usize; sites.len()];
+    let mut z = vec![0.0f64; sites.len() + 1];
+    let mut k = 0usize;
+    v[0] = sites[0];
+    z[0] = f64::NEG_INFINITY;
+    z[1] = f64::INFINITY;
+
+    for &q in sites.iter().skip(1) {
+        let mut s = parabola_intersection(f, q, v[k]);
+        while s <= z[k] {
+            if k == 0 {
+                break;
+            }
+            k -= 1;
+            s = parabola_intersection(f, q, v[k]);
+        }
+        if s <= z[k] && k == 0 {
+            v[0] = q;
+            z[0] = f64::NEG_INFINITY;
+            z[1] = f64::INFINITY;
+        } else {
+            k += 1;
+            v[k] = q;
+            z[k] = s;
+            z[k + 1] = f64::INFINITY;
+        }
+    }
+
+    k = 0;
+    for q in 0..n {
+        while z[k + 1] < q as f64 {
+            k += 1;
+        }
+        let site = v[k];
+        let delta = q.abs_diff(site);
+        dist_out[q] = f[site].saturating_add(delta * delta);
+        label_out[q] = labels[site];
+    }
+}
+
+fn parabola_intersection(f: &[usize], q: usize, p: usize) -> f64 {
+    let qf = q as f64;
+    let pf = p as f64;
+    ((f[q] as f64 + qf * qf) - (f[p] as f64 + pf * pf)) / (2.0 * (qf - pf))
+}
+
 fn unwrap_grid_phase(uw_grid: &UwGrid, uw_interp: &UwInterp) -> Result<Vec<f32>, CoreError> {
     validate_connected_graph(uw_interp, uw_grid.n_ps)?;
     let adjacency = graph_adjacency(&uw_interp.edgs, uw_grid.n_ps)?;
@@ -463,7 +630,8 @@ fn unwrap_grid_phase(uw_grid: &UwGrid, uw_interp: &UwInterp) -> Result<Vec<f32>,
                     continue;
                 }
                 let delta = wrap_phase(wrapped[next] - wrapped[node]);
-                output[next * uw_grid.ph.cols + col] = output[node * uw_grid.ph.cols + col] + delta as f32;
+                output[next * uw_grid.ph.cols + col] =
+                    output[node * uw_grid.ph.cols + col] + delta as f32;
                 visited[next] = true;
                 queue.push_back(next);
             }
@@ -489,7 +657,8 @@ fn grid_msd(ph_uw: &[f32], n_ps_grid: usize, n_unwrap: usize, uw_interp: &UwInte
             if a < 0 || b < 0 || a as usize >= n_ps_grid || b as usize >= n_ps_grid {
                 continue;
             }
-            let diff = ph_uw[a as usize * n_unwrap + col] as f64 - ph_uw[b as usize * n_unwrap + col] as f64;
+            let diff = ph_uw[a as usize * n_unwrap + col] as f64
+                - ph_uw[b as usize * n_unwrap + col] as f64;
             sum += diff * diff;
             count += 1;
         }
@@ -525,7 +694,11 @@ fn write_phuw2(
     for row in 0..n_ps {
         let grid_i = uw_grid.grid_ij.values[row * 2].round() as isize;
         let grid_j = uw_grid.grid_ij.values[row * 2 + 1].round() as isize;
-        if grid_i <= 0 || grid_j <= 0 || grid_i as usize > uw_grid.n_i || grid_j as usize > uw_grid.n_j {
+        if grid_i <= 0
+            || grid_j <= 0
+            || grid_i as usize > uw_grid.n_i
+            || grid_j as usize > uw_grid.n_j
+        {
             continue;
         }
         let ps_grid_idx = gridix[(grid_i as usize - 1) * uw_grid.n_j + (grid_j as usize - 1)];
@@ -536,7 +709,8 @@ fn write_phuw2(
             let ph_pix = ph_uw_some[(ps_grid_idx - 1) * unwrap_cols.len() + out_col];
             let ph_in = tuple_to_complex(uw_grid.ph_in.values[row * unwrap_cols.len() + out_col]);
             let residual = (ph_in * Complex64::from_polar(1.0, -(ph_pix as f64))).arg() as f32;
-            ph_uw[row * n_ifg + src_col] = ph_pix + residual + wrapped.phase_restore[row * n_ifg + src_col];
+            ph_uw[row * n_ifg + src_col] =
+                ph_pix + residual + wrapped.phase_restore[row * n_ifg + src_col];
         }
     }
     let mut msd = vec![0.0f32; n_ifg];
@@ -567,20 +741,35 @@ fn write_uw_phaseuw(
 fn write_uw_grid(dataset_root: &Path, grid: &UwGrid) -> Result<(), CoreError> {
     let mut mat = MatFile::new(dataset_root.join("uw_grid.mat"));
     mat.add_complex_f32_matrix("ph", grid.ph.rows, grid.ph.cols, grid.ph.values.clone())?;
-    mat.add_complex_f32_matrix("ph_in", grid.ph_in.rows, grid.ph_in.cols, grid.ph_in.values.clone())?;
+    mat.add_complex_f32_matrix(
+        "ph_in",
+        grid.ph_in.rows,
+        grid.ph_in.cols,
+        grid.ph_in.values.clone(),
+    )?;
     mat.add_complex_f32_matrix("ph_lowpass", 0, 0, Vec::new())?;
     mat.add_complex_f32_matrix("ph_uw_predef", 0, 0, Vec::new())?;
     mat.add_complex_f32_matrix("ph_in_predef", 0, 0, Vec::new())?;
     mat.add_f64_matrix("xy", grid.xy.rows, grid.xy.cols, grid.xy.values.clone())?;
     mat.add_f64_matrix("ij", grid.ij.rows, grid.ij.cols, grid.ij.values.clone())?;
-    mat.add_u8_matrix("nzix", grid.nzix.rows, grid.nzix.cols, grid.nzix.values.clone())?;
+    mat.add_u8_matrix(
+        "nzix",
+        grid.nzix.rows,
+        grid.nzix.cols,
+        grid.nzix.values.clone(),
+    )?;
     mat.add_f32_scalar("grid_x_min", grid.grid_x_min)?;
     mat.add_f32_scalar("grid_y_min", grid.grid_y_min)?;
     mat.add_f32_scalar("n_i", grid.n_i as f32)?;
     mat.add_f32_scalar("n_j", grid.n_j as f32)?;
     mat.add_f64_scalar("n_ifg", grid.ph.cols as f64)?;
     mat.add_f64_scalar("n_ps", grid.n_ps as f64)?;
-    mat.add_f64_matrix("grid_ij", grid.grid_ij.rows, grid.grid_ij.cols, grid.grid_ij.values.clone())?;
+    mat.add_f64_matrix(
+        "grid_ij",
+        grid.grid_ij.rows,
+        grid.grid_ij.cols,
+        grid.grid_ij.values.clone(),
+    )?;
     mat.add_f64_scalar("pix_size", grid.pix_size)?;
     mat.write()?;
     Ok(())
@@ -588,10 +777,25 @@ fn write_uw_grid(dataset_root: &Path, grid: &UwGrid) -> Result<(), CoreError> {
 
 fn write_uw_interp(dataset_root: &Path, interp: &UwInterp) -> Result<(), CoreError> {
     let mut mat = MatFile::new(dataset_root.join("uw_interp.mat"));
-    mat.add_f64_matrix("edgs", interp.edgs.rows, interp.edgs.cols, interp.edgs.values.clone())?;
+    mat.add_f64_matrix(
+        "edgs",
+        interp.edgs.rows,
+        interp.edgs.cols,
+        interp.edgs.values.clone(),
+    )?;
     mat.add_f64_scalar("n_edge", interp.n_edge as f64)?;
-    mat.add_f64_matrix("rowix", interp.rowix.rows, interp.rowix.cols, interp.rowix.values.clone())?;
-    mat.add_f64_matrix("colix", interp.colix.rows, interp.colix.cols, interp.colix.values.clone())?;
+    mat.add_f64_matrix(
+        "rowix",
+        interp.rowix.rows,
+        interp.rowix.cols,
+        interp.rowix.values.clone(),
+    )?;
+    mat.add_f64_matrix(
+        "colix",
+        interp.colix.rows,
+        interp.colix.cols,
+        interp.colix.values.clone(),
+    )?;
     mat.add_f64_matrix("Z", interp.z.rows, interp.z.cols, interp.z.values.clone())?;
     mat.write()?;
     Ok(())
@@ -604,26 +808,36 @@ fn read_uw_grid(dataset_root: &Path, n_ps: usize) -> Result<UwGrid, CoreError> {
         return stage6_err("uw_grid.mat missing valid n_ps");
     }
     let ph = complex_ps_matrix(&mat, "ph", n_grid, "uw_grid.ph")?;
-    let ph_in = complex_ps_matrix(&mat, "ph_in", n_ps, "uw_grid.ph_in").unwrap_or(ComplexMatrixF32 {
-        name: "ph_in".to_string(),
-        rows: n_ps,
-        cols: ph.cols,
-        values: vec![(0.0, 0.0); n_ps * ph.cols],
-    });
-    let nzix_source = mat.get_f32_matrix("nzix").or_else(|_| mat.get_f64_matrix("nzix").map(|m| Matrix {
-        name: m.name,
-        rows: m.rows,
-        cols: m.cols,
-        values: m.values.iter().map(|&value| value as f32).collect(),
-    })).map_err(|err| CoreError::NativeStage {
-        stage: 6,
-        message: format!("uw_grid.nzix is invalid: {err}"),
-    })?;
+    let ph_in =
+        complex_ps_matrix(&mat, "ph_in", n_ps, "uw_grid.ph_in").unwrap_or(ComplexMatrixF32 {
+            name: "ph_in".to_string(),
+            rows: n_ps,
+            cols: ph.cols,
+            values: vec![(0.0, 0.0); n_ps * ph.cols],
+        });
+    let nzix_source = mat
+        .get_f32_matrix("nzix")
+        .or_else(|_| {
+            mat.get_f64_matrix("nzix").map(|m| Matrix {
+                name: m.name,
+                rows: m.rows,
+                cols: m.cols,
+                values: m.values.iter().map(|&value| value as f32).collect(),
+            })
+        })
+        .map_err(|err| CoreError::NativeStage {
+            stage: 6,
+            message: format!("uw_grid.nzix is invalid: {err}"),
+        })?;
     let nzix = Matrix {
         name: "nzix".to_string(),
         rows: nzix_source.rows,
         cols: nzix_source.cols,
-        values: nzix_source.values.iter().map(|&value| u8::from(value != 0.0)).collect(),
+        values: nzix_source
+            .values
+            .iter()
+            .map(|&value| u8::from(value != 0.0))
+            .collect(),
     };
     let grid_ij = ps_dim_f64(&mat, "grid_ij", n_ps, 2, "uw_grid.grid_ij")?;
     let xy = mat.get_f64_matrix("xy").unwrap_or(Matrix {
@@ -668,10 +882,12 @@ fn read_uw_grid(dataset_root: &Path, n_ps: usize) -> Result<UwGrid, CoreError> {
 
 fn read_uw_interp(dataset_root: &Path, n_i: usize, n_j: usize) -> Result<UwInterp, CoreError> {
     let mat = read_mat_stage6(dataset_root, "uw_interp.mat")?;
-    let edgs = mat.get_f64_matrix("edgs").map_err(|err| CoreError::NativeStage {
-        stage: 6,
-        message: format!("uw_interp.edgs is invalid: {err}"),
-    })?;
+    let edgs = mat
+        .get_f64_matrix("edgs")
+        .map_err(|err| CoreError::NativeStage {
+            stage: 6,
+            message: format!("uw_interp.edgs is invalid: {err}"),
+        })?;
     let rowix = mat.get_f64_matrix("rowix").unwrap_or(Matrix {
         name: "rowix".to_string(),
         rows: n_i.saturating_sub(1),
@@ -806,12 +1022,22 @@ fn grid_points(uw_grid: &UwGrid) -> Result<Vec<(f64, f64)>, CoreError> {
     Ok(points)
 }
 
+#[cfg(test)]
 fn nearest_point(points: &[(f64, f64)], target: (f64, f64)) -> usize {
     points
         .iter()
         .enumerate()
-        .map(|(ix, &point)| (ix, (point.0 - target.0).powi(2) + (point.1 - target.1).powi(2)))
-        .min_by(|left, right| left.1.total_cmp(&right.1).then_with(|| left.0.cmp(&right.0)))
+        .map(|(ix, &point)| {
+            (
+                ix,
+                (point.0 - target.0).powi(2) + (point.1 - target.1).powi(2),
+            )
+        })
+        .min_by(|left, right| {
+            left.1
+                .total_cmp(&right.1)
+                .then_with(|| left.0.cmp(&right.0))
+        })
         .map(|(ix, _)| ix)
         .unwrap_or(0)
 }
@@ -855,7 +1081,10 @@ fn validate_connected_graph(uw_interp: &UwInterp, n_nodes: usize) -> Result<(), 
 
 fn graph_adjacency(edgs: &Matrix<f64>, n_nodes: usize) -> Result<Vec<Vec<usize>>, CoreError> {
     if edgs.cols < 3 && edgs.rows > 0 {
-        return stage6_err(format!("uw_interp.edgs must have at least 3 columns, got {}", edgs.cols));
+        return stage6_err(format!(
+            "uw_interp.edgs must have at least 3 columns, got {}",
+            edgs.cols
+        ));
     }
     let mut adjacency = vec![Vec::new(); n_nodes];
     for row in 0..edgs.rows {
@@ -896,7 +1125,8 @@ fn load_stage6_parms(dataset_root: &Path) -> Stage6Parms {
 }
 
 fn read_mat_stage6(dataset_root: &Path, filename: &str) -> Result<MatData, CoreError> {
-    MatData::read(dataset_root.join(filename)).map_err(|err| stage6_err_owned(format!("unable to read {filename}: {err}")))
+    MatData::read(dataset_root.join(filename))
+        .map_err(|err| stage6_err_owned(format!("unable to read {filename}: {err}")))
 }
 
 fn scalar_from_mat(mat: &MatData, name: &str, default: f64) -> f64 {
@@ -929,30 +1159,53 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
     }
 }
 
-fn ps_vector_f64(mat: &MatData, name: &str, len: usize, label: &str) -> Result<Vec<f64>, CoreError> {
+fn ps_vector_f64(
+    mat: &MatData,
+    name: &str,
+    len: usize,
+    label: &str,
+) -> Result<Vec<f64>, CoreError> {
     let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
         stage: 6,
         message: format!("{label} is missing"),
     })?;
     if values.len() != len {
-        return stage6_err(format!("{label} has incompatible length {} for expected length {len}", values.len()));
+        return stage6_err(format!(
+            "{label} has incompatible length {} for expected length {len}",
+            values.len()
+        ));
     }
     Ok(values)
 }
 
-fn ps_matrix_f32(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
-    let source = mat.get_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 6,
-        message: format!("{label} is invalid: {err}"),
-    })?;
+fn ps_matrix_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
+    let source = mat
+        .get_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 6,
+            message: format!("{label} is invalid: {err}"),
+        })?;
     orient_matrix_f32(source, n_ps, label)
 }
 
-fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str) -> Result<Matrix<f64>, CoreError> {
-    let source = mat.get_f64_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 6,
-        message: format!("{label} is invalid: {err}"),
-    })?;
+fn ps_dim_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
+    let source = mat
+        .get_f64_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 6,
+            message: format!("{label} is invalid: {err}"),
+        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -965,11 +1218,18 @@ fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str)
     ))
 }
 
-fn complex_ps_matrix(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<ComplexMatrixF32, CoreError> {
-    let source = mat.get_complex_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 6,
-        message: format!("{label} is invalid: {err}"),
-    })?;
+fn complex_ps_matrix(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<ComplexMatrixF32, CoreError> {
+    let source = mat
+        .get_complex_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 6,
+            message: format!("{label} is invalid: {err}"),
+        })?;
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -982,7 +1242,11 @@ fn complex_ps_matrix(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Res
     ))
 }
 
-fn orient_matrix_f32(source: Matrix<f32>, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
+fn orient_matrix_f32(
+    source: Matrix<f32>,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -1097,14 +1361,80 @@ mod tests {
     }
 
     #[test]
+    fn nearest_grid_labels_match_bruteforce_nearest_point() {
+        let uw_grid = UwGrid {
+            ph: Matrix {
+                name: "ph".to_string(),
+                rows: 4,
+                cols: 1,
+                values: vec![(1.0, 0.0); 4],
+            },
+            ph_in: Matrix {
+                name: "ph_in".to_string(),
+                rows: 4,
+                cols: 1,
+                values: vec![(1.0, 0.0); 4],
+            },
+            nzix: Matrix {
+                name: "nzix".to_string(),
+                rows: 4,
+                cols: 5,
+                values: vec![1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+            },
+            grid_ij: Matrix {
+                name: "grid_ij".to_string(),
+                rows: 4,
+                cols: 2,
+                values: Vec::new(),
+            },
+            n_i: 4,
+            n_j: 5,
+            n_ps: 4,
+            xy: Matrix {
+                name: "xy".to_string(),
+                rows: 4,
+                cols: 3,
+                values: Vec::new(),
+            },
+            ij: Matrix {
+                name: "ij".to_string(),
+                rows: 4,
+                cols: 2,
+                values: Vec::new(),
+            },
+            grid_x_min: 0.0,
+            grid_y_min: 0.0,
+            pix_size: 20.0,
+        };
+
+        let points = grid_points(&uw_grid).unwrap();
+        let observed = nearest_grid_labels(&uw_grid).unwrap();
+        let expected = (0..uw_grid.n_i)
+            .flat_map(|row| {
+                let points = &points;
+                (0..uw_grid.n_j)
+                    .map(move |col| nearest_point(points, ((col + 1) as f64, (row + 1) as f64)) + 1)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(observed, expected);
+    }
+
+    #[test]
     fn stage6_disconnected_unwrap_graph_returns_structured_error() {
         let root = temp_dataset("pystamps-stage6-disconnected");
         write_stage6_inputs(&root, 2);
         let mut uw_grid = MatFile::new(root.join("uw_grid.mat"));
-        uw_grid.add_complex_f32_matrix("ph", 2, 2, vec![(1.0, 0.0); 4]).unwrap();
-        uw_grid.add_complex_f32_matrix("ph_in", 2, 2, vec![(1.0, 0.0); 4]).unwrap();
+        uw_grid
+            .add_complex_f32_matrix("ph", 2, 2, vec![(1.0, 0.0); 4])
+            .unwrap();
+        uw_grid
+            .add_complex_f32_matrix("ph_in", 2, 2, vec![(1.0, 0.0); 4])
+            .unwrap();
         uw_grid.add_u8_matrix("nzix", 1, 2, vec![1, 1]).unwrap();
-        uw_grid.add_f64_matrix("grid_ij", 2, 2, vec![1.0, 1.0, 1.0, 2.0]).unwrap();
+        uw_grid
+            .add_f64_matrix("grid_ij", 2, 2, vec![1.0, 1.0, 1.0, 2.0])
+            .unwrap();
         uw_grid.add_f64_scalar("n_ps", 2.0).unwrap();
         uw_grid.write().unwrap();
 
@@ -1133,10 +1463,7 @@ mod tests {
         let master_ix = 2usize;
         let xy = if n_ps == 4 {
             vec![
-                1.0, 0.0, 0.0,
-                2.0, 41.0, 0.0,
-                3.0, 0.0, 41.0,
-                4.0, 41.0, 41.0,
+                1.0, 0.0, 0.0, 2.0, 41.0, 0.0, 3.0, 0.0, 41.0, 4.0, 41.0, 41.0,
             ]
         } else {
             vec![1.0, 0.0, 0.0, 2.0, 41.0, 0.0]
@@ -1146,44 +1473,66 @@ mod tests {
         ps2.add_f64_scalar("n_ifg", n_ifg as f64).unwrap();
         ps2.add_f64_scalar("n_image", n_ifg as f64).unwrap();
         ps2.add_f64_scalar("master_ix", master_ix as f64).unwrap();
-        ps2.add_f64_col_vector("day", vec![10.0, 20.0, 30.0]).unwrap();
-        ps2.add_f32_col_vector("bperp", vec![10.0, 0.0, 20.0]).unwrap();
+        ps2.add_f64_col_vector("day", vec![10.0, 20.0, 30.0])
+            .unwrap();
+        ps2.add_f32_col_vector("bperp", vec![10.0, 0.0, 20.0])
+            .unwrap();
         ps2.add_f64_matrix("xy", n_ps, 3, xy).unwrap();
         ps2.add_f64_scalar("mean_range", 830000.0).unwrap();
-        ps2.add_f64_scalar("mean_incidence", 23.0_f64.to_radians()).unwrap();
+        ps2.add_f64_scalar("mean_incidence", 23.0_f64.to_radians())
+            .unwrap();
         ps2.write().unwrap();
 
         let mut phases = Vec::with_capacity(n_ps * n_ifg);
         for row in 0..n_ps {
             let base = row as f32 * 0.4;
             for col in 0..n_ifg {
-                let phase = if col == 1 { 0.0 } else { base + col as f32 * 0.5 };
+                let phase = if col == 1 {
+                    0.0
+                } else {
+                    base + col as f32 * 0.5
+                };
                 phases.push((phase.cos(), phase.sin()));
             }
         }
         let mut ph2 = MatFile::new(root.join("ph2.mat"));
-        ph2.add_complex_f32_matrix("ph", n_ps, n_ifg, phases.clone()).unwrap();
+        ph2.add_complex_f32_matrix("ph", n_ps, n_ifg, phases.clone())
+            .unwrap();
         ph2.write().unwrap();
 
         let mut pm2 = MatFile::new(root.join("pm2.mat"));
         pm2.add_f64_col_vector("K_ps", vec![0.0; n_ps]).unwrap();
         pm2.add_f64_col_vector("C_ps", vec![0.0; n_ps]).unwrap();
         pm2.add_f64_col_vector("coh_ps", vec![1.0; n_ps]).unwrap();
-        pm2.add_complex_f32_matrix("ph_patch", n_ps, n_ifg - 1, vec![(1.0, 0.0); n_ps * (n_ifg - 1)]).unwrap();
-        pm2.add_f32_matrix("ph_res", n_ps, n_ifg - 1, vec![0.0; n_ps * (n_ifg - 1)]).unwrap();
+        pm2.add_complex_f32_matrix(
+            "ph_patch",
+            n_ps,
+            n_ifg - 1,
+            vec![(1.0, 0.0); n_ps * (n_ifg - 1)],
+        )
+        .unwrap();
+        pm2.add_f32_matrix("ph_res", n_ps, n_ifg - 1, vec![0.0; n_ps * (n_ifg - 1)])
+            .unwrap();
         pm2.write().unwrap();
 
         let mut bp2 = MatFile::new(root.join("bp2.mat"));
-        bp2.add_f32_matrix("bperp_mat", n_ps, n_ifg - 1, vec![0.0; n_ps * (n_ifg - 1)]).unwrap();
+        bp2.add_f32_matrix("bperp_mat", n_ps, n_ifg - 1, vec![0.0; n_ps * (n_ifg - 1)])
+            .unwrap();
         bp2.write().unwrap();
 
         let mut ifgstd2 = MatFile::new(root.join("ifgstd2.mat"));
-        ifgstd2.add_f64_col_vector("ifg_std", vec![1.0; n_ifg]).unwrap();
+        ifgstd2
+            .add_f64_col_vector("ifg_std", vec![1.0; n_ifg])
+            .unwrap();
         ifgstd2.write().unwrap();
 
         let mut parms = MatFile::new(root.join("parms.mat"));
-        parms.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32]).unwrap();
-        parms.add_u32_matrix("unwrap_patch_phase", 1, 1, vec!['n' as u32]).unwrap();
+        parms
+            .add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32])
+            .unwrap();
+        parms
+            .add_u32_matrix("unwrap_patch_phase", 1, 1, vec!['n' as u32])
+            .unwrap();
         parms.add_f64_scalar("unwrap_grid_size", 20.0).unwrap();
         parms.write().unwrap();
     }

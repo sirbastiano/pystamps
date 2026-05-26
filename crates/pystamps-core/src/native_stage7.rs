@@ -41,7 +41,9 @@ pub fn run_stage7_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
     let dataset_root = dataset_root.as_ref();
     let ps2 = read_mat_stage7(dataset_root, "ps2.mat")?;
     if !dataset_root.join("phuw2.mat").exists() {
-        return stage7_err("Missing required artifact: phuw2.mat (stage-6 unwrap output) before stage 7");
+        return stage7_err(
+            "Missing required artifact: phuw2.mat (stage-6 unwrap output) before stage 7",
+        );
     }
     let phuw = read_mat_stage7(dataset_root, "phuw2.mat")?;
     let ifgstd = read_mat_stage7(dataset_root, "ifgstd2.mat")?;
@@ -58,12 +60,15 @@ pub fn run_stage7_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
     }
     let master_ix = scalar_from_mat(&ps2, "master_ix", 1.0).round() as usize;
     if master_ix == 0 || master_ix > n_ifg {
-        return stage7_err(format!("ps2.master_ix must be 1-based within phuw2.ph_uw columns; got {master_ix}"));
+        return stage7_err(format!(
+            "ps2.master_ix must be 1-based within phuw2.ph_uw columns; got {master_ix}"
+        ));
     }
     let day = ps_vector_f64(&ps2, "day", n_ifg, "ps2.day")?;
     let ifg_std = ps_vector_f64(&ifgstd, "ifg_std", n_ifg, "ifgstd2.ifg_std")?;
     let small_baseline = parms.small_baseline_flag.eq_ignore_ascii_case("y");
-    let bperp_mat = load_or_rebuild_bperp(dataset_root, &ps2, n_ps, n_ifg, master_ix, small_baseline)?;
+    let bperp_mat =
+        load_or_rebuild_bperp(dataset_root, &ps2, n_ps, n_ifg, master_ix, small_baseline)?;
 
     let ph_raw = Matrix {
         name: "ph_raw".to_string(),
@@ -105,12 +110,18 @@ pub fn run_stage7_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
             .filter(|ix| !drop_set.contains(&(*ix as i64)))
             .map(|ix| ix - 1)
             .collect();
-        let solve: Vec<usize> = unwrap.iter().copied().filter(|ix| *ix != master_ix - 1).collect();
+        let solve: Vec<usize> = unwrap
+            .iter()
+            .copied()
+            .filter(|ix| *ix != master_ix - 1)
+            .collect();
         (unwrap, solve)
     };
     if solve_ifg.len() < 2 {
         if small_baseline {
-            return stage7_err("stage7 native SCLA requires at least two interferograms after drops");
+            return stage7_err(
+                "stage7 native SCLA requires at least two interferograms after drops",
+            );
         }
         return stage7_err("stage7 native SCLA requires at least two non-master interferograms");
     }
@@ -156,7 +167,8 @@ fn stage7_scla_kernel(
         let right = unwrap_ix[seq + 1];
         day_seq[seq] = day[right] - day[left];
         for row in 0..n_ps {
-            ph_seq[row * seq_count + seq] = ph_proc.values[row * n_ifg + right] - ph_proc.values[row * n_ifg + left];
+            ph_seq[row * seq_count + seq] =
+                ph_proc.values[row * n_ifg + right] - ph_proc.values[row * n_ifg + left];
             bperp_seq[row * seq_count + seq] =
                 bperp_mat.values[row * n_ifg + right] - bperp_mat.values[row * n_ifg + left];
         }
@@ -187,7 +199,8 @@ fn stage7_scla_kernel(
     let mut ph_scla = vec![0.0f32; n_ps * n_ifg];
     for row in 0..n_ps {
         for col in 0..n_ifg {
-            ph_scla[row * n_ifg + col] = (k_ps_uw[row] * bperp_mat.values[row * n_ifg + col]) as f32;
+            ph_scla[row * n_ifg + col] =
+                (k_ps_uw[row] * bperp_mat.values[row * n_ifg + col]) as f32;
         }
     }
 
@@ -245,9 +258,16 @@ fn stage7_scla_kernel(
     })
 }
 
-fn write_stage7_outputs(dataset_root: &Path, output: &Stage7KernelOutput, bperp_mat: &Matrix<f64>) -> Result<(), CoreError> {
+fn write_stage7_outputs(
+    dataset_root: &Path,
+    output: &Stage7KernelOutput,
+    bperp_mat: &Matrix<f64>,
+) -> Result<(), CoreError> {
     let mut scla2 = MatFile::new(dataset_root.join("scla2.mat"));
-    scla2.add_f32_col_vector("K_ps_uw", output.k_ps_uw.iter().map(|&value| value as f32).collect())?;
+    scla2.add_f32_col_vector(
+        "K_ps_uw",
+        output.k_ps_uw.iter().map(|&value| value as f32).collect(),
+    )?;
     scla2.add_f32_col_vector("C_ps_uw", output.c_ps_uw.clone())?;
     scla2.add_f32_matrix(
         "ph_scla",
@@ -269,16 +289,19 @@ fn write_stage7_outputs(dataset_root: &Path, output: &Stage7KernelOutput, bperp_
     )?;
     scla2.write()?;
 
-    let edges = complete_edges(output.k_ps_uw.len());
-    let (k_smooth, c_smooth) = smooth_scla_neighbor_envelope(&output.k_ps_uw, &output.c_ps_uw, &edges);
+    let (k_smooth, c_smooth) = smooth_scla_complete_envelope(&output.k_ps_uw, &output.c_ps_uw);
     let mut ph_scla_smooth = vec![0.0f32; bperp_mat.rows * bperp_mat.cols];
     for row in 0..bperp_mat.rows {
         for col in 0..bperp_mat.cols {
-            ph_scla_smooth[row * bperp_mat.cols + col] = (k_smooth[row] * bperp_mat.values[row * bperp_mat.cols + col]) as f32;
+            ph_scla_smooth[row * bperp_mat.cols + col] =
+                (k_smooth[row] * bperp_mat.values[row * bperp_mat.cols + col]) as f32;
         }
     }
     let mut scla_smooth2 = MatFile::new(dataset_root.join("scla_smooth2.mat"));
-    scla_smooth2.add_f32_col_vector("K_ps_uw", k_smooth.iter().map(|&value| value as f32).collect())?;
+    scla_smooth2.add_f32_col_vector(
+        "K_ps_uw",
+        k_smooth.iter().map(|&value| value as f32).collect(),
+    )?;
     scla_smooth2.add_f32_col_vector("C_ps_uw", c_smooth)?;
     scla_smooth2.add_f32_matrix("ph_scla", bperp_mat.rows, bperp_mat.cols, ph_scla_smooth)?;
     scla_smooth2.add_f64_matrix(
@@ -306,7 +329,11 @@ fn load_or_rebuild_bperp(
             name: "bperp_mat".to_string(),
             rows: matrix.rows,
             cols: matrix.cols,
-            values: matrix.values.into_iter().map(|value| value as f64).collect(),
+            values: matrix
+                .values
+                .into_iter()
+                .map(|value| value as f64)
+                .collect(),
         })?
     } else {
         let bperp = ps_vector_f64(ps2, "bperp", n_ifg, "ps2.bperp")?;
@@ -325,7 +352,12 @@ fn load_or_rebuild_bperp(
             tiled.extend_from_slice(&source);
         }
         let mut mat = MatFile::new(&bp2_path);
-        mat.add_f32_matrix("bperp_mat", n_ps, source_cols, tiled.iter().map(|&value| value as f32).collect())?;
+        mat.add_f32_matrix(
+            "bperp_mat",
+            n_ps,
+            source_cols,
+            tiled.iter().map(|&value| value as f32).collect(),
+        )?;
         mat.write()?;
         Matrix {
             name: "bperp_mat".to_string(),
@@ -336,7 +368,10 @@ fn load_or_rebuild_bperp(
     };
     if small_baseline {
         if bp_nm.cols != n_ifg {
-            return stage7_err(format!("bp2.bperp_mat has {} columns for small-baseline n_ifg={n_ifg}", bp_nm.cols));
+            return stage7_err(format!(
+                "bp2.bperp_mat has {} columns for small-baseline n_ifg={n_ifg}",
+                bp_nm.cols
+            ));
         }
         return Ok(bp_nm);
     }
@@ -344,7 +379,10 @@ fn load_or_rebuild_bperp(
         return Ok(bp_nm);
     }
     if bp_nm.cols != n_ifg - 1 {
-        return stage7_err(format!("bp2.bperp_mat has {} columns for single-master n_ifg={n_ifg}", bp_nm.cols));
+        return stage7_err(format!(
+            "bp2.bperp_mat has {} columns for single-master n_ifg={n_ifg}",
+            bp_nm.cols
+        ));
     }
     let mut full = Vec::with_capacity(n_ps * n_ifg);
     for row in 0..n_ps {
@@ -361,7 +399,10 @@ fn load_or_rebuild_bperp(
     })
 }
 
-fn deramp_unwrapped_phase(ps2: &MatData, ph_all: &Matrix<f64>) -> Result<(Matrix<f64>, Matrix<f64>), CoreError> {
+fn deramp_unwrapped_phase(
+    ps2: &MatData,
+    ph_all: &Matrix<f64>,
+) -> Result<(Matrix<f64>, Matrix<f64>), CoreError> {
     let xy = ps_dim_f64(ps2, "xy", ph_all.rows, 3, "ps2.xy")?;
     let mut design = vec![0.0; ph_all.rows * 3];
     for row in 0..ph_all.rows {
@@ -405,7 +446,11 @@ fn center_to_reference(ph: &Matrix<f64>, ref_ix: &[usize]) -> Matrix<f64> {
     }
     let mut centered = ph.values.clone();
     for col in 0..ph.cols {
-        let mean = ref_ix.iter().map(|&row| ph.values[row * ph.cols + col]).sum::<f64>() / ref_ix.len() as f64;
+        let mean = ref_ix
+            .iter()
+            .map(|&row| ph.values[row * ph.cols + col])
+            .sum::<f64>()
+            / ref_ix.len() as f64;
         for row in 0..ph.rows {
             centered[row * ph.cols + col] -= mean;
         }
@@ -418,7 +463,11 @@ fn center_to_reference(ph: &Matrix<f64>, ref_ix: &[usize]) -> Matrix<f64> {
     }
 }
 
-fn select_reference_ps(ps2: &MatData, parms: &Stage7Parms, n_ps: usize) -> Result<Vec<usize>, CoreError> {
+fn select_reference_ps(
+    ps2: &MatData,
+    parms: &Stage7Parms,
+    n_ps: usize,
+) -> Result<Vec<usize>, CoreError> {
     let lonlat = ps_dim_f64(ps2, "lonlat", n_ps, 2, "ps2.lonlat")?;
     if parms.ref_radius == f64::NEG_INFINITY {
         return Ok(Vec::new());
@@ -529,59 +578,57 @@ fn solve_linear(mut a: Vec<f64>, mut b: Vec<f64>, n: usize) -> Result<Vec<f64>, 
     Ok(x)
 }
 
-fn smooth_scla_neighbor_envelope(k_ps_uw: &[f64], c_ps_uw: &[f32], edges: &[(usize, usize)]) -> (Vec<f64>, Vec<f32>) {
-    if edges.is_empty() {
+fn smooth_scla_complete_envelope(k_ps_uw: &[f64], c_ps_uw: &[f32]) -> (Vec<f64>, Vec<f32>) {
+    if k_ps_uw.len() <= 1 {
         return (k_ps_uw.to_vec(), c_ps_uw.to_vec());
     }
-    let n_ps = k_ps_uw.len();
-    let mut k_min = vec![f64::INFINITY; n_ps];
-    let mut k_max = vec![f64::NEG_INFINITY; n_ps];
-    let mut c_min = vec![f64::INFINITY; n_ps];
-    let mut c_max = vec![f64::NEG_INFINITY; n_ps];
-    for &(a, b) in edges {
-        if a >= n_ps || b >= n_ps || a == b {
-            continue;
-        }
-        k_min[a] = k_min[a].min(k_ps_uw[b]);
-        k_min[b] = k_min[b].min(k_ps_uw[a]);
-        k_max[a] = k_max[a].max(k_ps_uw[b]);
-        k_max[b] = k_max[b].max(k_ps_uw[a]);
-        c_min[a] = c_min[a].min(c_ps_uw[b] as f64);
-        c_min[b] = c_min[b].min(c_ps_uw[a] as f64);
-        c_max[a] = c_max[a].max(c_ps_uw[b] as f64);
-        c_max[b] = c_max[b].max(c_ps_uw[a] as f64);
-    }
-    let mut k_out = k_ps_uw.to_vec();
-    let mut c_out: Vec<f64> = c_ps_uw.iter().map(|&value| value as f64).collect();
-    for ix in 0..n_ps {
-        if k_max[ix].is_finite() && k_out[ix] > k_max[ix] {
-            k_out[ix] = k_max[ix];
-        }
-        if k_min[ix].is_finite() && k_out[ix] < k_min[ix] {
-            k_out[ix] = k_min[ix];
-        }
-        if c_max[ix].is_finite() && c_out[ix] > c_max[ix] {
-            c_out[ix] = c_max[ix];
-        }
-        if c_min[ix].is_finite() && c_out[ix] < c_min[ix] {
-            c_out[ix] = c_min[ix];
-        }
-    }
-    (k_out, c_out.into_iter().map(|value| value as f32).collect())
+
+    let c_values: Vec<f64> = c_ps_uw.iter().map(|&value| value as f64).collect();
+    let k_out = clamp_to_peer_envelope(k_ps_uw);
+    let c_out = clamp_to_peer_envelope(&c_values)
+        .into_iter()
+        .map(|value| value as f32)
+        .collect();
+    (k_out, c_out)
 }
 
-fn complete_edges(n_ps: usize) -> Vec<(usize, usize)> {
-    let mut edges = Vec::new();
-    for a in 0..n_ps {
-        for b in a + 1..n_ps {
-            edges.push((a, b));
+fn clamp_to_peer_envelope(values: &[f64]) -> Vec<f64> {
+    let n = values.len();
+    if n <= 1 {
+        return values.to_vec();
+    }
+
+    let mut prefix_min = vec![f64::INFINITY; n + 1];
+    let mut prefix_max = vec![f64::NEG_INFINITY; n + 1];
+    for ix in 0..n {
+        prefix_min[ix + 1] = prefix_min[ix].min(values[ix]);
+        prefix_max[ix + 1] = prefix_max[ix].max(values[ix]);
+    }
+
+    let mut suffix_min = vec![f64::INFINITY; n + 1];
+    let mut suffix_max = vec![f64::NEG_INFINITY; n + 1];
+    for ix in (0..n).rev() {
+        suffix_min[ix] = suffix_min[ix + 1].min(values[ix]);
+        suffix_max[ix] = suffix_max[ix + 1].max(values[ix]);
+    }
+
+    let mut out = values.to_vec();
+    for ix in 0..n {
+        let lower = prefix_min[ix].min(suffix_min[ix + 1]);
+        let upper = prefix_max[ix].max(suffix_max[ix + 1]);
+        if out[ix] > upper {
+            out[ix] = upper;
+        }
+        if out[ix] < lower {
+            out[ix] = lower;
         }
     }
-    edges
+    out
 }
 
 fn read_mat_stage7(dataset_root: &Path, filename: &str) -> Result<MatData, CoreError> {
-    MatData::read(dataset_root.join(filename)).map_err(|err| stage7_err_owned(format!("unable to read {filename}: {err}")))
+    MatData::read(dataset_root.join(filename))
+        .map_err(|err| stage7_err_owned(format!("unable to read {filename}: {err}")))
 }
 
 fn load_stage7_parms(dataset_root: &Path) -> Stage7Parms {
@@ -605,8 +652,10 @@ fn load_stage7_parms(dataset_root: &Path) -> Stage7Parms {
             .into_iter()
             .filter_map(|value| (value > 0.0).then_some(value.round() as i64))
             .collect(),
-        ref_lon: optional_vector_f64(&mat, "ref_lon").unwrap_or_else(|| vec![f64::NEG_INFINITY, f64::INFINITY]),
-        ref_lat: optional_vector_f64(&mat, "ref_lat").unwrap_or_else(|| vec![f64::NEG_INFINITY, f64::INFINITY]),
+        ref_lon: optional_vector_f64(&mat, "ref_lon")
+            .unwrap_or_else(|| vec![f64::NEG_INFINITY, f64::INFINITY]),
+        ref_lat: optional_vector_f64(&mat, "ref_lat")
+            .unwrap_or_else(|| vec![f64::NEG_INFINITY, f64::INFINITY]),
         ref_radius: scalar_from_mat(&mat, "ref_radius", f64::INFINITY),
     }
 }
@@ -641,30 +690,53 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
     }
 }
 
-fn ps_vector_f64(mat: &MatData, name: &str, len: usize, label: &str) -> Result<Vec<f64>, CoreError> {
+fn ps_vector_f64(
+    mat: &MatData,
+    name: &str,
+    len: usize,
+    label: &str,
+) -> Result<Vec<f64>, CoreError> {
     let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
         stage: 7,
         message: format!("{label} is missing"),
     })?;
     if values.len() != len {
-        return stage7_err(format!("{label} has incompatible length {} for expected length {len}", values.len()));
+        return stage7_err(format!(
+            "{label} has incompatible length {} for expected length {len}",
+            values.len()
+        ));
     }
     Ok(values)
 }
 
-fn ps_matrix_f32(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
-    let source = mat.get_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 7,
-        message: format!("{label} is invalid: {err}"),
-    })?;
+fn ps_matrix_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
+    let source = mat
+        .get_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 7,
+            message: format!("{label} is invalid: {err}"),
+        })?;
     orient_matrix_f32(source, n_ps, label)
 }
 
-fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str) -> Result<Matrix<f64>, CoreError> {
-    let source = mat.get_f64_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 7,
-        message: format!("{label} is invalid: {err}"),
-    })?;
+fn ps_dim_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
+    let source = mat
+        .get_f64_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 7,
+            message: format!("{label} is invalid: {err}"),
+        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -677,7 +749,11 @@ fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str)
     ))
 }
 
-fn orient_matrix_f32(source: Matrix<f32>, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
+fn orient_matrix_f32(
+    source: Matrix<f32>,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -752,8 +828,14 @@ mod tests {
         let rust_elapsed = rust_start.elapsed();
 
         let specs = vec![
-            ArtifactComparisonSpec::new("scla2.mat", ["K_ps_uw", "C_ps_uw", "ph_scla", "ph_ramp", "ifg_vcm"]),
-            ArtifactComparisonSpec::new("scla_smooth2.mat", ["K_ps_uw", "C_ps_uw", "ph_scla", "ph_ramp"]),
+            ArtifactComparisonSpec::new(
+                "scla2.mat",
+                ["K_ps_uw", "C_ps_uw", "ph_scla", "ph_ramp", "ifg_vcm"],
+            ),
+            ArtifactComparisonSpec::new(
+                "scla_smooth2.mat",
+                ["K_ps_uw", "C_ps_uw", "ph_scla", "ph_ramp"],
+            ),
         ];
         let summary = compare_fixture_artifacts(
             7,
@@ -796,14 +878,37 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn complete_scla_envelope_clamps_only_unique_extrema() {
+        let k = vec![10.0, 1.0, 4.0, 4.0];
+        let c = vec![0.0, 5.0, 3.0, 3.0];
+        let (k_smooth, c_smooth) = smooth_scla_complete_envelope(&k, &c);
+        assert_eq!(k_smooth, vec![4.0, 4.0, 4.0, 4.0]);
+        assert_eq!(c_smooth, vec![3.0, 3.0, 3.0, 3.0]);
+
+        let duplicate_extrema = vec![1.0, 1.0, 10.0];
+        let (k_smooth, _) = smooth_scla_complete_envelope(&duplicate_extrema, &[0.0, 0.0, 0.0]);
+        assert_eq!(k_smooth, vec![1.0, 1.0, 1.0]);
+    }
+
     fn create_stage7_fixture(root: &Path) {
         fs::create_dir_all(root).unwrap();
         let mut parms = MatFile::new(root.join("parms.mat"));
-        parms.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32]).unwrap();
-        parms.add_u32_matrix("scla_deramp", 1, 1, vec!['n' as u32]).unwrap();
-        parms.add_f64_matrix("drop_ifg_index", 0, 0, Vec::new()).unwrap();
-        parms.add_f64_matrix("scla_drop_index", 0, 0, Vec::new()).unwrap();
-        parms.add_f64_scalar("ref_radius", f64::NEG_INFINITY).unwrap();
+        parms
+            .add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32])
+            .unwrap();
+        parms
+            .add_u32_matrix("scla_deramp", 1, 1, vec!['n' as u32])
+            .unwrap();
+        parms
+            .add_f64_matrix("drop_ifg_index", 0, 0, Vec::new())
+            .unwrap();
+        parms
+            .add_f64_matrix("scla_drop_index", 0, 0, Vec::new())
+            .unwrap();
+        parms
+            .add_f64_scalar("ref_radius", f64::NEG_INFINITY)
+            .unwrap();
         parms.write().unwrap();
 
         let mut ps2 = MatFile::new(root.join("ps2.mat"));
@@ -812,12 +917,24 @@ mod tests {
         ps2.add_f64_scalar("n_image", 4.0).unwrap();
         ps2.add_f64_scalar("master_ix", 2.0).unwrap();
         ps2.add_f64_scalar("master_day", 20.0).unwrap();
-        ps2.add_f64_row_vector("day", vec![10.0, 20.0, 30.0, 40.0]).unwrap();
-        ps2.add_f64_row_vector("bperp", vec![-3.0, 0.0, 7.0, 14.0]).unwrap();
-        ps2.add_f64_matrix("lonlat", 3, 2, vec![-118.0, 34.0, -117.9, 34.1, -117.8, 34.2])
+        ps2.add_f64_row_vector("day", vec![10.0, 20.0, 30.0, 40.0])
             .unwrap();
-        ps2.add_f32_matrix("xy", 3, 3, vec![1.0, 0.0, 0.0, 2.0, 100.0, 0.0, 3.0, 0.0, 100.0])
+        ps2.add_f64_row_vector("bperp", vec![-3.0, 0.0, 7.0, 14.0])
             .unwrap();
+        ps2.add_f64_matrix(
+            "lonlat",
+            3,
+            2,
+            vec![-118.0, 34.0, -117.9, 34.1, -117.8, 34.2],
+        )
+        .unwrap();
+        ps2.add_f32_matrix(
+            "xy",
+            3,
+            3,
+            vec![1.0, 0.0, 0.0, 2.0, 100.0, 0.0, 3.0, 0.0, 100.0],
+        )
+        .unwrap();
         ps2.write().unwrap();
 
         let mut bp2 = MatFile::new(root.join("bp2.mat"));
@@ -847,11 +964,15 @@ mod tests {
                 ],
             )
             .unwrap();
-        phuw2.add_f32_col_vector("msd", vec![0.0, 0.0, 0.0, 0.0]).unwrap();
+        phuw2
+            .add_f32_col_vector("msd", vec![0.0, 0.0, 0.0, 0.0])
+            .unwrap();
         phuw2.write().unwrap();
 
         let mut ifgstd = MatFile::new(root.join("ifgstd2.mat"));
-        ifgstd.add_f64_col_vector("ifg_std", vec![1.0, 1.5, 2.0, 2.5]).unwrap();
+        ifgstd
+            .add_f64_col_vector("ifg_std", vec![1.0, 1.5, 2.0, 2.5])
+            .unwrap();
         ifgstd.write().unwrap();
     }
 

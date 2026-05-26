@@ -3,6 +3,13 @@ AUDIT_DATASETS = inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_out
 AUDIT_OUTPUT = inputs_and_outputs/validation_runs/latest_audit.json
 VERIFY_RUN = inputs_and_outputs/RUN_FULL_GATE_1e10
 VERIFY_GOLDEN = inputs_and_outputs/InSAR_dataset_test
+DATASET ?= inputs_and_outputs/InSAR_dataset_test
+RUN ?= inputs_and_outputs/validation_runs/native-full-chain
+GOLDEN ?= inputs_and_outputs/InSAR_dataset_test
+THREADS ?= 0
+START_STEP ?= 1
+END_STEP ?= 8
+NATIVE_BIN ?= target/release/pystamps-native
 BENCHMARK_DATASET = inputs_and_outputs/InSAR_dataset_test_stage8diag
 PYPI_PROJECT ?= pystamps-insar
 VERSION ?=
@@ -15,7 +22,7 @@ UV_INSTALL_URL ?= https://astral.sh/uv/install.sh
 RUSTUP_INSTALL_URL ?= https://sh.rustup.rs
 APT_NATIVE_DEPS ?= build-essential curl pkg-config python3 python3-dev
 
-.PHONY: deps deps-python deps-rust deps-ubuntu deps-check setup test test-impl build clean-dist require-version next-patch bump release-build repair-wheel release-check publish release release-patch audit verify benchmark parity-loop web
+.PHONY: deps deps-python deps-rust deps-ubuntu deps-check setup test test-impl build clean-dist require-version next-patch bump release-build repair-wheel release-check publish release release-patch audit verify benchmark parity-loop web native-release-bin native-full-chain-run native-full-chain-verify
 
 deps: deps-rust deps-python
 
@@ -125,6 +132,28 @@ audit:
 
 verify:
 	$(PARITY_ENV) uv run pystamps verify --run $(VERIFY_RUN) --golden $(VERIFY_GOLDEN)
+
+native-release-bin:
+	cargo build --release -p pystamps-core --bin pystamps-native
+
+native-full-chain-run: native-release-bin
+	$(PARITY_ENV) uv run python scripts/native_full_chain_gate.py run \
+		--dataset "$(DATASET)" \
+		--run "$(RUN)" \
+		--native-bin "$(NATIVE_BIN)" \
+		--threads "$(THREADS)" \
+		--start-step "$(START_STEP)" \
+		--end-step "$(END_STEP)"
+
+native-full-chain-verify: native-release-bin
+	$(PARITY_ENV) uv run python scripts/native_full_chain_gate.py verify \
+		--dataset "$(DATASET)" \
+		--run "$(RUN)" \
+		--golden "$(GOLDEN)" \
+		--native-bin "$(NATIVE_BIN)" \
+		--threads "$(THREADS)" \
+		--start-step "$(START_STEP)" \
+		--end-step "$(END_STEP)"
 
 benchmark:
 	uv run python scripts/benchmark_backends.py \

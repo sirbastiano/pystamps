@@ -9,7 +9,7 @@ import numpy as np
 from scipy import sparse
 
 from pystamps.config import ToleranceConfig
-from pystamps.io.dataset import discover_dataset
+from pystamps.io.dataset import PATCH_PREFIX, discover_dataset
 from pystamps.io.mat import read_mat
 
 DEFAULT_GLOBS: tuple[str, ...] = (
@@ -278,15 +278,57 @@ def _compare_mat(run_mat: Path, golden_mat: Path, tol: ToleranceConfig) -> tuple
     return True, f"Matched {len(golden_keys)} numeric keys", {"matched_keys": len(golden_keys)}
 
 
+def _patch_sort_key(name: str) -> tuple[int, str]:
+    suffix = name.replace(PATCH_PREFIX, "", 1)
+    try:
+        return (int(suffix), name)
+    except ValueError:
+        return (10**9, name)
+
+
+def _read_patch_manifest(path: Path) -> list[str]:
+    if not path.exists():
+        return []
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+
+
+def _patch_dir_names(root: Path) -> list[str]:
+    if not root.is_dir():
+        return []
+    return sorted(
+        [path.name for path in root.iterdir() if path.is_dir() and path.name.startswith(PATCH_PREFIX)],
+        key=_patch_sort_key,
+    )
+
+
+def _verification_patch_names(root: Path) -> list[str]:
+    patch_list_old = _read_patch_manifest(root / "patch.list_old")
+    if patch_list_old:
+        return patch_list_old
+
+    patch_list = _read_patch_manifest(root / "patch.list")
+    patch_dirs = _patch_dir_names(root)
+    if patch_list and len(patch_dirs) > len(patch_list) and set(patch_list).issubset(patch_dirs):
+        return patch_dirs
+    if patch_list:
+        return patch_list
+    return [patch.name for patch in discover_dataset(root).patches]
+
+
 def _iter_pattern_files(root: Path, pattern: str) -> list[Path]:
     if not pattern.startswith("PATCH_*/"):
         return sorted(root.glob(pattern))
 
-    layout = discover_dataset(root)
     subpattern = pattern.split("/", 1)[1]
     files: list[Path] = []
-    for patch in layout.patches:
-        files.extend(sorted(patch.glob(subpattern)))
+    for patch_name in _verification_patch_names(root):
+        patch = root / patch_name
+        if patch.is_dir():
+            files.extend(sorted(patch.glob(subpattern)))
     return files
 
 
@@ -435,6 +477,32 @@ def verify_run_against_golden(
     golden_path = Path(golden_root).resolve()
 
     report = VerificationReport()
+
+    expected_patches = _verification_patch_names(golden_path)
+    if expected_patches:
+        run_patches = _verification_patch_names(run_path)
+        if run_patches != expected_patches:
+            report.comparisons.append(
+                FileComparison(
+                    relative_path="patch.list",
+                    ok=False,
+                    message=(
+                        "Patch manifest mismatch: "
+                        f"run has {run_patches}, golden expects {expected_patches}"
+                    ),
+                    failure_kind="patch_manifest_mismatch",
+                )
+            )
+        for patch_name in expected_patches:
+            if not (run_path / patch_name).is_dir():
+                report.comparisons.append(
+                    FileComparison(
+                        relative_path=patch_name,
+                        ok=False,
+                        message="Missing run patch directory",
+                        failure_kind="missing_run_patch",
+                    )
+                )
 
     golden_files: list[Path] = []
     for pattern in patterns:

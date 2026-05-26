@@ -134,3 +134,8 @@
 [2026-05-25 10:30:48] US-015 verification complete: cargo test --workspace PASS; uv run pytest -q tests/test_kernels_accelerated.py PASS
 [2026-05-25 10:31:46] ITERATION 5 end (duration=255s)
 [2026-05-25 10:32:36] US-015 manually reconciled after Ralph context-limit failure; docs commit c5babf6 verified and progress entry appended
+[2026-05-26 14:28:48] ITERATION 1 start (mode=build story=US-001)
+[2026-05-26 14:31:16] Read guardrails, errors, PRD, AGENTS, and started US-001 discovery
+[2026-05-26 14:38:21] Implemented native full-chain gate script, Make targets, and patch manifest verifier hardening for US-001
+[2026-05-26 15:09:59] US-001 verification: cargo test PASS, release build PASS, accelerated pytest PASS, native-full-chain-verify ran full chain and failed on verifier ok=false as designed
+[2026-05-26 15:11:51] US-001 post-hardening focused tests and git diff check passed
