@@ -552,3 +552,44 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: `pystamps-native run` exits successfully even when parity later fails, so the Make verify wrapper must treat native execution and verifier `ok` as separate statuses.
   - Useful context: `make native-full-chain-verify THREADS=8` produced a full native run in 546.84 seconds, then correctly returned nonzero because parity remains false on Stage 1/2/3/4 and downstream artifacts.
 ---
+## [2026-05-26 16:16:46 UTC] - US-002: Define artifact tolerance manifest
+Thread: 
+Run: 20260526-142844-454144 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 5a94f26 feat(parity): add tolerance manifest
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `python -m json.tool pystamps/data/artifact_tolerances.json >/tmp/artifact_tolerances.validated.json` -> PASS
+  - Command: `uv run pytest -q tests/test_verify.py tests/test_cli.py` -> PASS
+  - Command: `uv run pytest -q tests/test_verify.py tests/test_cli.py tests/test_native_full_chain_gate.py tests/test_validate_audit.py` -> PASS
+  - Command: `uv run python -m py_compile pystamps/verify.py pystamps/tolerance_manifest.py pystamps/cli.py scripts/narrow_compare.py` -> PASS
+  - Command: `uv run python - <<'PY' ... verify_run_against_golden(... patterns=('ph2.mat','uw_space_time.mat')) ... PY` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_verify.py tests/test_cli.py tests/test_native_full_chain_gate.py tests/test_validate_audit.py tests/test_parity_contract.py` -> PASS
+  - Command: `make native-full-chain-verify` -> FAIL (native run completed with status ok; verifier `ok: false`, checked=47, failed=47, numeric failures missing rule ID=0)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - pystamps/cli.py
+  - pystamps/data/artifact_tolerances.json
+  - pystamps/tolerance_manifest.py
+  - pystamps/verify.py
+  - scripts/narrow_compare.py
+  - tests/test_verify.py
+- What was implemented
+  - Added a packaged tolerance manifest for core stage 1-8 artifacts, including required keys, exact shape policy, dtype labels, comparison modes, and explicit f32/f64/phase/sparse tolerances.
+  - Wired manifest-backed MAT comparisons into the verifier while preserving the existing tolerance fallback for ad hoc unmanifested comparison patterns.
+  - Added verifier failure metadata for `tolerance_rule_id`, `comparison_mode`, shape, max_abs, and max_rel in CLI and narrow-compare output.
+  - Added tests for manifest coverage, `ph2.mat/ph` phase modulo f32 behavior, missing `uw_space_time.mat` required keys, and sparse structural parity.
+  - Completed security/performance/regression review: no secrets or external trust paths added; manifest loading is cached; comparison work remains bounded to selected artifacts and keeps fallback behavior intact.
+- **Learnings for future iterations:**
+  - Patterns discovered: `verify_run_against_golden` is the shared comparison surface used by CLI, narrow comparison, audit, and the full-chain gate, so manifest metadata belongs there rather than in a stage runner.
+  - Gotchas encountered: a progress entry cannot truthfully include its own final commit hash without a follow-up progress commit; use the implementation commit in the entry and then commit the progress/log update.
+  - Useful context: final `make native-full-chain-verify` confirms the native run completes, but current parity remains false; the new verifier output includes rule IDs for all failed numeric comparisons.
+---

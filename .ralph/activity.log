@@ -149,3 +149,4 @@
 [2026-05-26 15:58:36] US-002 verification: native-full-chain-verify completed native run but parity failed with manifest-backed failures
 [2026-05-26 16:14:04] US-002 final native-full-chain-verify rerun: native run ok, parity failed with 47 manifest-backed failures
 [2026-05-26 16:15:23] US-002 review: security/performance/regression audit completed before commit
+[2026-05-26 16:17:24] US-002: appended progress entry with commit and verification details
