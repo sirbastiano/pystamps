@@ -514,3 +514,41 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: Ralph exhausted its own context after committing the story, so the progress entry had to be appended manually from the clean docs commit and activity log.
   - Useful context: `GET /api/native-coverage` and `pystamps-native coverage --start-step 1 --end-step 8` share the same core coverage matrix.
 ---
+## [2026-05-26 15:14:07 UTC] - US-001: Create repeatable full-chain parity gate
+Thread: 
+Run: 20260526-142844-454144 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: bcc0701 feat(validation): add native full-chain gate
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `uv run pytest -q tests/test_native_full_chain_gate.py tests/test_verify.py` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `make native-full-chain-verify THREADS=8` -> FAIL (native run completed; verifier `ok: false` on current stage parity gaps)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - Cargo.lock
+  - Makefile
+  - crates/pystamps-core/Cargo.toml
+  - crates/pystamps-core/src/native_stage5.rs
+  - crates/pystamps-core/src/native_stage6.rs
+  - crates/pystamps-core/src/native_stage7.rs
+  - pystamps/verify.py
+  - scripts/native_full_chain_gate.py
+  - tests/test_native_full_chain_gate.py
+  - tests/test_verify.py
+- What was implemented
+  - Added `native-full-chain-run` and `native-full-chain-verify` Make targets with `DATASET`, `RUN`, `THREADS`, `START_STEP`, and `END_STEP` overrides.
+  - Added `scripts/native_full_chain_gate.py` to create a clean validation copy, restore `patch.list` from the authoritative four-patch manifest, remove generated artifacts for the selected stage range, run `target/release/pystamps-native`, and write run/timing/verify JSON reports under the run copy.
+  - Hardened verification patch enumeration so `patch.list_old` or extra `PATCH_*` directories prevent subset-only parity checks; added focused regression coverage for the negative patch-list case.
+  - Included pre-existing native Stage 5-7 worktree changes in the commit because the run instructions required staging all changes and leaving a clean tree.
+- **Learnings for future iterations:**
+  - Patterns discovered: the current validation golden has `patch.list` narrowed to `PATCH_1`, while `patch.list_old` is the four-patch manifest needed for full-chain validation.
+  - Gotchas encountered: `pystamps-native run` exits successfully even when parity later fails, so the Make verify wrapper must treat native execution and verifier `ok` as separate statuses.
+  - Useful context: `make native-full-chain-verify THREADS=8` produced a full native run in 546.84 seconds, then correctly returned nonzero because parity remains false on Stage 1/2/3/4 and downstream artifacts.
+---
