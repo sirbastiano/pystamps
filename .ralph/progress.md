@@ -670,3 +670,45 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: Rust MAT reading helpers do not cover the compressed golden `ps1.mat` files used by validation, so focused golden tests should use `pystamps.io.mat.read_mat` through `uv run python`.
   - Useful context: keep validation fixtures under workspace `target/` and hard-link large phase files where possible; `/tmp` can force copies and exhaust space.
 ---
+## [2026-05-26 21:45:51 UTC] - US-005: Make Stage 2 fast and strict-parity deterministic
+Thread:
+Run: 20260526-142844-454144 (iteration 5)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-5.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-5.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 9446740 fix(stage2): restore parity input primitives
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage2 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `make native-full-chain-verify THREADS=8 START_STEP=1 END_STEP=2 RUN=inputs_and_outputs/validation_runs/us005-stage1-2-after7` -> FAIL (native execution and budget passed; parity failed PATCH_1 `C_ps`, PATCH_2 `Nr`, PATCH_3 `Nr`)
+  - Command: `make native-full-chain-verify` -> FAIL (native execution and budget passed; verifier checked 47 artifacts and failed 38 after Stage 2 drift propagated downstream)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-core/src/native_stage1.rs
+  - crates/pystamps-core/src/native_stage2.rs
+  - crates/pystamps-core/src/native_stage3.rs
+  - crates/pystamps-core/src/native_stage4.rs
+  - crates/pystamps-core/src/native_stage8.rs
+  - crates/pystamps-core/tests/native_cli.rs
+  - crates/pystamps-mat/src/lib.rs
+  - crates/pystamps-parity/src/lib.rs
+  - crates/pystamps-web/src/main.rs
+  - src/lib.rs
+- What was implemented
+  - Restored Stage 2 native inputs that were missing from strict parity: deterministic MATLAB v5 random coherence histograms, P-square weighting, HDF5 `parms.mat` scalar/text fallback, baseline precision alignment, and 3D `ph_grid` MAT output.
+  - Added opt-in `PYSTAMPS_STAGE2_NATIVE_DEBUG_PM` iteration snapshots so Stage 2 convergence drift can be compared against golden `pm1_iter_##.mat` artifacts.
+  - Added MAT v5 complex 3D array writing support needed for `pm1.mat/ph_grid` shape parity.
+  - Completed security/performance/regression review: no secrets or external command trust paths added; HDF5 fallback reads local files through temporary files and removes them; debug snapshots are environment-gated; hot loops avoid additional full-matrix clones; local Rust/Python gates still pass.
+  - Story remains incomplete: focused and full native parity gates still fail. The current reduced blocker is Stage 2 PATCH_1 `C_ps` drift plus PATCH_2/PATCH_3 `Nr` one-bin/count drift, which propagates into later stage candidate selection.
+- **Learnings for future iterations:**
+  - Patterns discovered: Stage 2 final parity is highly sensitive to tiny early CLAP/topofit drift because P-square weighting amplifies it into later candidate-row changes.
+  - Gotchas encountered: a near-max candidate-selector alignment and a `complex64` psdph multiplication experiment both regressed or failed to improve parity, so they were reverted before committing.
+  - Useful context: use `PYSTAMPS_STAGE2_NATIVE_DEBUG_PM=1` on PATCH_1 and compare against `stage2_manifest_probe_final/PATCH_1/pm1_iter_*.mat`; the known divergence appears by iteration 7 after small iteration-1 differences.
+---

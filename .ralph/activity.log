@@ -182,3 +182,5 @@
 [2026-05-26 21:21:21] US-005: matched Stage 2 psdph multiplication to complex64 live path
 [2026-05-26 21:33:23] US-005: reverted selector and psdph precision experiments after focused parity regressions
 [2026-05-26 21:44:22] US-005: final verification passed local tests but native full-chain parity failed from Stage 2 drift
+[2026-05-26 21:46:32] US-005: updated progress log with incomplete native parity outcome
+[2026-05-26 21:49:14] US-005: corrected progress log entry order
