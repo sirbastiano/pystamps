@@ -1,11 +1,16 @@
 use crate::CoreError;
 use pystamps_mat::{ComplexMatrixF32, MatData, MatFile, Matrix};
 use std::collections::BTreeSet;
+use std::fs;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_COH_START: f64 = 0.005;
 const DEFAULT_COH_STEP: f64 = 0.01;
 const DEFAULT_COH_COUNT: usize = 100;
+const HDF5_SIGNATURE: &[u8; 8] = b"\x89HDF\r\n\x1a\n";
+const HDF5_SIGNATURE_SCAN_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug)]
 struct Stage3Parms {
@@ -32,44 +37,30 @@ impl Default for Stage3Parms {
 
 pub fn run_stage3_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreError> {
     let patch_dir = patch_dir.as_ref();
-    let pm = MatData::read(patch_dir.join("pm1.mat"))
-        .map_err(|err| stage3_err_owned(format!("unable to read pm1.mat: {err}")))?;
-    let ps = MatData::read(patch_dir.join("ps1.mat"))
-        .map_err(|err| stage3_err_owned(format!("unable to read ps1.mat: {err}")))?;
+    let pm = Stage3MatSource::read(patch_dir.join("pm1.mat"));
+    let ps = Stage3MatSource::read(patch_dir.join("ps1.mat"));
     let parms = load_stage3_parms(patch_dir);
 
-    let n_ps = scalar_from_mat(&ps, "n_ps", 0.0)? as usize;
+    let n_ps = ps.scalar("n_ps", 0.0).round() as usize;
     if n_ps == 0 {
         return stage3_err("ps1.mat missing valid n_ps");
     }
 
-    let coh_ps = ps_vector_f64(&pm, "coh_ps", n_ps, "pm1.coh_ps")?;
-    let mut coh_bins = optional_vector_f64(&pm, "coh_bins").unwrap_or_default();
+    let coh_ps = pm.ps_vector_f64("coh_ps", n_ps, "pm1.coh_ps")?;
+    let mut coh_bins = pm.vector_f64("coh_bins").unwrap_or_default();
     if coh_bins.is_empty() {
         coh_bins = (0..DEFAULT_COH_COUNT)
             .map(|ix| DEFAULT_COH_START + DEFAULT_COH_STEP * ix as f64)
             .collect();
     }
-    let mut nr_dist = optional_vector_f64(&pm, "Nr").unwrap_or_default();
+    let mut nr_dist = pm.vector_f64("Nr").unwrap_or_default();
     if nr_dist.is_empty() {
         nr_dist = vec![1.0; coh_bins.len()];
     }
 
     let mut d_a = load_da(patch_dir, n_ps)?;
     let d_a_max = if d_a.len() >= 10_000 {
-        let mut sorted = d_a.clone();
-        sorted.sort_by(|left, right| left.total_cmp(right));
-        let bin_size = if d_a.len() >= 50_000 { 10_000 } else { 2_000 };
-        let mut edges = Vec::new();
-        edges.push(0.0);
-        let end = d_a.len().saturating_sub(bin_size);
-        let mut ix = bin_size;
-        while ix < end {
-            edges.push(sorted[ix]);
-            ix += bin_size;
-        }
-        edges.push(*sorted.last().unwrap_or(&1.0));
-        edges
+        da_bin_edges(&d_a)
     } else {
         d_a = vec![1.0; n_ps];
         vec![0.0, 1.0]
@@ -90,7 +81,7 @@ pub fn run_stage3_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
     let max_percent_rand = if method == "PERCENT" {
         parms.percent_rand
     } else {
-        let xy = ps_dim_f64(&ps, "xy", n_ps, 3, "ps1.xy")?;
+        let xy = ps.ps_dim_f64("xy", n_ps, 3, "ps1.xy")?;
         let patch_area = patch_area_square_km(&xy);
         parms.density_rand * patch_area / (d_a_max.len().saturating_sub(1).max(1) as f64)
     };
@@ -106,17 +97,12 @@ pub fn run_stage3_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         &method,
     );
 
-    let mut ix0: Vec<usize> = coh_ps
-        .iter()
-        .zip(coh_thresh_all.iter())
-        .enumerate()
-        .filter_map(|(ix, (&coh, &threshold))| (coh > threshold).then_some(ix))
-        .collect();
+    let mut ix0 = selected_indices_from_thresholds(&coh_ps, &coh_thresh_all);
 
-    let ph_patch = ps_complex_matrix(&pm, "ph_patch", n_ps, "pm1.ph_patch")?;
-    let ph_res = ps_matrix_f32(&pm, "ph_res", n_ps, "pm1.ph_res")?;
-    let k_ps = ps_vector_f64(&pm, "K_ps", n_ps, "pm1.K_ps")?;
-    let c_ps = ps_vector_f64(&pm, "C_ps", n_ps, "pm1.C_ps")?;
+    let ph_patch = pm.ps_complex_matrix("ph_patch", n_ps, "pm1.ph_patch")?;
+    let ph_res = pm.ps_matrix_f32("ph_res", n_ps, "pm1.ph_res")?;
+    let k_ps = pm.ps_vector_f64("K_ps", n_ps, "pm1.K_ps")?;
+    let c_ps = pm.ps_vector_f64("C_ps", n_ps, "pm1.C_ps")?;
 
     if parms.gamma_stdev_reject > 0.0 && !ix0.is_empty() {
         let ifg_index_ix: Vec<usize> = ifg_index_for_selection(&ps, &parms)?
@@ -167,35 +153,162 @@ fn load_stage3_parms(patch_dir: &Path) -> Stage3Parms {
     let Some(path) = resolve_file_optional(patch_dir, "parms.mat") else {
         return Stage3Parms::default();
     };
-    let Ok(mat) = MatData::read(path) else {
-        return Stage3Parms::default();
-    };
+    let source = Stage3MatSource::read(path);
     Stage3Parms {
-        select_method: text_from_mat(&mat, "select_method", "PERCENT"),
-        percent_rand: scalar_from_mat_default(&mat, "percent_rand", 1.0),
-        density_rand: scalar_from_mat_default(&mat, "density_rand", 1.0),
-        small_baseline_flag: text_from_mat(&mat, "small_baseline_flag", "n"),
-        drop_ifg_index: optional_vector_f64(&mat, "drop_ifg_index")
+        select_method: source.text("select_method", "PERCENT"),
+        percent_rand: source.scalar("percent_rand", 1.0),
+        density_rand: source.scalar("density_rand", 1.0),
+        small_baseline_flag: source.text("small_baseline_flag", "n"),
+        drop_ifg_index: source
+            .vector_f64("drop_ifg_index")
             .unwrap_or_default()
             .into_iter()
             .filter(|value| value.is_finite())
             .map(|value| value.round() as i64)
             .collect(),
-        gamma_stdev_reject: scalar_from_mat_default(&mat, "gamma_stdev_reject", 0.0),
+        gamma_stdev_reject: source.scalar("gamma_stdev_reject", 0.0),
+    }
+}
+
+#[derive(Debug)]
+struct Stage3MatSource {
+    path: PathBuf,
+    mat: Option<MatData>,
+}
+
+impl Stage3MatSource {
+    fn read(path: impl AsRef<Path>) -> Self {
+        let path = path.as_ref().to_path_buf();
+        let mat = MatData::read(&path).ok();
+        Self { path, mat }
+    }
+
+    fn scalar(&self, name: &str, default: f64) -> f64 {
+        self.vector_f64(name)
+            .and_then(|values| values.into_iter().next())
+            .unwrap_or(default)
+    }
+
+    fn text(&self, name: &str, default: &str) -> String {
+        let value = self
+            .mat
+            .as_ref()
+            .and_then(|mat| text_from_mat_opt(mat, name))
+            .or_else(|| read_hdf5_text(&self.path, name).ok());
+        match value {
+            Some(text) if !text.is_empty() => text,
+            _ => default.to_string(),
+        }
+    }
+
+    fn vector_f64(&self, name: &str) -> Option<Vec<f64>> {
+        self.mat
+            .as_ref()
+            .and_then(|mat| optional_vector_f64(mat, name))
+            .or_else(|| {
+                read_hdf5_matrix_f64(&self.path, name)
+                    .ok()
+                    .map(|matrix| matrix.values)
+            })
+    }
+
+    fn ps_vector_f64(&self, name: &str, n_ps: usize, label: &str) -> Result<Vec<f64>, CoreError> {
+        let values = self
+            .vector_f64(name)
+            .ok_or_else(|| CoreError::NativeStage {
+                stage: 3,
+                message: format!("{label} is missing"),
+            })?;
+        if values.len() != n_ps {
+            return stage3_err(format!(
+                "{label} has incompatible length {} for n_ps={n_ps}",
+                values.len()
+            ));
+        }
+        Ok(values)
+    }
+
+    fn ps_matrix_f32(
+        &self,
+        name: &str,
+        n_ps: usize,
+        label: &str,
+    ) -> Result<Matrix<f32>, CoreError> {
+        if let Some(mat) = &self.mat {
+            if let Ok(matrix) = ps_matrix_f32(mat, name, n_ps, label) {
+                return Ok(matrix);
+            }
+        }
+        if let Ok(matrix) = read_hdf5_matrix_f32(&self.path, name) {
+            return orient_matrix_f32(matrix, n_ps, label);
+        }
+        stage3_err(format!("{label} is missing or invalid"))
+    }
+
+    fn ps_complex_matrix(
+        &self,
+        name: &str,
+        n_ps: usize,
+        label: &str,
+    ) -> Result<ComplexMatrixF32, CoreError> {
+        if let Some(mat) = &self.mat {
+            if let Ok(matrix) = ps_complex_matrix(mat, name, n_ps, label) {
+                return Ok(matrix);
+            }
+        }
+        if let Ok(matrix) = read_hdf5_complex_matrix_f32(&self.path, name) {
+            return orient_complex_matrix_f32(matrix, n_ps, label);
+        }
+        stage3_err(format!("{label} is missing or invalid"))
+    }
+
+    fn ps_dim_f64(
+        &self,
+        name: &str,
+        n_ps: usize,
+        n_dim: usize,
+        label: &str,
+    ) -> Result<Matrix<f64>, CoreError> {
+        if let Some(mat) = &self.mat {
+            if let Ok(matrix) = ps_dim_f64_from_matrix(mat, name, n_ps, n_dim) {
+                return Ok(matrix);
+            }
+        }
+        if let Ok(matrix) = read_hdf5_matrix_f64(&self.path, name) {
+            return orient_ps_dim_f64(matrix, name, n_ps, n_dim, label);
+        }
+        stage3_err(format!(
+            "{label} is missing or has incompatible shape; expected {n_ps}x{n_dim}"
+        ))
     }
 }
 
 fn load_da(patch_dir: &Path, n_ps: usize) -> Result<Vec<f64>, CoreError> {
     if patch_dir.join("da1.mat").exists() {
-        let da = MatData::read(patch_dir.join("da1.mat"))
-            .map_err(|err| stage3_err_owned(format!("unable to read da1.mat: {err}")))?;
-        optional_vector_f64(&da, "D_A").ok_or_else(|| CoreError::NativeStage {
+        let da = Stage3MatSource::read(patch_dir.join("da1.mat"));
+        da.vector_f64("D_A").ok_or_else(|| CoreError::NativeStage {
             stage: 3,
             message: "da1.mat missing D_A".to_string(),
         })
     } else {
         Ok(vec![1.0; n_ps])
     }
+}
+
+fn da_bin_edges(d_a: &[f64]) -> Vec<f64> {
+    let mut sorted = d_a.to_vec();
+    sorted.sort_by(|left, right| left.total_cmp(right));
+    let bin_size = if d_a.len() >= 50_000 { 10_000 } else { 2_000 };
+    let mut edges = Vec::new();
+    edges.push(0.0);
+    let last_interior = d_a.len().saturating_sub(bin_size);
+    let mut one_based_ix = bin_size;
+    while one_based_ix <= last_interior {
+        edges.push(sorted[one_based_ix - 1]);
+        one_based_ix += bin_size;
+    }
+    edges.push(*sorted.last().unwrap_or(&1.0));
+    edges
 }
 
 fn coh_threshold_from_dist(
@@ -325,6 +438,15 @@ fn coh_threshold_from_dist(
         }
     }
     (threshold, coeffs)
+}
+
+fn selected_indices_from_thresholds(coh_ps: &[f64], coh_thresh_all: &[f64]) -> Vec<usize> {
+    coh_ps
+        .iter()
+        .zip(coh_thresh_all.iter())
+        .enumerate()
+        .filter_map(|(ix, (&coh, &threshold))| (coh > threshold).then_some(ix))
+        .collect()
 }
 
 fn hist_with_centers(values: &[f64], centers: &[f64]) -> Vec<f64> {
@@ -495,12 +617,15 @@ fn write_select_artifact(
     Ok(())
 }
 
-fn ifg_index_for_selection(ps: &MatData, parms: &Stage3Parms) -> Result<Vec<f64>, CoreError> {
-    let n_ifg = scalar_from_mat_default(ps, "n_ifg", 0.0).round() as i64;
+fn ifg_index_for_selection(
+    ps: &Stage3MatSource,
+    parms: &Stage3Parms,
+) -> Result<Vec<f64>, CoreError> {
+    let n_ifg = ps.scalar("n_ifg", 0.0).round() as i64;
     let drop: BTreeSet<i64> = parms.drop_ifg_index.iter().copied().collect();
     let mut ifg: Vec<i64> = (1..=n_ifg).filter(|value| !drop.contains(value)).collect();
     if !parms.small_baseline_flag.eq_ignore_ascii_case("y") {
-        let master_ix = scalar_from_mat_default(ps, "master_ix", 1.0).round() as i64;
+        let master_ix = ps.scalar("master_ix", 1.0).round() as i64;
         ifg.retain(|&value| value != master_ix);
         for value in &mut ifg {
             if *value > master_ix {
@@ -535,37 +660,8 @@ fn patch_area_square_km(xy: &Matrix<f64>) -> f64 {
     }
 }
 
-fn scalar_from_mat(mat: &MatData, name: &str, default: f64) -> Result<f64, CoreError> {
-    Ok(scalar_from_mat_default(mat, name, default))
-}
-
-fn scalar_from_mat_default(mat: &MatData, name: &str, default: f64) -> f64 {
-    optional_vector_f64(mat, name)
-        .and_then(|values| values.into_iter().next())
-        .unwrap_or(default)
-}
-
 fn optional_vector_f64(mat: &MatData, name: &str) -> Option<Vec<f64>> {
     mat.get_f64_matrix(name).ok().map(|matrix| matrix.values)
-}
-
-fn ps_vector_f64(
-    mat: &MatData,
-    name: &str,
-    n_ps: usize,
-    label: &str,
-) -> Result<Vec<f64>, CoreError> {
-    let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
-        stage: 3,
-        message: format!("{label} is missing"),
-    })?;
-    if values.len() != n_ps {
-        return stage3_err(format!(
-            "{label} has incompatible length {} for n_ps={n_ps}",
-            values.len()
-        ));
-    }
-    Ok(values)
 }
 
 fn ps_matrix_f32(
@@ -595,6 +691,14 @@ fn ps_complex_matrix(
             stage: 3,
             message: format!("{label} is missing or invalid: {err}"),
         })?;
+    orient_complex_matrix_f32(source, n_ps, label)
+}
+
+fn orient_complex_matrix_f32(
+    source: ComplexMatrixF32,
+    n_ps: usize,
+    label: &str,
+) -> Result<ComplexMatrixF32, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -618,19 +722,23 @@ fn ps_complex_matrix(
     ))
 }
 
-fn ps_dim_f64(
+fn ps_dim_f64_from_matrix(
     mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+) -> Result<Matrix<f64>, ()> {
+    let source = mat.get_f64_matrix(name).map_err(|_| ())?;
+    orient_ps_dim_f64(source, name, n_ps, n_dim, "").map_err(|_| ())
+}
+
+fn orient_ps_dim_f64(
+    source: Matrix<f64>,
     name: &str,
     n_ps: usize,
     n_dim: usize,
     label: &str,
 ) -> Result<Matrix<f64>, CoreError> {
-    let source = mat
-        .get_f64_matrix(name)
-        .map_err(|err| CoreError::NativeStage {
-            stage: 3,
-            message: format!("{label} is missing or invalid: {err}"),
-        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -682,9 +790,9 @@ fn orient_matrix_f32(
     ))
 }
 
-fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
+fn text_from_mat_opt(mat: &MatData, name: &str) -> Option<String> {
     let Some(values) = optional_vector_f64(mat, name) else {
-        return default.to_string();
+        return None;
     };
     let text: String = values
         .into_iter()
@@ -696,10 +804,223 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
         .trim()
         .to_string();
     if text.is_empty() {
-        default.to_string()
+        None
     } else {
-        text
+        Some(text)
     }
+}
+
+fn read_hdf5_matrix_f64(path: &Path, variable: &str) -> Result<Matrix<f64>, String> {
+    match read_hdf5_matrix_f64_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_matrix_f64_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_matrix_f64_direct(path: &Path, variable: &str) -> Result<Matrix<f64>, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset
+        .read_raw::<f64>()
+        .or_else(|_| {
+            dataset
+                .read_raw::<f32>()
+                .map(|values| values.into_iter().map(f64::from).collect())
+        })
+        .map_err(|err| err.to_string())?;
+    let shape = dataset.shape();
+    let rows = shape.first().copied().unwrap_or(1);
+    let cols = if shape.len() <= 1 {
+        1
+    } else {
+        shape[1..].iter().copied().product()
+    };
+    Ok(Matrix {
+        name: variable.to_string(),
+        rows,
+        cols,
+        values,
+    })
+}
+
+fn read_hdf5_matrix_f32(path: &Path, variable: &str) -> Result<Matrix<f32>, String> {
+    match read_hdf5_matrix_f32_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_matrix_f32_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_matrix_f32_direct(path: &Path, variable: &str) -> Result<Matrix<f32>, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset
+        .read_raw::<f32>()
+        .or_else(|_| {
+            dataset
+                .read_raw::<f64>()
+                .map(|values| values.into_iter().map(|value| value as f32).collect())
+        })
+        .map_err(|err| err.to_string())?;
+    let (rows, cols) = hdf5_matrix_shape(&dataset);
+    Ok(Matrix {
+        name: variable.to_string(),
+        rows,
+        cols,
+        values,
+    })
+}
+
+fn read_hdf5_complex_matrix_f32(path: &Path, variable: &str) -> Result<ComplexMatrixF32, String> {
+    match read_hdf5_complex_matrix_f32_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_complex_matrix_f32_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_complex_matrix_f32_direct(
+    path: &Path,
+    variable: &str,
+) -> Result<ComplexMatrixF32, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset
+        .read_raw::<rust_hdf5::Complex32>()
+        .map_err(|err| err.to_string())?
+        .into_iter()
+        .map(|value| (value.re, value.im))
+        .collect();
+    let (rows, cols) = hdf5_matrix_shape(&dataset);
+    Ok(ComplexMatrixF32 {
+        name: variable.to_string(),
+        rows,
+        cols,
+        values,
+    })
+}
+
+fn hdf5_matrix_shape(dataset: &rust_hdf5::H5Dataset) -> (usize, usize) {
+    let shape = dataset.shape();
+    let rows = shape.first().copied().unwrap_or(1);
+    let cols = if shape.len() <= 1 {
+        1
+    } else {
+        shape[1..].iter().copied().product()
+    };
+    (rows, cols)
+}
+
+fn read_hdf5_text(path: &Path, variable: &str) -> Result<String, String> {
+    match read_hdf5_text_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_text_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_text_direct(path: &Path, variable: &str) -> Result<String, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset.read_raw::<u16>().map_err(|err| err.to_string())?;
+    let text = values
+        .into_iter()
+        .filter_map(|value| char::from_u32(value as u32))
+        .filter(|&ch| ch != '\0')
+        .collect::<String>()
+        .trim()
+        .to_string();
+    if text.is_empty() {
+        Err(format!("{variable} has empty text"))
+    } else {
+        Ok(text)
+    }
+}
+
+fn read_hdf5_from_userblock<T, F>(path: &Path, offset: usize, read_direct: F) -> Result<T, String>
+where
+    F: FnOnce(&Path) -> Result<T, String>,
+{
+    let temp_path = std::env::temp_dir().join(format!(
+        "pystamps-stage3-hdf5-{}-{}.h5",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| err.to_string())?
+            .as_nanos()
+    ));
+    let mut input = fs::File::open(path).map_err(|err| err.to_string())?;
+    input
+        .seek(SeekFrom::Start(offset as u64))
+        .map_err(|err| err.to_string())?;
+    {
+        let mut output = fs::File::create(&temp_path).map_err(|err| err.to_string())?;
+        std::io::copy(&mut input, &mut output).map_err(|err| err.to_string())?;
+        output.flush().map_err(|err| err.to_string())?;
+    }
+    let result = read_direct(&temp_path);
+    let _ = fs::remove_file(&temp_path);
+    result
+}
+
+fn find_hdf5_signature_offset(path: &Path) -> Result<usize, String> {
+    let mut file = fs::File::open(path).map_err(|err| err.to_string())?;
+    let mut buffer = vec![0_u8; HDF5_SIGNATURE_SCAN_BYTES];
+    let read_len = file.read(&mut buffer).map_err(|err| err.to_string())?;
+    buffer.truncate(read_len);
+    buffer
+        .windows(HDF5_SIGNATURE.len())
+        .position(|window| window == HDF5_SIGNATURE)
+        .ok_or_else(|| "HDF5 signature not found".to_string())
 }
 
 fn resolve_file_optional(patch_dir: &Path, filename: &str) -> Option<PathBuf> {
@@ -732,6 +1053,7 @@ mod tests {
     use super::*;
     use pystamps_parity::{compare_fixture_artifacts, ArtifactComparisonSpec, ParityTolerance};
     use std::fs;
+    use std::io::Write;
     use std::process::Command;
     use std::time::Instant;
 
@@ -841,6 +1163,43 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
+    #[test]
+    fn selection_rejects_threshold_ties_and_nan_candidates() {
+        let selected = selected_indices_from_thresholds(
+            &[0.20, 0.30, f64::NAN, 0.5001],
+            &[0.20, 0.30, 0.10, 0.50],
+        );
+        assert_eq!(selected, vec![3]);
+    }
+
+    #[test]
+    fn da_bin_edges_follow_matlab_one_based_interior_indices() {
+        let edges = da_bin_edges(&(1..=50_000).map(|value| value as f64).collect::<Vec<_>>());
+        assert_eq!(
+            edges,
+            vec![0.0, 10_000.0, 20_000.0, 30_000.0, 40_000.0, 50_000.0]
+        );
+    }
+
+    #[test]
+    fn reads_hdf5_ps1_and_parms_for_density_selection() {
+        let root = temp_root("stage3-hdf5-parms");
+        let patch = root.join("PATCH_1");
+        fs::create_dir_all(&patch).unwrap();
+        write_ps1_hdf5(&patch, 8);
+        write_parms_hdf5(&patch);
+        write_pm1(&patch, 8);
+
+        run_stage3_native(&patch).unwrap();
+
+        let select = MatData::read(patch.join("select1.mat")).unwrap();
+        let max_percent_rand = select.get_f64_matrix("max_percent_rand").unwrap().values[0];
+        let small_baseline_flag = select.get_f64_matrix("small_baseline_flag").unwrap().values;
+        assert!((max_percent_rand - 1.5).abs() < f64::from(f32::EPSILON));
+        assert_eq!(small_baseline_flag, vec!['n' as u32 as f64]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     fn create_stage3_fixture(
         root: &Path,
         select_method: &str,
@@ -888,6 +1247,92 @@ mod tests {
             .unwrap();
         mat.add_f64_matrix("xy", n_ps, 3, xy).unwrap();
         mat.write().unwrap();
+    }
+
+    fn write_ps1_hdf5(patch: &Path, n_ps: usize) {
+        let raw_hdf5 = patch.join("ps1-raw.h5");
+        let h5 = rust_hdf5::H5File::create(&raw_hdf5).unwrap();
+        h5.new_dataset::<f64>()
+            .shape([1, 1])
+            .create("n_ps")
+            .unwrap()
+            .write_raw(&[n_ps as f64])
+            .unwrap();
+        h5.new_dataset::<f64>()
+            .shape([1, 1])
+            .create("n_ifg")
+            .unwrap()
+            .write_raw(&[4.0_f64])
+            .unwrap();
+        h5.new_dataset::<f64>()
+            .shape([1, 1])
+            .create("master_ix")
+            .unwrap()
+            .write_raw(&[1.0_f64])
+            .unwrap();
+        let mut xy = Vec::with_capacity(3 * n_ps);
+        for dim in 0..3 {
+            for ix in 0..n_ps {
+                let value = match dim {
+                    0 => ix as f32 + 1.0,
+                    1 => (ix % 2) as f32 * 1_000.0,
+                    _ => (ix / 2) as f32 * 1_000.0,
+                };
+                xy.push(value);
+            }
+        }
+        h5.new_dataset::<f32>()
+            .shape([3, n_ps])
+            .create("xy")
+            .unwrap()
+            .write_raw(&xy)
+            .unwrap();
+        h5.close().unwrap();
+        write_matlab_hdf5_with_userblock(&raw_hdf5, &patch.join("ps1.mat"));
+    }
+
+    fn write_parms_hdf5(patch: &Path) {
+        let raw_hdf5 = patch.join("parms-raw.h5");
+        let h5 = rust_hdf5::H5File::create(&raw_hdf5).unwrap();
+        h5.new_dataset::<u16>()
+            .shape([7, 1])
+            .create("select_method")
+            .unwrap()
+            .write_raw(&"DENSITY".chars().map(|ch| ch as u16).collect::<Vec<_>>())
+            .unwrap();
+        h5.new_dataset::<u16>()
+            .shape([1, 1])
+            .create("small_baseline_flag")
+            .unwrap()
+            .write_raw(&['n' as u16])
+            .unwrap();
+        h5.new_dataset::<f64>()
+            .shape([1, 1])
+            .create("percent_rand")
+            .unwrap()
+            .write_raw(&[1.0_f64])
+            .unwrap();
+        h5.new_dataset::<f64>()
+            .shape([1, 1])
+            .create("density_rand")
+            .unwrap()
+            .write_raw(&[0.5_f64])
+            .unwrap();
+        h5.new_dataset::<f64>()
+            .shape([1, 1])
+            .create("gamma_stdev_reject")
+            .unwrap()
+            .write_raw(&[0.0_f64])
+            .unwrap();
+        h5.close().unwrap();
+        write_matlab_hdf5_with_userblock(&raw_hdf5, &patch.join("parms.mat"));
+    }
+
+    fn write_matlab_hdf5_with_userblock(raw_hdf5: &Path, matlab_path: &Path) {
+        let mut matlab_hdf5 = fs::File::create(matlab_path).unwrap();
+        matlab_hdf5.write_all(&vec![b' '; 512]).unwrap();
+        matlab_hdf5.write_all(&fs::read(raw_hdf5).unwrap()).unwrap();
+        fs::remove_file(raw_hdf5).unwrap();
     }
 
     fn write_da(patch: &Path, n_ps: usize) {

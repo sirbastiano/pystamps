@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-26 21:50:28 | run=20260526-142844-454144 | iter=5 | mode=build | story=US-005 | duration=11605s | status=success
 - 2026-05-26 18:36:52 | run=20260526-142844-454144 | iter=4 | mode=build | story=US-004 | duration=4740s | status=success
 - 2026-05-26 17:17:48 | run=20260526-142844-454144 | iter=3 | mode=build | story=US-003 | duration=3524s | status=success
 - 2026-05-26 16:18:56 | run=20260526-142844-454144 | iter=2 | mode=build | story=US-002 | duration=3712s | status=success
@@ -184,3 +185,9 @@
 [2026-05-26 21:44:22] US-005: final verification passed local tests but native full-chain parity failed from Stage 2 drift
 [2026-05-26 21:46:32] US-005: updated progress log with incomplete native parity outcome
 [2026-05-26 21:49:14] US-005: corrected progress log entry order
+[2026-05-26 21:50:21] ITERATION 5 end (duration=11605s)
+[2026-05-26 21:50:35] ITERATION 6 start (mode=build story=US-006)
+[2026-05-26 21:53:42] US-006: start Stage 3 selection parity work; required guardrails, errors, PRD, and AGENTS context read
+[2026-05-26 22:16:34] US-006: added Stage 3 HDF5 ps1/parms fallbacks and threshold tie/NaN regression test
+[2026-05-26 23:29:50] US-006 verification: cargo workspace, release build, accelerated kernels, and diff check passed; Stage 3/full parity gates still fail on select1 C_ps2/count deltas
+[2026-05-26 23:30:05] US-006 review: security performance regression audit completed; residual blockers are Stage 3 reestimated C_ps2 parity and upstream Stage 2 drift
