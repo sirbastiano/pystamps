@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-26 18:36:52 | run=20260526-142844-454144 | iter=4 | mode=build | story=US-004 | duration=4740s | status=success
 - 2026-05-26 17:17:48 | run=20260526-142844-454144 | iter=3 | mode=build | story=US-003 | duration=3524s | status=success
 - 2026-05-26 16:18:56 | run=20260526-142844-454144 | iter=2 | mode=build | story=US-002 | duration=3712s | status=success
 - 2026-05-26 15:16:48 | run=20260526-142844-454144 | iter=1 | mode=build | story=US-001 | duration=2875s | status=success
@@ -168,3 +169,16 @@
 [2026-05-26 18:30:11] Tightened US-004 negative ij shift test before final commit
 [2026-05-26 18:33:09] Final US-004 Rust workspace gate and diff check passed before commit
 [2026-05-26 18:35:34] Updated progress log for US-004
+[2026-05-26 18:36:51] ITERATION 4 end (duration=4740s)
+[2026-05-26 18:36:55] ITERATION 5 start (mode=build story=US-005)
+[2026-05-26 18:38:32] Start US-005 Stage 2 parity determinism work
+[2026-05-26 19:17:08] US-005: restored Stage 2 random histogram, P-square weighting, ph_grid shape, and baseline precision
+[2026-05-26 19:36:52] US-005: added Stage 2 HDF5 parms fallback for validation wavelength and text parameters
+[2026-05-26 19:57:12] US-005: aligned Stage 2 random baseline with original single-trial random-row selector
+[2026-05-26 20:09:13] US-005: aligned Stage 2 PS candidate selection to original coarse-trial winner
+[2026-05-26 21:01:44] US-005: focused Stage 1-to-2 gate still fails PATCH_1 C_ps and PATCH_2/PATCH_3 Nr after histogram alignment
+[2026-05-26 21:04:39] US-005: cargo workspace and accelerated kernel tests passed; focused native Stage 1-to-2 parity remains failed
+[2026-05-26 21:09:47] US-005: aligned native Stage 2 row solver with near-max Rust kernel selector
+[2026-05-26 21:21:21] US-005: matched Stage 2 psdph multiplication to complex64 live path
+[2026-05-26 21:33:23] US-005: reverted selector and psdph precision experiments after focused parity regressions
+[2026-05-26 21:44:22] US-005: final verification passed local tests but native full-chain parity failed from Stage 2 drift

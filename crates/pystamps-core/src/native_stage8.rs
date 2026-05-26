@@ -44,7 +44,11 @@ pub fn run_stage8_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
     ensure_exists(dataset_root, "phuw2.mat", "stage-6 unwrap output")?;
     ensure_exists(dataset_root, "scla2.mat", "stage-7 SCLA output")?;
     ensure_exists(dataset_root, "uw_grid.mat", "stage-6 grid output")?;
-    ensure_exists(dataset_root, "uw_interp.mat", "stage-6 interpolation output")?;
+    ensure_exists(
+        dataset_root,
+        "uw_interp.mat",
+        "stage-6 interpolation output",
+    )?;
     let parms = load_stage8_parms(dataset_root);
     validate_supported_stage8_mode(&parms)?;
 
@@ -58,7 +62,9 @@ pub fn run_stage8_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
     }
     let master_ix = scalar_from_mat(&ps2, "master_ix", 1.0).round() as usize;
     if master_ix == 0 || master_ix > n_ifg {
-        return stage8_err(format!("ps2.master_ix must be 1-based within n_ifg={n_ifg}; got {master_ix}"));
+        return stage8_err(format!(
+            "ps2.master_ix must be 1-based within n_ifg={n_ifg}; got {master_ix}"
+        ));
     }
 
     let uw_grid = read_mat_stage8(dataset_root, "uw_grid.mat")?;
@@ -75,7 +81,10 @@ pub fn run_stage8_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
     let output = stage8_edge_noise_kernel(&uw_ph, &edges);
     write_uw_space_time(dataset_root, &output, n_ifg, master_ix, &ps2)?;
 
-    Ok(format!("Stage 8 produced mean velocity and space-time noise model for {} arcs", edges.len()))
+    Ok(format!(
+        "Stage 8 produced mean velocity and space-time noise model for {} arcs",
+        edges.len()
+    ))
 }
 
 fn validate_supported_stage8_mode(parms: &Stage8Parms) -> Result<(), CoreError> {
@@ -87,7 +96,9 @@ fn validate_supported_stage8_mode(parms: &Stage8Parms) -> Result<(), CoreError> 
         unwrap_upper.as_str()
     };
     let la_flag = parms.unwrap_la_error_flag.eq_ignore_ascii_case("y");
-    let scf_flag = parms.unwrap_spatial_cost_func_flag.eq_ignore_ascii_case("y");
+    let scf_flag = parms
+        .unwrap_spatial_cost_func_flag
+        .eq_ignore_ascii_case("y");
     if small_baseline || effective_unwrap != "3D_FULL" || !la_flag || scf_flag {
         return stage8_err(
             "Stage 8 native path currently supports only single-master unwrap_method=3D_FULL \
@@ -111,7 +122,9 @@ fn stage8_mean_velocity_payload(
     let ph_uw = ps_matrix_f32(&phuw, "ph_uw", n_ps, "phuw2.ph_uw")?;
     let ph_scla = ps_matrix_f32(&scla, "ph_scla", n_ps, "scla2.ph_scla")?;
     if ph_uw.cols != n_ifg || ph_scla.cols != n_ifg {
-        return stage8_err("phuw2.ph_uw and scla2.ph_scla must match ps2.n_ifg for stage-8 mean velocity export");
+        return stage8_err(
+            "phuw2.ph_uw and scla2.ph_scla must match ps2.n_ifg for stage-8 mean velocity export",
+        );
     }
 
     let residual = Matrix {
@@ -134,7 +147,9 @@ fn stage8_mean_velocity_payload(
         .map(|ix| ix - 1)
         .collect();
     if unwrap_ix.is_empty() {
-        return stage8_err("stage-8 mean velocity export requires at least one non-master interferogram");
+        return stage8_err(
+            "stage-8 mean velocity export requires at least one non-master interferogram",
+        );
     }
 
     let ref_ix = select_reference_ps(ps2, parms, n_ps)?;
@@ -169,7 +184,10 @@ fn stage8_mean_velocity_payload(
     })
 }
 
-fn stage8_edge_noise_kernel(uw_ph: &ComplexMatrixF32, edges: &[(usize, usize)]) -> Stage8EdgeOutput {
+fn stage8_edge_noise_kernel(
+    uw_ph: &ComplexMatrixF32,
+    edges: &[(usize, usize)],
+) -> Stage8EdgeOutput {
     let n_edge = edges.len();
     let n_ifg = uw_ph.cols;
     let mut dph_space_uw = vec![0.0f32; n_edge * n_ifg];
@@ -183,7 +201,11 @@ fn stage8_edge_noise_kernel(uw_ph: &ComplexMatrixF32, edges: &[(usize, usize)]) 
             dph_space_uw[edge_ix * n_ifg + ifg_ix] = phase;
             sum += phase as f64;
         }
-        let mean = if n_ifg == 0 { 0.0 } else { (sum / n_ifg as f64) as f32 };
+        let mean = if n_ifg == 0 {
+            0.0
+        } else {
+            (sum / n_ifg as f64) as f32
+        };
         for ifg_ix in 0..n_ifg {
             let value = dph_space_uw[edge_ix * n_ifg + ifg_ix];
             dph_noise[edge_ix * n_ifg + ifg_ix] = (value - mean) * STAGE8_NOISE_SCALE;
@@ -225,7 +247,9 @@ fn write_uw_space_time(
     master_ix: usize,
     ps2: &MatData,
 ) -> Result<(), CoreError> {
-    let day_len = optional_vector_f64(ps2, "day").map(|values| values.len()).unwrap_or(n_ifg);
+    let day_len = optional_vector_f64(ps2, "day")
+        .map(|values| values.len())
+        .unwrap_or(n_ifg);
     let unwrap_ifg: Vec<usize> = (1..=n_ifg).filter(|ix| *ix != master_ix).collect();
     let mut g = vec![0.0f64; unwrap_ifg.len() * day_len];
     for (row, &ifg_ix) in unwrap_ifg.iter().enumerate() {
@@ -251,7 +275,12 @@ fn write_uw_space_time(
         output.dph_space_uw.cols,
         output.dph_space_uw.values.clone(),
     )?;
-    mat.add_f64_matrix("spread", output.dph_noise.rows, output.dph_noise.cols, vec![0.0; output.dph_noise.rows * output.dph_noise.cols])?;
+    mat.add_f64_matrix(
+        "spread",
+        output.dph_noise.rows,
+        output.dph_noise.cols,
+        vec![0.0; output.dph_noise.rows * output.dph_noise.cols],
+    )?;
     mat.add_f64_matrix("ifreq_ij", 0, 0, Vec::new())?;
     mat.add_f64_matrix("jfreq_ij", 0, 0, Vec::new())?;
     mat.add_f64_matrix("shaky_ix", 0, 0, Vec::new())?;
@@ -261,7 +290,9 @@ fn write_uw_space_time(
 }
 
 fn edge_table(mat: &MatData, name: &str, n_nodes: usize) -> Result<Vec<(usize, usize)>, CoreError> {
-    let source = mat.get_f64_matrix(name).map_err(|err| stage8_err_owned(format!("uw_interp.{name} is invalid: {err}")))?;
+    let source = mat
+        .get_f64_matrix(name)
+        .map_err(|err| stage8_err_owned(format!("uw_interp.{name} is invalid: {err}")))?;
     if source.cols != 3 {
         return stage8_err(format!(
             "uw_interp.{name} must be an Nx3 edge table with 1-based node columns 2 and 3; got {}x{}",
@@ -287,11 +318,16 @@ fn ensure_exists(dataset_root: &Path, filename: &str, label: &str) -> Result<(),
     if dataset_root.join(filename).exists() {
         Ok(())
     } else {
-        stage8_err(format!("Missing required artifact: {filename} ({label}) before stage 8"))
+        stage8_err(format!(
+            "Missing required artifact: {filename} ({label}) before stage 8"
+        ))
     }
 }
 
-fn deramp_unwrapped_phase(ps2: &MatData, ph_all: &Matrix<f64>) -> Result<(Matrix<f64>, Matrix<f64>), CoreError> {
+fn deramp_unwrapped_phase(
+    ps2: &MatData,
+    ph_all: &Matrix<f64>,
+) -> Result<(Matrix<f64>, Matrix<f64>), CoreError> {
     let xy = ps_dim_f64(ps2, "xy", ph_all.rows, 3, "ps2.xy")?;
     let mut design = vec![0.0; ph_all.rows * 3];
     for row in 0..ph_all.rows {
@@ -334,14 +370,22 @@ fn center_values_to_reference(values: &mut [f64], rows: usize, cols: usize, ref_
         return;
     }
     for col in 0..cols {
-        let mean = ref_ix.iter().map(|&row| values[row * cols + col]).sum::<f64>() / ref_ix.len() as f64;
+        let mean = ref_ix
+            .iter()
+            .map(|&row| values[row * cols + col])
+            .sum::<f64>()
+            / ref_ix.len() as f64;
         for row in 0..rows {
             values[row * cols + col] -= mean;
         }
     }
 }
 
-fn select_reference_ps(ps2: &MatData, parms: &Stage8Parms, n_ps: usize) -> Result<Vec<usize>, CoreError> {
+fn select_reference_ps(
+    ps2: &MatData,
+    parms: &Stage8Parms,
+    n_ps: usize,
+) -> Result<Vec<usize>, CoreError> {
     let lonlat = ps_dim_f64(ps2, "lonlat", n_ps, 2, "ps2.lonlat")?;
     if parms.ref_radius == f64::NEG_INFINITY {
         return Ok(Vec::new());
@@ -381,7 +425,13 @@ fn fit_shared_design(
     Ok(out)
 }
 
-fn fit_single_target(design: &[f64], rows: usize, cols: usize, y: &[f64], weights: Option<&[f64]>) -> Result<Vec<f64>, CoreError> {
+fn fit_single_target(
+    design: &[f64],
+    rows: usize,
+    cols: usize,
+    y: &[f64],
+    weights: Option<&[f64]>,
+) -> Result<Vec<f64>, CoreError> {
     let mut normal = vec![0.0; cols * cols];
     let mut rhs = vec![0.0; cols];
     for row in 0..rows {
@@ -447,7 +497,8 @@ fn solve_linear(mut a: Vec<f64>, mut b: Vec<f64>, n: usize) -> Result<Vec<f64>, 
 }
 
 fn read_mat_stage8(dataset_root: &Path, filename: &str) -> Result<MatData, CoreError> {
-    MatData::read(dataset_root.join(filename)).map_err(|err| stage8_err_owned(format!("unable to read {filename}: {err}")))
+    MatData::read(dataset_root.join(filename))
+        .map_err(|err| stage8_err_owned(format!("unable to read {filename}: {err}")))
 }
 
 fn load_stage8_parms(dataset_root: &Path) -> Stage8Parms {
@@ -468,8 +519,10 @@ fn load_stage8_parms(dataset_root: &Path) -> Stage8Parms {
             .into_iter()
             .filter_map(|value| (value > 0.0).then_some(value.round() as i64))
             .collect(),
-        ref_lon: optional_vector_f64(&mat, "ref_lon").unwrap_or_else(|| vec![f64::NEG_INFINITY, f64::INFINITY]),
-        ref_lat: optional_vector_f64(&mat, "ref_lat").unwrap_or_else(|| vec![f64::NEG_INFINITY, f64::INFINITY]),
+        ref_lon: optional_vector_f64(&mat, "ref_lon")
+            .unwrap_or_else(|| vec![f64::NEG_INFINITY, f64::INFINITY]),
+        ref_lat: optional_vector_f64(&mat, "ref_lat")
+            .unwrap_or_else(|| vec![f64::NEG_INFINITY, f64::INFINITY]),
         ref_radius: scalar_from_mat(&mat, "ref_radius", f64::INFINITY),
     }
 }
@@ -504,30 +557,53 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
     }
 }
 
-fn ps_vector_f64(mat: &MatData, name: &str, len: usize, label: &str) -> Result<Vec<f64>, CoreError> {
+fn ps_vector_f64(
+    mat: &MatData,
+    name: &str,
+    len: usize,
+    label: &str,
+) -> Result<Vec<f64>, CoreError> {
     let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
         stage: 8,
         message: format!("{label} is missing"),
     })?;
     if values.len() != len {
-        return stage8_err(format!("{label} has incompatible length {} for expected length {len}", values.len()));
+        return stage8_err(format!(
+            "{label} has incompatible length {} for expected length {len}",
+            values.len()
+        ));
     }
     Ok(values)
 }
 
-fn ps_matrix_f32(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
-    let source = mat.get_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 8,
-        message: format!("{label} is invalid: {err}"),
-    })?;
+fn ps_matrix_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
+    let source = mat
+        .get_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 8,
+            message: format!("{label} is invalid: {err}"),
+        })?;
     orient_matrix_f32(source, n_ps, label)
 }
 
-fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str) -> Result<Matrix<f64>, CoreError> {
-    let source = mat.get_f64_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 8,
-        message: format!("{label} is invalid: {err}"),
-    })?;
+fn ps_dim_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
+    let source = mat
+        .get_f64_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 8,
+            message: format!("{label} is invalid: {err}"),
+        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -540,11 +616,18 @@ fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str)
     ))
 }
 
-fn complex_ps_matrix(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<ComplexMatrixF32, CoreError> {
-    let source = mat.get_complex_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 8,
-        message: format!("{label} is invalid: {err}"),
-    })?;
+fn complex_ps_matrix(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<ComplexMatrixF32, CoreError> {
+    let source = mat
+        .get_complex_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 8,
+            message: format!("{label} is invalid: {err}"),
+        })?;
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -557,7 +640,11 @@ fn complex_ps_matrix(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Res
     ))
 }
 
-fn orient_matrix_f32(source: Matrix<f32>, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
+fn orient_matrix_f32(
+    source: Matrix<f32>,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -646,7 +733,10 @@ mod tests {
         run_stage8_native(&rust_root).unwrap();
         let rust_elapsed = rust_start.elapsed();
 
-        let specs = vec![ArtifactComparisonSpec::new("uw_space_time.mat", ["dph_noise", "dph_space_uw"])];
+        let specs = vec![ArtifactComparisonSpec::new(
+            "uw_space_time.mat",
+            ["dph_noise", "dph_space_uw"],
+        )];
         let summary = compare_fixture_artifacts(
             8,
             "merged",
@@ -695,12 +785,24 @@ mod tests {
     fn create_stage8_fixture(root: &Path, edge_count: usize) {
         fs::create_dir_all(root).unwrap();
         let mut parms = MatFile::new(root.join("parms.mat"));
-        parms.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32]).unwrap();
-        parms.add_u32_matrix("unwrap_method", 1, 2, vec!['3' as u32, 'D' as u32]).unwrap();
-        parms.add_u32_matrix("unwrap_la_error_flag", 1, 1, vec!['y' as u32]).unwrap();
-        parms.add_u32_matrix("unwrap_spatial_cost_func_flag", 1, 1, vec!['n' as u32]).unwrap();
-        parms.add_f64_matrix("drop_ifg_index", 0, 0, Vec::new()).unwrap();
-        parms.add_f64_scalar("ref_radius", f64::NEG_INFINITY).unwrap();
+        parms
+            .add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32])
+            .unwrap();
+        parms
+            .add_u32_matrix("unwrap_method", 1, 2, vec!['3' as u32, 'D' as u32])
+            .unwrap();
+        parms
+            .add_u32_matrix("unwrap_la_error_flag", 1, 1, vec!['y' as u32])
+            .unwrap();
+        parms
+            .add_u32_matrix("unwrap_spatial_cost_func_flag", 1, 1, vec!['n' as u32])
+            .unwrap();
+        parms
+            .add_f64_matrix("drop_ifg_index", 0, 0, Vec::new())
+            .unwrap();
+        parms
+            .add_f64_scalar("ref_radius", f64::NEG_INFINITY)
+            .unwrap();
         parms.write().unwrap();
 
         let n_ps = 4;
@@ -711,15 +813,24 @@ mod tests {
         ps2.add_f64_scalar("n_image", n_ifg as f64).unwrap();
         ps2.add_f64_scalar("master_ix", 2.0).unwrap();
         ps2.add_f64_scalar("master_day", 20.0).unwrap();
-        ps2.add_f64_row_vector("day", vec![10.0, 20.0, 30.0, 40.0]).unwrap();
-        ps2.add_f64_row_vector("bperp", vec![-3.0, 0.0, 7.0, 14.0]).unwrap();
-        ps2.add_f64_matrix("lonlat", n_ps, 2, vec![-118.0, 34.0, -117.9, 34.1, -117.8, 34.2, -117.7, 34.3])
+        ps2.add_f64_row_vector("day", vec![10.0, 20.0, 30.0, 40.0])
             .unwrap();
+        ps2.add_f64_row_vector("bperp", vec![-3.0, 0.0, 7.0, 14.0])
+            .unwrap();
+        ps2.add_f64_matrix(
+            "lonlat",
+            n_ps,
+            2,
+            vec![-118.0, 34.0, -117.9, 34.1, -117.8, 34.2, -117.7, 34.3],
+        )
+        .unwrap();
         ps2.add_f32_matrix(
             "xy",
             n_ps,
             3,
-            vec![1.0, 0.0, 0.0, 2.0, 100.0, 0.0, 3.0, 0.0, 100.0, 4.0, 100.0, 100.0],
+            vec![
+                1.0, 0.0, 0.0, 2.0, 100.0, 0.0, 3.0, 0.0, 100.0, 4.0, 100.0, 100.0,
+            ],
         )
         .unwrap();
         ps2.write().unwrap();
@@ -736,11 +847,15 @@ mod tests {
         phuw2.write().unwrap();
 
         let mut scla2 = MatFile::new(root.join("scla2.mat"));
-        scla2.add_f32_matrix("ph_scla", n_ps, n_ifg, vec![0.0; n_ps * n_ifg]).unwrap();
+        scla2
+            .add_f32_matrix("ph_scla", n_ps, n_ifg, vec![0.0; n_ps * n_ifg])
+            .unwrap();
         scla2.write().unwrap();
 
         let mut ifgstd = MatFile::new(root.join("ifgstd2.mat"));
-        ifgstd.add_f64_col_vector("ifg_std", vec![1.0, 1.5, 2.0, 2.5]).unwrap();
+        ifgstd
+            .add_f64_col_vector("ifg_std", vec![1.0, 1.5, 2.0, 2.5])
+            .unwrap();
         ifgstd.write().unwrap();
 
         let n_grid = 5;
@@ -753,7 +868,9 @@ mod tests {
         }
         let mut uw_grid = MatFile::new(root.join("uw_grid.mat"));
         uw_grid.add_f64_scalar("n_ps", n_grid as f64).unwrap();
-        uw_grid.add_complex_f32_matrix("ph", n_grid, n_ifg, ph).unwrap();
+        uw_grid
+            .add_complex_f32_matrix("ph", n_grid, n_ifg, ph)
+            .unwrap();
         uw_grid.write().unwrap();
 
         let mut edgs = Vec::with_capacity(edge_count * 3);
@@ -765,7 +882,9 @@ mod tests {
             edgs.push(b as f64);
         }
         let mut uw_interp = MatFile::new(root.join("uw_interp.mat"));
-        uw_interp.add_f64_matrix("edgs", edge_count, 3, edgs).unwrap();
+        uw_interp
+            .add_f64_matrix("edgs", edge_count, 3, edgs)
+            .unwrap();
         uw_interp.write().unwrap();
     }
 

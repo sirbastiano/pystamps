@@ -1,7 +1,7 @@
 use pystamps_mat::MatData;
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::fmt;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -421,7 +421,10 @@ pub fn execute_pipeline_cli_bridge(
     })
 }
 
-pub fn processing_chain_coverage(start_step: u8, end_step: u8) -> Result<Vec<StageCoverage>, CoreError> {
+pub fn processing_chain_coverage(
+    start_step: u8,
+    end_step: u8,
+) -> Result<Vec<StageCoverage>, CoreError> {
     processing_chain_coverage_with_disabled(
         start_step,
         end_step,
@@ -474,11 +477,17 @@ pub fn verify_full_native_processing_chain_with_disabled(
     end_step: u8,
     disabled_stages: &[(u8, StageScope)],
 ) -> Result<(), CoreError> {
-    let missing: Vec<String> = processing_chain_coverage_with_disabled(start_step, end_step, disabled_stages)?
-        .into_iter()
-        .filter(|coverage| !coverage.native_stage)
-        .map(|coverage| format!("stage {} {} ({})", coverage.stage, coverage.scope, coverage.target))
-        .collect();
+    let missing: Vec<String> =
+        processing_chain_coverage_with_disabled(start_step, end_step, disabled_stages)?
+            .into_iter()
+            .filter(|coverage| !coverage.native_stage)
+            .map(|coverage| {
+                format!(
+                    "stage {} {} ({})",
+                    coverage.stage, coverage.scope, coverage.target
+                )
+            })
+            .collect();
     if missing.is_empty() {
         Ok(())
     } else {
@@ -529,8 +538,8 @@ fn stage_coverage(
     disabled_stages: &[(u8, StageScope)],
 ) -> StageCoverage {
     let scope_name = scope.to_string();
-    let native_stage =
-        !disabled_stages.contains(&(stage_id, scope)) && pystamps_stages::native_stage_is_parity_certified(stage_id, &scope_name);
+    let native_stage = !disabled_stages.contains(&(stage_id, scope))
+        && pystamps_stages::native_stage_is_parity_certified(stage_id, &scope_name);
     StageCoverage {
         stage: stage_id,
         scope,
@@ -599,7 +608,10 @@ fn run_cli_bridge_command(
     let Some((program, args)) = options.command.split_first() else {
         return Err(CoreError::StartExecution {
             program: "<empty>".to_string(),
-            source: std::io::Error::new(std::io::ErrorKind::InvalidInput, "empty execution command"),
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "empty execution command",
+            ),
         });
     };
     let mut command = Command::new(program);
@@ -621,10 +633,12 @@ fn run_cli_bridge_command(
     if request.dry_run {
         command.arg("--dry-run");
     }
-    command.output().map_err(|source| CoreError::StartExecution {
-        program: program.clone(),
-        source,
-    })
+    command
+        .output()
+        .map_err(|source| CoreError::StartExecution {
+            program: program.clone(),
+            source,
+        })
 }
 
 fn temp_runtime_config_path() -> PathBuf {
@@ -632,7 +646,10 @@ fn temp_runtime_config_path() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
-    std::env::temp_dir().join(format!("pystamps-core-runtime-{}-{nanos}.yaml", std::process::id()))
+    std::env::temp_dir().join(format!(
+        "pystamps-core-runtime-{}-{nanos}.yaml",
+        std::process::id()
+    ))
 }
 
 fn plan_single_scope(
@@ -672,8 +689,19 @@ fn plan_single_scope(
     } else {
         StageStatus::PendingExecution
     };
-    let verb = if dry_run { "Would produce" } else { "Will produce" };
-    StageResult::new(stage_id, scope, target_name, status, format!("{verb} {expected}"), None)
+    let verb = if dry_run {
+        "Would produce"
+    } else {
+        "Will produce"
+    };
+    StageResult::new(
+        stage_id,
+        scope,
+        target_name,
+        status,
+        format!("{verb} {expected}"),
+        None,
+    )
 }
 
 fn dataset_name(path: &Path) -> &str {
@@ -704,12 +732,25 @@ fn expected_bundle(stage_id: u8, scope: StageScope) -> &'static [&'static str] {
         (3, StageScope::Patch) => &["select1.mat"],
         (4, StageScope::Patch) => &["weed1.mat"],
         (5, StageScope::Patch) => &[
-            "ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "hgt2.mat", "la2.mat", "rc2.mat",
+            "ps2.mat",
+            "ph2.mat",
+            "pm2.mat",
+            "bp2.mat",
+            "hgt2.mat",
+            "la2.mat",
+            "rc2.mat",
             "psver.mat",
         ],
         (5, StageScope::Merged) => &[
-            "ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "hgt2.mat", "la2.mat", "rc2.mat",
-            "psver.mat", "ifgstd2.mat",
+            "ps2.mat",
+            "ph2.mat",
+            "pm2.mat",
+            "bp2.mat",
+            "hgt2.mat",
+            "la2.mat",
+            "rc2.mat",
+            "psver.mat",
+            "ifgstd2.mat",
         ],
         (6, StageScope::Merged) => &[
             "ps2.mat",
@@ -769,14 +810,32 @@ fn stage_output_artifacts(stage_id: u8, scope: StageScope) -> &'static [&'static
         (3, StageScope::Patch) => &["select1.mat"],
         (4, StageScope::Patch) => &["weed1.mat"],
         (5, StageScope::Patch) => &[
-            "ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "hgt2.mat", "la2.mat", "rc2.mat",
+            "ps2.mat",
+            "ph2.mat",
+            "pm2.mat",
+            "bp2.mat",
+            "hgt2.mat",
+            "la2.mat",
+            "rc2.mat",
             "psver.mat",
         ],
         (5, StageScope::Merged) => &[
-            "ps2.mat", "ph2.mat", "pm2.mat", "bp2.mat", "hgt2.mat", "la2.mat", "rc2.mat",
-            "psver.mat", "ifgstd2.mat",
+            "ps2.mat",
+            "ph2.mat",
+            "pm2.mat",
+            "bp2.mat",
+            "hgt2.mat",
+            "la2.mat",
+            "rc2.mat",
+            "psver.mat",
+            "ifgstd2.mat",
         ],
-        (6, StageScope::Merged) => &["phuw2.mat", "uw_phaseuw.mat", "uw_grid.mat", "uw_interp.mat"],
+        (6, StageScope::Merged) => &[
+            "phuw2.mat",
+            "uw_phaseuw.mat",
+            "uw_grid.mat",
+            "uw_interp.mat",
+        ],
         (7, StageScope::Merged) => &["scla2.mat", "scla_smooth2.mat"],
         (8, StageScope::Merged) => &["mean_v.mat", "uw_space_time.mat"],
         _ => &[],
@@ -796,7 +855,10 @@ fn count_stage_input_artifacts(
                     .patches
                     .iter()
                     .map(|patch| {
-                        count_existing_artifacts(patch, stage_output_artifacts(5, StageScope::Patch))
+                        count_existing_artifacts(
+                            patch,
+                            stage_output_artifacts(5, StageScope::Patch),
+                        )
                     })
                     .sum()
             })
@@ -814,10 +876,14 @@ fn count_existing_artifacts(target_dir: &Path, artifacts: &[&str]) -> usize {
 
 fn rows_processed_for_stage(target_dir: &Path, stage_id: u8, scope: StageScope) -> Option<usize> {
     let artifact = match (stage_id, scope) {
-        (1, StageScope::Patch) | (2, StageScope::Patch) | (3, StageScope::Patch) | (4, StageScope::Patch) => {
-            "ps1.mat"
-        }
-        (5, StageScope::Patch) | (5, StageScope::Merged) | (6, StageScope::Merged) | (7, StageScope::Merged)
+        (1, StageScope::Patch)
+        | (2, StageScope::Patch)
+        | (3, StageScope::Patch)
+        | (4, StageScope::Patch) => "ps1.mat",
+        (5, StageScope::Patch)
+        | (5, StageScope::Merged)
+        | (6, StageScope::Merged)
+        | (7, StageScope::Merged)
         | (8, StageScope::Merged) => "ps2.mat",
         _ => return None,
     };
@@ -949,7 +1015,8 @@ mod tests {
     #[test]
     fn coverage_spans_the_full_processing_chain() {
         let coverage = processing_chain_coverage(1, 8).unwrap();
-        let stages: Vec<(u8, StageScope)> = coverage.iter().map(|row| (row.stage, row.scope)).collect();
+        let stages: Vec<(u8, StageScope)> =
+            coverage.iter().map(|row| (row.stage, row.scope)).collect();
 
         assert_eq!(
             stages,
@@ -1055,8 +1122,7 @@ mod tests {
                 5,
                 3,
                 vec![
-                    1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 1.0, 5.0, 1.0,
-                    3.0,
+                    1.0, 1.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 4.0, 4.0, 4.0, 1.0, 5.0, 1.0, 3.0,
                 ],
             )
             .unwrap();

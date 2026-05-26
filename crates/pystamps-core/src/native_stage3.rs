@@ -75,7 +75,10 @@ pub fn run_stage3_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         vec![0.0, 1.0]
     };
     if d_a.len() != n_ps {
-        return stage3_err(format!("da1.D_A has incompatible length {} for n_ps={n_ps}", d_a.len()));
+        return stage3_err(format!(
+            "da1.D_A has incompatible length {} for n_ps={n_ps}",
+            d_a.len()
+        ));
     }
 
     let low_coh_thresh = if parms.small_baseline_flag.eq_ignore_ascii_case("y") {
@@ -186,11 +189,10 @@ fn load_da(patch_dir: &Path, n_ps: usize) -> Result<Vec<f64>, CoreError> {
     if patch_dir.join("da1.mat").exists() {
         let da = MatData::read(patch_dir.join("da1.mat"))
             .map_err(|err| stage3_err_owned(format!("unable to read da1.mat: {err}")))?;
-        optional_vector_f64(&da, "D_A")
-            .ok_or_else(|| CoreError::NativeStage {
-                stage: 3,
-                message: "da1.mat missing D_A".to_string(),
-            })
+        optional_vector_f64(&da, "D_A").ok_or_else(|| CoreError::NativeStage {
+            stage: 3,
+            message: "da1.mat missing D_A".to_string(),
+        })
     } else {
         Ok(vec![1.0; n_ps])
     }
@@ -214,7 +216,9 @@ fn coh_threshold_from_dist(
         let selected: Vec<usize> = d_a
             .iter()
             .enumerate()
-            .filter_map(|(ix, &value)| (value > d_a_max[i] && value <= d_a_max[i + 1]).then_some(ix))
+            .filter_map(|(ix, &value)| {
+                (value > d_a_max[i] && value <= d_a_max[i + 1]).then_some(ix)
+            })
             .collect();
         if selected.is_empty() {
             continue;
@@ -267,7 +271,10 @@ fn coh_threshold_from_dist(
         } else {
             nr_cum
         };
-        let Some(min_ok) = percent_rand.iter().position(|&value| value < max_percent_rand) else {
+        let Some(min_ok) = percent_rand
+            .iter()
+            .position(|&value| value < max_percent_rand)
+        else {
             min_coh[i] = 1.0;
             continue;
         };
@@ -327,10 +334,15 @@ fn hist_with_centers(values: &[f64], centers: &[f64]) -> Vec<f64> {
     if centers.len() == 1 {
         return vec![values.len() as f64];
     }
-    let mids: Vec<f64> = centers.windows(2).map(|pair| (pair[0] + pair[1]) / 2.0).collect();
+    let mids: Vec<f64> = centers
+        .windows(2)
+        .map(|pair| (pair[0] + pair[1]) / 2.0)
+        .collect();
     let mut counts = vec![0.0; centers.len()];
     for &value in values {
-        let ix = mids.partition_point(|&mid| mid < value).min(centers.len() - 1);
+        let ix = mids
+            .partition_point(|&mid| mid < value)
+            .min(centers.len() - 1);
         counts[ix] += 1.0;
     }
     counts
@@ -383,7 +395,8 @@ fn least_squares_poly(x: &[f64], y: &[f64], degree: usize) -> Vec<f64> {
 fn solve_linear_system(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
     let n = b.len();
     for pivot in 0..n {
-        let max_row = (pivot..n).max_by(|&left, &right| a[left][pivot].abs().total_cmp(&a[right][pivot].abs()))?;
+        let max_row = (pivot..n)
+            .max_by(|&left, &right| a[left][pivot].abs().total_cmp(&a[right][pivot].abs()))?;
         if a[max_row][pivot].abs() <= f64::EPSILON {
             return None;
         }
@@ -451,7 +464,8 @@ fn write_select_artifact(
     let mut coh_ps2 = Vec::with_capacity(ix0.len());
     let mut coh_thresh = Vec::with_capacity(ix0.len());
     for &row in ix0 {
-        ph_patch2.extend_from_slice(&ph_patch.values[row * ph_patch.cols..(row + 1) * ph_patch.cols]);
+        ph_patch2
+            .extend_from_slice(&ph_patch.values[row * ph_patch.cols..(row + 1) * ph_patch.cols]);
         ph_res2.extend_from_slice(&ph_res.values[row * ph_res.cols..(row + 1) * ph_res.cols]);
         k_ps2.push(k_ps[row]);
         c_ps2.push(c_ps[row]);
@@ -514,7 +528,11 @@ fn patch_area_square_km(xy: &Matrix<f64>) -> f64 {
         max_y = max_y.max(y);
     }
     let area = (max_x - min_x) * (max_y - min_y) / 1e6;
-    if area > 0.0 { area } else { 1.0 }
+    if area > 0.0 {
+        area
+    } else {
+        1.0
+    }
 }
 
 fn scalar_from_mat(mat: &MatData, name: &str, default: f64) -> Result<f64, CoreError> {
@@ -531,22 +549,37 @@ fn optional_vector_f64(mat: &MatData, name: &str) -> Option<Vec<f64>> {
     mat.get_f64_matrix(name).ok().map(|matrix| matrix.values)
 }
 
-fn ps_vector_f64(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Vec<f64>, CoreError> {
+fn ps_vector_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Vec<f64>, CoreError> {
     let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
         stage: 3,
         message: format!("{label} is missing"),
     })?;
     if values.len() != n_ps {
-        return stage3_err(format!("{label} has incompatible length {} for n_ps={n_ps}", values.len()));
+        return stage3_err(format!(
+            "{label} has incompatible length {} for n_ps={n_ps}",
+            values.len()
+        ));
     }
     Ok(values)
 }
 
-fn ps_matrix_f32(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
-    let source = mat.get_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 3,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_matrix_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
+    let source = mat
+        .get_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 3,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     orient_matrix_f32(source, n_ps, label)
 }
 
@@ -556,10 +589,12 @@ fn ps_complex_matrix(
     n_ps: usize,
     label: &str,
 ) -> Result<ComplexMatrixF32, CoreError> {
-    let source = mat.get_complex_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 3,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+    let source = mat
+        .get_complex_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 3,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -583,11 +618,19 @@ fn ps_complex_matrix(
     ))
 }
 
-fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str) -> Result<Matrix<f64>, CoreError> {
-    let source = mat.get_f64_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 3,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_dim_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
+    let source = mat
+        .get_f64_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 3,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -611,7 +654,11 @@ fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str)
     ))
 }
 
-fn orient_matrix_f32(source: Matrix<f32>, n_ps: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
+fn orient_matrix_f32(
+    source: Matrix<f32>,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -658,7 +705,10 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
 fn resolve_file_optional(patch_dir: &Path, filename: &str) -> Option<PathBuf> {
     [
         patch_dir.join(filename),
-        patch_dir.parent().map(|parent| parent.join(filename)).unwrap_or_default(),
+        patch_dir
+            .parent()
+            .map(|parent| parent.join(filename))
+            .unwrap_or_default(),
         patch_dir
             .parent()
             .and_then(|parent| parent.parent())
@@ -791,7 +841,12 @@ mod tests {
         fs::remove_dir_all(root).unwrap();
     }
 
-    fn create_stage3_fixture(root: &Path, select_method: &str, percent_rand: f64, density_rand: f64) {
+    fn create_stage3_fixture(
+        root: &Path,
+        select_method: &str,
+        percent_rand: f64,
+        density_rand: f64,
+    ) {
         let patch = root.join("PATCH_1");
         fs::create_dir_all(&patch).unwrap();
         let n_ps = 240;
@@ -812,7 +867,8 @@ mod tests {
         .unwrap();
         mat.add_f64_scalar("percent_rand", percent_rand).unwrap();
         mat.add_f64_scalar("density_rand", density_rand).unwrap();
-        mat.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32]).unwrap();
+        mat.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32])
+            .unwrap();
         mat.add_f64_scalar("gamma_stdev_reject", 0.0).unwrap();
         mat.write().unwrap();
     }
@@ -828,15 +884,19 @@ mod tests {
         mat.add_f64_scalar("n_ps", n_ps as f64).unwrap();
         mat.add_f64_scalar("n_ifg", 4.0).unwrap();
         mat.add_f64_scalar("master_ix", 1.0).unwrap();
-        mat.add_f64_row_vector("bperp", vec![0.0, 10.0, 20.0, 30.0, 40.0]).unwrap();
+        mat.add_f64_row_vector("bperp", vec![0.0, 10.0, 20.0, 30.0, 40.0])
+            .unwrap();
         mat.add_f64_matrix("xy", n_ps, 3, xy).unwrap();
         mat.write().unwrap();
     }
 
     fn write_da(patch: &Path, n_ps: usize) {
         let mut mat = MatFile::new(patch.join("da1.mat"));
-        mat.add_f64_row_vector("D_A", (0..n_ps).map(|ix| 0.2 + ix as f64 / n_ps as f64).collect())
-            .unwrap();
+        mat.add_f64_row_vector(
+            "D_A",
+            (0..n_ps).map(|ix| 0.2 + ix as f64 / n_ps as f64).collect(),
+        )
+        .unwrap();
         mat.write().unwrap();
     }
 
@@ -858,9 +918,12 @@ mod tests {
         }
         let mut mat = MatFile::new(patch.join("pm1.mat"));
         mat.add_f64_row_vector("coh_ps", coh_ps).unwrap();
-        mat.add_f64_row_vector("coh_bins", coh_bins.clone()).unwrap();
-        mat.add_f64_row_vector("Nr", vec![1.0; coh_bins.len()]).unwrap();
-        mat.add_complex_f32_matrix("ph_patch", n_ps, 4, ph_patch).unwrap();
+        mat.add_f64_row_vector("coh_bins", coh_bins.clone())
+            .unwrap();
+        mat.add_f64_row_vector("Nr", vec![1.0; coh_bins.len()])
+            .unwrap();
+        mat.add_complex_f32_matrix("ph_patch", n_ps, 4, ph_patch)
+            .unwrap();
         mat.add_f32_matrix("ph_res", n_ps, 4, ph_res).unwrap();
         mat.add_f64_row_vector("K_ps", k_ps).unwrap();
         mat.add_f64_row_vector("C_ps", c_ps).unwrap();

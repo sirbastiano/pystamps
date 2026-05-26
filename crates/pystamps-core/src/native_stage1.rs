@@ -57,7 +57,8 @@ pub fn run_stage1_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
             sorted_col
         };
         for row in 0..n_ps {
-            ph_reordered[row * day_full.len() + out_col] = ph_raw.values[row * ph_raw.cols + original_col];
+            ph_reordered[row * day_full.len() + out_col] =
+                ph_raw.values[row * ph_raw.cols + original_col];
         }
     }
     for row in 0..n_ps {
@@ -105,7 +106,8 @@ pub fn run_stage1_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         xy_out.push(quantize_mm(xy_sort[src_row][0]));
         xy_out.push(quantize_mm(xy_sort[src_row][1]));
         for col in 0..day_full.len() {
-            ph_sorted[out_row * day_full.len() + col] = ph_reordered[src_row * day_full.len() + col];
+            ph_sorted[out_row * day_full.len() + col] =
+                ph_reordered[src_row * day_full.len() + col];
         }
     }
 
@@ -202,7 +204,9 @@ fn resolve_stage1_metadata(patch_dir: &Path, ij: &[Vec<f64>]) -> Result<Stage1Me
     let day_path = resolve_file_optional(patch_dir, "day.1.in");
     let master_day_path = resolve_file_optional(patch_dir, "master_day.1.in");
     let bperp_path = resolve_file_optional(patch_dir, "bperp.1.in");
-    if let (Some(day_path), Some(master_day_path), Some(bperp_path)) = (day_path, master_day_path, bperp_path) {
+    if let (Some(day_path), Some(master_day_path), Some(bperp_path)) =
+        (day_path, master_day_path, bperp_path)
+    {
         return metadata_from_text(&day_path, &master_day_path, &bperp_path, None);
     }
 
@@ -243,7 +247,10 @@ fn metadata_from_text(
     build_metadata(slave_day, bperp_raw, master_day, bperp_mat)
 }
 
-fn metadata_from_existing_ps1(patch_dir: &Path, n_ps: usize) -> Result<Option<Stage1Metadata>, CoreError> {
+fn metadata_from_existing_ps1(
+    patch_dir: &Path,
+    n_ps: usize,
+) -> Result<Option<Stage1Metadata>, CoreError> {
     let ps1_file = patch_dir.join("ps1.mat");
     if !ps1_file.exists() {
         return Ok(None);
@@ -253,7 +260,11 @@ fn metadata_from_existing_ps1(patch_dir: &Path, n_ps: usize) -> Result<Option<St
     let bperp_full = ps1.get_f64_matrix(VAR_BPERP)?.values;
     let master_day = scalar_from_mat(&ps1, VAR_MASTER_DAY)?;
     let master_ix = scalar_from_mat(&ps1, VAR_MASTER_IX)?.round() as usize;
-    if day_full.is_empty() || bperp_full.len() != day_full.len() || master_ix == 0 || master_ix > day_full.len() {
+    if day_full.is_empty()
+        || bperp_full.len() != day_full.len()
+        || master_ix == 0
+        || master_ix > day_full.len()
+    {
         return Ok(None);
     }
 
@@ -268,12 +279,19 @@ fn metadata_from_existing_ps1(patch_dir: &Path, n_ps: usize) -> Result<Option<St
 
     let bperp_mat = match MatData::read(patch_dir.join("bp1.mat")) {
         Ok(bp1) => match bp1.get_f32_matrix(VAR_BPERP_MAT) {
-            Ok(candidate) if candidate.rows == n_ps && candidate.cols == day_full.len() - 1 => Some(candidate),
+            Ok(candidate) if candidate.rows == n_ps && candidate.cols == day_full.len() - 1 => {
+                Some(candidate)
+            }
             _ => None,
         },
         Err(_) => None,
     };
-    Ok(Some(build_metadata(slave_day, slave_bperp, master_day, bperp_mat)?))
+    Ok(Some(build_metadata(
+        slave_day,
+        slave_bperp,
+        master_day,
+        bperp_mat,
+    )?))
 }
 
 fn build_metadata(
@@ -351,7 +369,9 @@ fn metadata_from_snap(patch_dir: &Path, ij: &[Vec<f64>]) -> Result<Stage1Metadat
         bperp_cols.push(snap_patch_bperp_vector(&record.base_file, &rslc_par, ij)?);
     }
     if bperp_cols.is_empty() {
-        return stage1_err("Stage 1 SNAP metadata synthesis did not produce any perpendicular baselines");
+        return stage1_err(
+            "Stage 1 SNAP metadata synthesis did not produce any perpendicular baselines",
+        );
     }
 
     let n_ps = ij.len();
@@ -372,7 +392,10 @@ fn metadata_from_snap(patch_dir: &Path, ij: &[Vec<f64>]) -> Result<Stage1Metadat
     let day_path = patch_dir.join("day.1.in");
     let master_day_path = patch_dir.join("master_day.1.in");
     let bperp_path = patch_dir.join("bperp.1.in");
-    write_lines_if_missing(&day_path, records.iter().map(|record| record.slave.clone()).collect())?;
+    write_lines_if_missing(
+        &day_path,
+        records.iter().map(|record| record.slave.clone()).collect(),
+    )?;
     write_lines_if_missing(&master_day_path, vec![master_day])?;
     let mean_bperp = (0..n_cols)
         .map(|col| {
@@ -523,7 +546,11 @@ fn resolve_rslc_par(dataset_root: &Path, master_day: &str) -> Result<PathBuf, Co
     ))
 }
 
-fn snap_patch_bperp_vector(base_file: &Path, rslc_par: &Path, ij: &[Vec<f64>]) -> Result<Vec<f32>, CoreError> {
+fn snap_patch_bperp_vector(
+    base_file: &Path,
+    rslc_par: &Path,
+    ij: &[Vec<f64>],
+) -> Result<Vec<f32>, CoreError> {
     let b_tcn = read_named_float_vector(base_file, "initial_baseline(TCN)", 3)?;
     let br_tcn = read_named_float_vector(base_file, "initial_baseline_rate", 3)?;
     let range_pixel_spacing = read_named_scalar(rslc_par, "range_pixel_spacing")?;
@@ -542,7 +569,8 @@ fn snap_patch_bperp_vector(base_file: &Path, rslc_par: &Path, ij: &[Vec<f64>]) -
         .map(|row| {
             let azimuth = row[1];
             let rg = near_range_slc + row[2] * range_pixel_spacing;
-            let look_arg = (sar_to_earth_center.powi(2) + rg.powi(2) - earth_radius_below_sensor.powi(2))
+            let look_arg = (sar_to_earth_center.powi(2) + rg.powi(2)
+                - earth_radius_below_sensor.powi(2))
                 / (2.0 * sar_to_earth_center * rg);
             let look = look_arg.clamp(-1.0, 1.0).acos();
             let bc = b_tcn[1] + br_tcn[1] * (azimuth - mean_az) / prf;
@@ -618,13 +646,15 @@ fn stage1_geometry(patch_dir: &Path, ij: &[Vec<f64>]) -> Option<(f64, f64)> {
     let range_pixel_spacing = read_named_scalar(&rslc_par, "range_pixel_spacing").ok()?;
     let near_range_slc = read_named_scalar(&rslc_par, "near_range_slc").ok()?;
     let sar_to_earth_center = read_named_scalar(&rslc_par, "sar_to_earth_center").ok()?;
-    let earth_radius_below_sensor = read_named_scalar(&rslc_par, "earth_radius_below_sensor").ok()?;
+    let earth_radius_below_sensor =
+        read_named_scalar(&rslc_par, "earth_radius_below_sensor").ok()?;
     let center_range_slc = read_named_scalar(&rslc_par, "center_range_slc").ok()?;
     let mut sum = 0.0;
     for row in ij {
         let rg = near_range_slc + row[2] * range_pixel_spacing;
-        let incidence_arg = (sar_to_earth_center.powi(2) - earth_radius_below_sensor.powi(2) - rg.powi(2))
-            / (2.0 * earth_radius_below_sensor * rg);
+        let incidence_arg =
+            (sar_to_earth_center.powi(2) - earth_radius_below_sensor.powi(2) - rg.powi(2))
+                / (2.0 * earth_radius_below_sensor * rg);
         sum += incidence_arg.clamp(-1.0, 1.0).acos();
     }
     Some((center_range_slc, sum / ij.len() as f64))
@@ -689,11 +719,10 @@ fn stage1_err<T>(message: impl Into<String>) -> Result<T, CoreError> {
 }
 
 fn resolve_file(patch_dir: &Path, filename: &str) -> Result<PathBuf, CoreError> {
-    resolve_file_optional(patch_dir, filename)
-        .ok_or_else(|| CoreError::NativeStage {
-            stage: 1,
-            message: format!("{filename} not found near {}", patch_dir.display()),
-        })
+    resolve_file_optional(patch_dir, filename).ok_or_else(|| CoreError::NativeStage {
+        stage: 1,
+        message: format!("{filename} not found near {}", patch_dir.display()),
+    })
 }
 
 fn resolve_file_optional(patch_dir: &Path, filename: &str) -> Option<PathBuf> {
@@ -751,7 +780,10 @@ fn read_text_flat(path: &Path) -> Result<Vec<f64>, CoreError> {
 fn read_complex_columns(path: &Path, rows: usize) -> Result<ComplexMatrix, CoreError> {
     let raw = read_binary_f32(path, BinaryKind::Generic)?;
     if raw.len() % (2 * rows) != 0 {
-        return stage1_err(format!("unexpected binary size for phase file {}", path.display()));
+        return stage1_err(format!(
+            "unexpected binary size for phase file {}",
+            path.display()
+        ));
     }
     let cols = raw.len() / (2 * rows);
     let mut values = vec![(0.0_f32, 0.0_f32); rows * cols];
@@ -770,7 +802,10 @@ fn read_binary_f32(path: &Path, kind: BinaryKind) -> Result<Vec<f32>, CoreError>
         source,
     })?;
     if bytes.len() % 4 != 0 {
-        return stage1_err(format!("{} byte count is not divisible by 4", path.display()));
+        return stage1_err(format!(
+            "{} byte count is not divisible by 4",
+            path.display()
+        ));
     }
     let little = bytes
         .chunks_exact(4)
@@ -823,13 +858,22 @@ fn quantize_mm(value: f32) -> f32 {
     (value * 1000.0).round() / 1000.0
 }
 
-fn local_xy_from_lonlat(lonlat: &[[f64; 2]], heading_deg: Option<f64>) -> (Vec<[f64; 2]>, [f64; 2]) {
-    let min_lon = lonlat.iter().map(|pair| pair[0]).fold(f64::INFINITY, f64::min);
+fn local_xy_from_lonlat(
+    lonlat: &[[f64; 2]],
+    heading_deg: Option<f64>,
+) -> (Vec<[f64; 2]>, [f64; 2]) {
+    let min_lon = lonlat
+        .iter()
+        .map(|pair| pair[0])
+        .fold(f64::INFINITY, f64::min);
     let max_lon = lonlat
         .iter()
         .map(|pair| pair[0])
         .fold(f64::NEG_INFINITY, f64::max);
-    let min_lat = lonlat.iter().map(|pair| pair[1]).fold(f64::INFINITY, f64::min);
+    let min_lat = lonlat
+        .iter()
+        .map(|pair| pair[1])
+        .fold(f64::INFINITY, f64::min);
     let max_lat = lonlat
         .iter()
         .map(|pair| pair[1])
@@ -850,7 +894,10 @@ fn local_xy_from_lonlat(lonlat: &[[f64; 2]], heading_deg: Option<f64>) -> (Vec<[
                 let n = a / (1.0 - e.powi(2) * lat.sin().powi(2)).sqrt();
                 let angle = dlambda * lat.sin();
                 let cot = 1.0 / lat.tan();
-                [n * cot * angle.sin(), m - m0 + n * cot * (1.0 - angle.cos())]
+                [
+                    n * cot * angle.sin(),
+                    m - m0 + n * cot * (1.0 - angle.cos()),
+                ]
             } else {
                 [a * (lon - origin_rad[0]), -m0]
             }
@@ -917,11 +964,7 @@ mod tests {
         fs::write(root.join("day.1.in"), "20200104\n20200102\n").unwrap();
         fs::write(root.join("master_day.1.in"), "20200103\n").unwrap();
         fs::write(root.join("bperp.1.in"), "20\n10\n").unwrap();
-        fs::write(
-            patch.join("pscands.1.ij"),
-            "9 2 2\n8 1 1\n7 3 3\n",
-        )
-        .unwrap();
+        fs::write(patch.join("pscands.1.ij"), "9 2 2\n8 1 1\n7 3 3\n").unwrap();
         write_f32_file(
             &patch.join("pscands.1.ll"),
             &[-120.0, 35.0, -119.99, 35.01, -120.01, 34.99],
@@ -1085,7 +1128,10 @@ expect_ij_mismatch("zero-based coordinate columns", column_shifted)
         run_stage1_native(&patch).unwrap();
 
         let ps1 = MatData::read(patch.join("ps1.mat")).unwrap();
-        assert_eq!(ps1.get_f64_matrix(VAR_DAY).unwrap().values, vec![738949.0, 738961.0, 738973.0]);
+        assert_eq!(
+            ps1.get_f64_matrix(VAR_DAY).unwrap().values,
+            vec![738949.0, 738961.0, 738973.0]
+        );
         assert_eq!(scalar_from_mat(&ps1, VAR_MASTER_IX).unwrap(), 1.0);
         let bp1 = MatData::read(patch.join("bp1.mat")).unwrap();
         let bperp = bp1.get_f32_matrix(VAR_BPERP_MAT).unwrap();
@@ -1294,7 +1340,11 @@ heading: 12
         }
     }
 
-    fn assert_stage1_ps1_matches_golden_with_python(golden_root: &Path, observed_root: &Path, patch_names: &[&str]) {
+    fn assert_stage1_ps1_matches_golden_with_python(
+        golden_root: &Path,
+        observed_root: &Path,
+        patch_names: &[&str],
+    ) {
         let script = r#"
 import sys
 from pathlib import Path
@@ -1383,6 +1433,9 @@ for patch in patches:
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        std::env::temp_dir().join(format!("pystamps-stage1-{name}-{}-{nanos}", std::process::id()))
+        std::env::temp_dir().join(format!(
+            "pystamps-stage1-{name}-{}-{nanos}",
+            std::process::id()
+        ))
     }
 }

@@ -86,7 +86,10 @@ pub struct ArtifactComparisonSpec {
 }
 
 impl ArtifactComparisonSpec {
-    pub fn new(artifact: impl Into<PathBuf>, variables: impl IntoIterator<Item = impl Into<String>>) -> Self {
+    pub fn new(
+        artifact: impl Into<PathBuf>,
+        variables: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
         Self {
             artifact: artifact.into(),
             variables: variables.into_iter().map(Into::into).collect(),
@@ -191,10 +194,14 @@ pub fn create_fixture_run_copies(
     validate_fixture_name(&fixture)?;
     let fixture_source = fixture_source.as_ref();
     if !fixture_source.exists() {
-        return Err(ParityError::MissingFixtureSource(fixture_source.to_path_buf()));
+        return Err(ParityError::MissingFixtureSource(
+            fixture_source.to_path_buf(),
+        ));
     }
     if !fixture_source.is_dir() {
-        return Err(ParityError::FixtureSourceNotDirectory(fixture_source.to_path_buf()));
+        return Err(ParityError::FixtureSourceNotDirectory(
+            fixture_source.to_path_buf(),
+        ));
     }
 
     let work_root = work_root.as_ref();
@@ -311,10 +318,13 @@ fn copy_dir_recursive(source: &Path, dest: &Path) -> Result<(), ParityError> {
         })?;
         let source_path = entry.path();
         let dest_path = dest.join(entry.file_name());
-        let file_type = entry.file_type().map_err(|source_err| ParityError::ReadFixtureDirectory {
-            path: source.to_path_buf(),
-            source: source_err,
-        })?;
+        let file_type =
+            entry
+                .file_type()
+                .map_err(|source_err| ParityError::ReadFixtureDirectory {
+                    path: source.to_path_buf(),
+                    source: source_err,
+                })?;
         if file_type.is_dir() {
             copy_dir_recursive(&source_path, &dest_path)?;
         } else if file_type.is_file() {
@@ -350,7 +360,10 @@ fn compare_artifact(
             &artifact,
             &spec.variables,
             tolerance,
-            format!("Missing Python reference artifact {}", python_path.display()),
+            format!(
+                "Missing Python reference artifact {}",
+                python_path.display()
+            ),
             comparisons,
         );
         return Ok(());
@@ -369,14 +382,16 @@ fn compare_artifact(
         return Ok(());
     }
 
-    let python_mat = pystamps_mat::MatData::read(&python_path).map_err(|source| ParityError::ReadMat {
-        path: python_path.clone(),
-        source,
-    })?;
-    let rust_mat = pystamps_mat::MatData::read(&rust_path).map_err(|source| ParityError::ReadMat {
-        path: rust_path.clone(),
-        source,
-    })?;
+    let python_mat =
+        pystamps_mat::MatData::read(&python_path).map_err(|source| ParityError::ReadMat {
+            path: python_path.clone(),
+            source,
+        })?;
+    let rust_mat =
+        pystamps_mat::MatData::read(&rust_path).map_err(|source| ParityError::ReadMat {
+            path: rust_path.clone(),
+            source,
+        })?;
 
     let variables = if spec.variables.is_empty() {
         python_mat
@@ -397,7 +412,10 @@ fn compare_artifact(
                 &variable,
                 tolerance.rtol,
                 tolerance.atol,
-                format!("Missing Python variable '{variable}' in {}", python_path.display()),
+                format!(
+                    "Missing Python variable '{variable}' in {}",
+                    python_path.display()
+                ),
             )),
             (_, Err(_)) => comparisons.push(ParityComparison::fail(
                 stage,
@@ -407,17 +425,13 @@ fn compare_artifact(
                 &variable,
                 tolerance.rtol,
                 tolerance.atol,
-                format!("Missing Rust variable '{variable}' in {}", rust_path.display()),
+                format!(
+                    "Missing Rust variable '{variable}' in {}",
+                    rust_path.display()
+                ),
             )),
             (Ok(python), Ok(rust)) => comparisons.push(compare_variable(
-                stage,
-                scope,
-                fixture,
-                &artifact,
-                &variable,
-                python,
-                rust,
-                tolerance,
+                stage, scope, fixture, &artifact, &variable, python, rust, tolerance,
             )),
         }
     }
@@ -563,7 +577,11 @@ fn compare_real_values(
         let abs_diff = diff.abs();
         max_abs = max_abs.max(abs_diff);
         if !within_tolerance(abs_diff, expected.abs(), tolerance) {
-            let kind = if wrap_key { "Wrap mismatch" } else { "Value mismatch" };
+            let kind = if wrap_key {
+                "Wrap mismatch"
+            } else {
+                "Value mismatch"
+            };
             return Err(format!(
                 "{kind} for {} variable '{}', max_abs={max_abs:.6e}",
                 python.name, python.name
@@ -580,10 +598,16 @@ fn compare_complex_values(
     wrap_key: bool,
 ) -> Result<(), String> {
     let Some(python_imag) = &python.imag else {
-        return Err(format!("Missing Python imaginary payload for variable '{}'", python.name));
+        return Err(format!(
+            "Missing Python imaginary payload for variable '{}'",
+            python.name
+        ));
     };
     let Some(rust_imag) = &rust.imag else {
-        return Err(format!("Missing Rust imaginary payload for variable '{}'", rust.name));
+        return Err(format!(
+            "Missing Rust imaginary payload for variable '{}'",
+            rust.name
+        ));
     };
     let python_real = numeric_to_f64(&python.real);
     let rust_real = numeric_to_f64(&rust.real);
@@ -633,7 +657,11 @@ fn compare_complex_values(
         };
         max_abs = max_abs.max(abs_diff);
         if !within_tolerance(abs_diff, scale, tolerance) {
-            let kind = if wrap_key { "Wrap mismatch" } else { "Value mismatch" };
+            let kind = if wrap_key {
+                "Wrap mismatch"
+            } else {
+                "Value mismatch"
+            };
             return Err(format!(
                 "{kind} for {} variable '{}', max_abs={max_abs:.6e}",
                 python.name, python.name
@@ -646,15 +674,29 @@ fn compare_complex_values(
 fn numeric_to_f64(data: &pystamps_mat::NumericData) -> Vec<f64> {
     match data {
         pystamps_mat::NumericData::F64(values) => values.clone(),
-        pystamps_mat::NumericData::F32(values) => values.iter().map(|&value| value as f64).collect(),
+        pystamps_mat::NumericData::F32(values) => {
+            values.iter().map(|&value| value as f64).collect()
+        }
         pystamps_mat::NumericData::I8(values) => values.iter().map(|&value| value as f64).collect(),
         pystamps_mat::NumericData::U8(values) => values.iter().map(|&value| value as f64).collect(),
-        pystamps_mat::NumericData::I16(values) => values.iter().map(|&value| value as f64).collect(),
-        pystamps_mat::NumericData::U16(values) => values.iter().map(|&value| value as f64).collect(),
-        pystamps_mat::NumericData::I32(values) => values.iter().map(|&value| value as f64).collect(),
-        pystamps_mat::NumericData::U32(values) => values.iter().map(|&value| value as f64).collect(),
-        pystamps_mat::NumericData::I64(values) => values.iter().map(|&value| value as f64).collect(),
-        pystamps_mat::NumericData::U64(values) => values.iter().map(|&value| value as f64).collect(),
+        pystamps_mat::NumericData::I16(values) => {
+            values.iter().map(|&value| value as f64).collect()
+        }
+        pystamps_mat::NumericData::U16(values) => {
+            values.iter().map(|&value| value as f64).collect()
+        }
+        pystamps_mat::NumericData::I32(values) => {
+            values.iter().map(|&value| value as f64).collect()
+        }
+        pystamps_mat::NumericData::U32(values) => {
+            values.iter().map(|&value| value as f64).collect()
+        }
+        pystamps_mat::NumericData::I64(values) => {
+            values.iter().map(|&value| value as f64).collect()
+        }
+        pystamps_mat::NumericData::U64(values) => {
+            values.iter().map(|&value| value as f64).collect()
+        }
     }
 }
 
@@ -788,13 +830,8 @@ mod tests {
         let rust = root.join("rust");
         fs::create_dir_all(python.join("PATCH_1")).unwrap();
         fs::create_dir_all(rust.join("PATCH_1")).unwrap();
-        write_example_artifact(
-            python.join("PATCH_1/artifact.mat"),
-            1,
-            1,
-            vec![(1.0, 0.0)],
-        )
-        .unwrap();
+        write_example_artifact(python.join("PATCH_1/artifact.mat"), 1, 1, vec![(1.0, 0.0)])
+            .unwrap();
 
         let summary = compare_fixture_artifacts(
             1,

@@ -5,8 +5,8 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use pystamps_core::{
-    execute_pipeline_cli_bridge, plan_pipeline, processing_chain_coverage, CliBridgeOptions, RunRequest,
-    RuntimeOptions, StageCoverage, StageResult,
+    execute_pipeline_cli_bridge, plan_pipeline, processing_chain_coverage, CliBridgeOptions,
+    RunRequest, RuntimeOptions, StageCoverage, StageResult,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -284,7 +284,8 @@ async fn run_job(state: AppState, id: String) {
         ..CliBridgeOptions::default()
     };
     let execution =
-        tokio::task::spawn_blocking(move || execute_pipeline_cli_bridge(&core_request, &options)).await;
+        tokio::task::spawn_blocking(move || execute_pipeline_cli_bridge(&core_request, &options))
+            .await;
 
     let mut jobs = state.jobs.write().await;
     let Some(job) = jobs.get_mut(&id) else {
@@ -313,7 +314,11 @@ async fn run_job(state: AppState, id: String) {
 }
 
 fn validate_form(form: &RunForm) -> Result<(), AppError> {
-    if form.start_step == 0 || form.end_step == 0 || form.start_step > form.end_step || form.end_step > 8 {
+    if form.start_step == 0
+        || form.end_step == 0
+        || form.start_step > form.end_step
+        || form.end_step > 8
+    {
         return Err(AppError::bad_request("stage range must be within 1..8"));
     }
     if form.dataset.trim().is_empty() {

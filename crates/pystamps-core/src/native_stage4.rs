@@ -158,7 +158,10 @@ pub fn run_stage4_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
             let small_baseline = parms.small_baseline_flag.eq_ignore_ascii_case("y");
             let master_ix = scalar_from_mat(&ps1, "master_ix", 1.0).round() as usize;
             if !small_baseline && (master_ix == 0 || master_ix > ph1.cols) {
-                return stage4_err(format!("ps1.master_ix must be 1-based within ph1 width {}; got {master_ix}", ph1.cols));
+                return stage4_err(format!(
+                    "ps1.master_ix must be 1-based within ph1 width {}; got {master_ix}",
+                    ph1.cols
+                ));
             }
 
             let mut ph_weed = Vec::with_capacity(n_pre_noise * ifg_cols.len());
@@ -238,7 +241,8 @@ pub fn run_stage4_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
 }
 
 fn read_mat_stage4(patch_dir: &Path, filename: &str) -> Result<MatData, CoreError> {
-    MatData::read(patch_dir.join(filename)).map_err(|err| stage4_err_owned(format!("unable to read {filename}: {err}")))
+    MatData::read(patch_dir.join(filename))
+        .map_err(|err| stage4_err_owned(format!("unable to read {filename}: {err}")))
 }
 
 fn load_stage4_parms(patch_dir: &Path) -> Stage4Parms {
@@ -274,8 +278,18 @@ fn write_weed1(
 ) -> Result<(), CoreError> {
     let mut mat = MatFile::new(patch_dir.join("weed1.mat"));
     mat.add_f64_row_vector("ifg_index", ifg_index.to_vec())?;
-    mat.add_u8_matrix("ix_weed", ix_weed.len(), 1, ix_weed.iter().map(|&keep| u8::from(keep)).collect())?;
-    mat.add_u8_matrix("ix_weed2", ix_weed2.len(), 1, ix_weed2.iter().map(|&keep| u8::from(keep)).collect())?;
+    mat.add_u8_matrix(
+        "ix_weed",
+        ix_weed.len(),
+        1,
+        ix_weed.iter().map(|&keep| u8::from(keep)).collect(),
+    )?;
+    mat.add_u8_matrix(
+        "ix_weed2",
+        ix_weed2.len(),
+        1,
+        ix_weed2.iter().map(|&keep| u8::from(keep)).collect(),
+    )?;
     mat.add_f32_col_vector("ps_max", ps_max.iter().map(|&value| value as f32).collect())?;
     mat.add_f32_col_vector("ps_std", ps_std.iter().map(|&value| value as f32).collect())?;
     mat.write()?;
@@ -433,13 +447,18 @@ fn stage4_edge_stats_kernel(
 ) -> Result<EdgeStats, CoreError> {
     validate_stage4_edge_topology(edges, n_node)?;
     if ph.len() != n_node * n_ifg {
-        return stage4_err(format!("stage4_edge_stats phase matrix has {} values for {n_node}x{n_ifg}", ph.len()));
+        return stage4_err(format!(
+            "stage4_edge_stats phase matrix has {} values for {n_node}x{n_ifg}",
+            ph.len()
+        ));
     }
     if bperp.len() != n_ifg {
         return stage4_err("stage4_edge_stats bperp vector must match phase width");
     }
     if !small_baseline && day.len() != n_ifg {
-        return stage4_err("stage4_edge_stats day vector must match phase width for non-small-baseline mode");
+        return stage4_err(
+            "stage4_edge_stats day vector must match phase width for non-small-baseline mode",
+        );
     }
     let mut ps_std = vec![f64::INFINITY; n_node];
     let mut ps_max = vec![f64::INFINITY; n_node];
@@ -451,7 +470,8 @@ fn stage4_edge_stats_kernel(
     let mut dph_space = vec![Complex64::new(0.0, 0.0); n_edge * n_ifg];
     for (edge_ix, &(a, b)) in edges.iter().enumerate() {
         for ifg_ix in 0..n_ifg {
-            dph_space[edge_ix * n_ifg + ifg_ix] = ph[b * n_ifg + ifg_ix] * ph[a * n_ifg + ifg_ix].conj();
+            dph_space[edge_ix * n_ifg + ifg_ix] =
+                ph[b * n_ifg + ifg_ix] * ph[a * n_ifg + ifg_ix].conj();
         }
     }
 
@@ -516,7 +536,8 @@ fn stage4_single_master_edge_stats(
     let mut dph_smooth2 = dph_smooth0.clone();
     for edge in 0..n_edge {
         for ifg in 0..n_ifg {
-            dph_smooth2[edge * n_ifg + ifg] -= dph_space[edge * n_ifg + ifg] * weight_all[ifg * n_ifg + ifg];
+            dph_smooth2[edge * n_ifg + ifg] -=
+                dph_space[edge * n_ifg + ifg] * weight_all[ifg * n_ifg + ifg];
         }
     }
 
@@ -531,20 +552,23 @@ fn stage4_single_master_edge_stats(
             dph_mean[edge] = mean;
             let mean_conj = mean.conj();
             for col in 0..n_ifg {
-                dph_mean_adj[edge * n_ifg + col] = (dph_space[edge * n_ifg + col] * mean_conj).arg();
+                dph_mean_adj[edge * n_ifg + col] =
+                    (dph_space[edge * n_ifg + col] * mean_conj).arg();
             }
         }
         let (m0, m1) = weighted_affine_fit_rows(time_diff, &dph_mean_adj, n_edge, n_ifg, weight);
         let mut dph_mean_adj2 = vec![0.0; n_edge * n_ifg];
         for edge in 0..n_edge {
             for col in 0..n_ifg {
-                let detrended = dph_mean_adj[edge * n_ifg + col] - (m0[edge] + m1[edge] * time_diff[col]);
+                let detrended =
+                    dph_mean_adj[edge * n_ifg + col] - (m0[edge] + m1[edge] * time_diff[col]);
                 dph_mean_adj2[edge * n_ifg + col] = wrap_phase(detrended);
             }
         }
         let (m20, _) = weighted_affine_fit_rows(time_diff, &dph_mean_adj2, n_edge, n_ifg, weight);
         for edge in 0..n_edge {
-            dph_smooth[edge * n_ifg + ifg] = dph_mean[edge] * Complex64::from_polar(1.0, m0[edge] + m20[edge]);
+            dph_smooth[edge * n_ifg + ifg] =
+                dph_mean[edge] * Complex64::from_polar(1.0, m0[edge] + m20[edge]);
         }
     }
 
@@ -552,15 +576,23 @@ fn stage4_single_master_edge_stats(
     let mut dph_noise2 = vec![0.0; n_edge * n_ifg];
     for edge in 0..n_edge {
         for ifg in 0..n_ifg {
-            dph_noise[edge * n_ifg + ifg] = (dph_space[edge * n_ifg + ifg] * dph_smooth[edge * n_ifg + ifg].conj()).arg();
-            dph_noise2[edge * n_ifg + ifg] = (dph_space[edge * n_ifg + ifg] * dph_smooth2[edge * n_ifg + ifg].conj()).arg();
+            dph_noise[edge * n_ifg + ifg] =
+                (dph_space[edge * n_ifg + ifg] * dph_smooth[edge * n_ifg + ifg].conj()).arg();
+            dph_noise2[edge * n_ifg + ifg] =
+                (dph_space[edge * n_ifg + ifg] * dph_smooth2[edge * n_ifg + ifg].conj()).arg();
         }
     }
 
     let ifg_var = variance_cols_real(&dph_noise2, n_edge, n_ifg, usize::from(n_edge > 1));
     let w_ifg: Vec<f64> = ifg_var
         .iter()
-        .map(|&value| if value == 0.0 { f64::INFINITY } else { 1.0 / value })
+        .map(|&value| {
+            if value == 0.0 {
+                f64::INFINITY
+            } else {
+                1.0 / value
+            }
+        })
         .collect();
     let k_edge = weighted_slope_fit_rows_real(bperp, &dph_noise, n_edge, n_ifg, &w_ifg);
     for edge in 0..n_edge {
@@ -580,19 +612,29 @@ fn stage4_small_baseline_edge_stats(
     let ifg_var = variance_cols_complex(dph_space, n_edge, n_ifg, usize::from(n_edge > 1));
     let w_ifg: Vec<f64> = ifg_var
         .iter()
-        .map(|&value| if value == 0.0 { f64::INFINITY } else { 1.0 / value })
+        .map(|&value| {
+            if value == 0.0 {
+                f64::INFINITY
+            } else {
+                1.0 / value
+            }
+        })
         .collect();
     let k_edge = weighted_slope_fit_rows_complex(bperp, dph_space, n_edge, n_ifg, &w_ifg);
     let mut ang = vec![0.0; n_edge * n_ifg];
     for edge in 0..n_edge {
         for ifg in 0..n_ifg {
-            ang[edge * n_ifg + ifg] = (dph_space[edge * n_ifg + ifg] - k_edge[edge] * bperp[ifg]).arg();
+            ang[edge * n_ifg + ifg] =
+                (dph_space[edge * n_ifg + ifg] - k_edge[edge] * bperp[ifg]).arg();
         }
     }
     std_max_rows_real(&ang, n_edge, n_ifg, usize::from(n_ifg > 1))
 }
 
-fn validate_stage4_edge_topology(edges: &[(usize, usize)], n_nodes: usize) -> Result<(), CoreError> {
+fn validate_stage4_edge_topology(
+    edges: &[(usize, usize)],
+    n_nodes: usize,
+) -> Result<(), CoreError> {
     for (pos, &(a, b)) in edges.iter().enumerate() {
         if a >= n_nodes || b >= n_nodes || a == b {
             return stage4_err(format!(
@@ -604,20 +646,37 @@ fn validate_stage4_edge_topology(edges: &[(usize, usize)], n_nodes: usize) -> Re
     Ok(())
 }
 
-fn weighted_affine_fit_rows(time_diff: &[f64], y: &[f64], n_row: usize, n_col: usize, w: &[f64]) -> (Vec<f64>, Vec<f64>) {
+fn weighted_affine_fit_rows(
+    time_diff: &[f64],
+    y: &[f64],
+    n_row: usize,
+    n_col: usize,
+    w: &[f64],
+) -> (Vec<f64>, Vec<f64>) {
     let mut intercept = vec![0.0; n_row];
     let mut slope = vec![0.0; n_row];
     if n_row == 0 || n_col == 0 {
         return (intercept, slope);
     }
     let s0: f64 = w.iter().sum();
-    let s1: f64 = w.iter().zip(time_diff.iter()).map(|(&wi, &ti)| wi * ti).sum();
-    let s2: f64 = w.iter().zip(time_diff.iter()).map(|(&wi, &ti)| wi * ti * ti).sum();
+    let s1: f64 = w
+        .iter()
+        .zip(time_diff.iter())
+        .map(|(&wi, &ti)| wi * ti)
+        .sum();
+    let s2: f64 = w
+        .iter()
+        .zip(time_diff.iter())
+        .map(|(&wi, &ti)| wi * ti * ti)
+        .sum();
     let det = s0 * s2 - s1 * s1;
     if det == 0.0 {
         if s0 != 0.0 {
             for row in 0..n_row {
-                intercept[row] = (0..n_col).map(|col| y[row * n_col + col] * w[col]).sum::<f64>() / s0;
+                intercept[row] = (0..n_col)
+                    .map(|col| y[row * n_col + col] * w[col])
+                    .sum::<f64>()
+                    / s0;
             }
         }
         return (intercept, slope);
@@ -636,19 +695,33 @@ fn weighted_affine_fit_rows(time_diff: &[f64], y: &[f64], n_row: usize, n_col: u
     (intercept, slope)
 }
 
-fn weighted_slope_fit_rows_real(x: &[f64], y: &[f64], n_row: usize, n_col: usize, w: &[f64]) -> Vec<f64> {
+fn weighted_slope_fit_rows_real(
+    x: &[f64],
+    y: &[f64],
+    n_row: usize,
+    n_col: usize,
+    w: &[f64],
+) -> Vec<f64> {
     let mut out = vec![0.0; n_row];
     if n_row == 0 || n_col == 0 {
         return out;
     }
-    let inf_idx: Vec<usize> = w.iter().enumerate().filter_map(|(idx, &value)| value.is_infinite().then_some(idx)).collect();
+    let inf_idx: Vec<usize> = w
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| value.is_infinite().then_some(idx))
+        .collect();
     if !inf_idx.is_empty() {
         let den: f64 = inf_idx.iter().map(|&idx| x[idx] * x[idx]).sum();
         if den == 0.0 {
             return out;
         }
         for row in 0..n_row {
-            out[row] = inf_idx.iter().map(|&col| y[row * n_col + col] * x[col]).sum::<f64>() / den;
+            out[row] = inf_idx
+                .iter()
+                .map(|&col| y[row * n_col + col] * x[col])
+                .sum::<f64>()
+                / den;
         }
         return out;
     }
@@ -674,12 +747,22 @@ fn weighted_slope_fit_rows_real(x: &[f64], y: &[f64], n_row: usize, n_col: usize
     out
 }
 
-fn weighted_slope_fit_rows_complex(x: &[f64], y: &[Complex64], n_row: usize, n_col: usize, w: &[f64]) -> Vec<Complex64> {
+fn weighted_slope_fit_rows_complex(
+    x: &[f64],
+    y: &[Complex64],
+    n_row: usize,
+    n_col: usize,
+    w: &[f64],
+) -> Vec<Complex64> {
     let mut out = vec![Complex64::new(0.0, 0.0); n_row];
     if n_row == 0 || n_col == 0 {
         return out;
     }
-    let inf_idx: Vec<usize> = w.iter().enumerate().filter_map(|(idx, &value)| value.is_infinite().then_some(idx)).collect();
+    let inf_idx: Vec<usize> = w
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| value.is_infinite().then_some(idx))
+        .collect();
     if !inf_idx.is_empty() {
         let den: f64 = inf_idx.iter().map(|&idx| x[idx] * x[idx]).sum();
         if den == 0.0 {
@@ -748,7 +831,10 @@ fn variance_cols_complex(data: &[Complex64], n_row: usize, n_col: usize, ddof: u
         return out;
     }
     for col in 0..n_col {
-        let mean = (0..n_row).map(|row| data[row * n_col + col]).sum::<Complex64>() / n_row as f64;
+        let mean = (0..n_row)
+            .map(|row| data[row * n_col + col])
+            .sum::<Complex64>()
+            / n_row as f64;
         out[col] = (0..n_row)
             .map(|row| (data[row * n_col + col] - mean).norm_sqr())
             .sum::<f64>()
@@ -757,7 +843,12 @@ fn variance_cols_complex(data: &[Complex64], n_row: usize, n_col: usize, ddof: u
     out
 }
 
-fn std_max_rows_real(data: &[f64], n_row: usize, n_col: usize, ddof: usize) -> (Vec<f64>, Vec<f64>) {
+fn std_max_rows_real(
+    data: &[f64],
+    n_row: usize,
+    n_col: usize,
+    ddof: usize,
+) -> (Vec<f64>, Vec<f64>) {
     let mut std = vec![0.0; n_row];
     let mut max_abs = vec![0.0; n_row];
     if n_row == 0 || n_col == 0 {
@@ -773,7 +864,11 @@ fn std_max_rows_real(data: &[f64], n_row: usize, n_col: usize, ddof: usize) -> (
             accum += (value - mean) * (value - mean);
             max_value = max_value.max(value.abs());
         }
-        std[row] = if denom == 0 { 0.0 } else { (accum / denom as f64).sqrt() };
+        std[row] = if denom == 0 {
+            0.0
+        } else {
+            (accum / denom as f64).sqrt()
+        };
         max_abs[row] = max_value;
     }
     (std, max_abs)
@@ -785,7 +880,10 @@ fn wrap_phase(value: f64) -> f64 {
 
 fn mul_exp_neg_i(value: Complex64, theta: f64) -> Complex64 {
     let (sin, cos) = theta.sin_cos();
-    Complex64::new(value.re * cos + value.im * sin, value.im * cos - value.re * sin)
+    Complex64::new(
+        value.re * cos + value.im * sin,
+        value.im * cos - value.re * sin,
+    )
 }
 
 fn normalize_complex(value: Complex64) -> Complex64 {
@@ -804,13 +902,19 @@ fn load_hgt1(patch_dir: &Path, n_ps: usize) -> Result<Option<Vec<f64>>, CoreErro
     }
     let hgt = read_mat_stage4(patch_dir, "hgt1.mat")?;
     let values = optional_vector_f64(&hgt, "hgt")
-        .or_else(|| optional_vector_f32(&hgt, "hgt").map(|values| values.into_iter().map(|value| value as f64).collect()))
+        .or_else(|| {
+            optional_vector_f32(&hgt, "hgt")
+                .map(|values| values.into_iter().map(|value| value as f64).collect())
+        })
         .ok_or_else(|| CoreError::NativeStage {
             stage: 4,
             message: "hgt1.mat missing hgt".to_string(),
         })?;
     if values.len() != n_ps {
-        return stage4_err(format!("hgt1.hgt has incompatible length {} for n_ps={n_ps}", values.len()));
+        return stage4_err(format!(
+            "hgt1.hgt has incompatible length {} for n_ps={n_ps}",
+            values.len()
+        ));
     }
     Ok(Some(values))
 }
@@ -857,7 +961,12 @@ fn vector_i64(mat: &MatData, name: &str, label: &str) -> Result<Vec<i64>, CoreEr
         .collect())
 }
 
-fn bool_vector_or_default(mat: &MatData, name: &str, expected_len: usize, default_value: bool) -> Vec<bool> {
+fn bool_vector_or_default(
+    mat: &MatData,
+    name: &str,
+    expected_len: usize,
+    default_value: bool,
+) -> Vec<bool> {
     let Some(values) = optional_vector_f64(mat, name) else {
         return vec![default_value; expected_len];
     };
@@ -867,22 +976,38 @@ fn bool_vector_or_default(mat: &MatData, name: &str, expected_len: usize, defaul
     values.into_iter().map(|value| value != 0.0).collect()
 }
 
-fn ps_vector_f64(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Vec<f64>, CoreError> {
+fn ps_vector_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Vec<f64>, CoreError> {
     let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
         stage: 4,
         message: format!("{label} is missing"),
     })?;
     if values.len() != n_ps {
-        return stage4_err(format!("{label} has incompatible length {} for n_ps={n_ps}", values.len()));
+        return stage4_err(format!(
+            "{label} has incompatible length {} for n_ps={n_ps}",
+            values.len()
+        ));
     }
     Ok(values)
 }
 
-fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str) -> Result<Matrix<f64>, CoreError> {
-    let source = mat.get_f64_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 4,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_dim_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
+    let source = mat
+        .get_f64_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 4,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -895,11 +1020,18 @@ fn ps_dim_f64(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str)
     ))
 }
 
-fn ps_complex_matrix(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<ComplexMatrixF32, CoreError> {
-    let source = mat.get_complex_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 4,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_complex_matrix(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<ComplexMatrixF32, CoreError> {
+    let source = mat
+        .get_complex_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 4,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -993,7 +1125,10 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
 fn resolve_file_optional(patch_dir: &Path, filename: &str) -> Option<PathBuf> {
     [
         patch_dir.join(filename),
-        patch_dir.parent().map(|parent| parent.join(filename)).unwrap_or_default(),
+        patch_dir
+            .parent()
+            .map(|parent| parent.join(filename))
+            .unwrap_or_default(),
         patch_dir
             .parent()
             .and_then(|parent| parent.parent())
@@ -1096,9 +1231,12 @@ mod tests {
 
     fn write_parms(patch: &Path) {
         let mut mat = MatFile::new(patch.join("parms.mat"));
-        mat.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32]).unwrap();
-        mat.add_u32_matrix("weed_neighbours", 1, 1, vec!['n' as u32]).unwrap();
-        mat.add_u32_matrix("weed_zero_elevation", 1, 1, vec!['y' as u32]).unwrap();
+        mat.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32])
+            .unwrap();
+        mat.add_u32_matrix("weed_neighbours", 1, 1, vec!['n' as u32])
+            .unwrap();
+        mat.add_u32_matrix("weed_zero_elevation", 1, 1, vec!['y' as u32])
+            .unwrap();
         mat.add_f64_scalar("weed_standard_dev", 1.0).unwrap();
         mat.add_f64_scalar("weed_max_noise", 1.0).unwrap();
         mat.add_f64_scalar("weed_time_win", 360.0).unwrap();
@@ -1106,22 +1244,16 @@ mod tests {
     }
 
     fn write_ps1(patch: &Path) {
-        let ij = vec![
-            1.0, 10.0, 10.0,
-            2.0, 10.0, 20.0,
-            3.0, 20.0, 10.0,
-        ];
-        let xy = vec![
-            1.0, 0.0, 0.0,
-            2.0, 1.0, 0.0,
-            3.0, 0.0, 1.0,
-        ];
+        let ij = vec![1.0, 10.0, 10.0, 2.0, 10.0, 20.0, 3.0, 20.0, 10.0];
+        let xy = vec![1.0, 0.0, 0.0, 2.0, 1.0, 0.0, 3.0, 0.0, 1.0];
         let mut mat = MatFile::new(patch.join("ps1.mat"));
         mat.add_f64_scalar("n_ps", 3.0).unwrap();
         mat.add_f64_scalar("n_ifg", 4.0).unwrap();
         mat.add_f64_scalar("master_ix", 1.0).unwrap();
-        mat.add_f64_row_vector("bperp", vec![0.0, 10.0, 20.0, 30.0]).unwrap();
-        mat.add_f64_row_vector("day", vec![20200101.0, 20200113.0, 20200125.0, 20200206.0]).unwrap();
+        mat.add_f64_row_vector("bperp", vec![0.0, 10.0, 20.0, 30.0])
+            .unwrap();
+        mat.add_f64_row_vector("day", vec![20200101.0, 20200113.0, 20200125.0, 20200206.0])
+            .unwrap();
         mat.add_f64_matrix("ij", 3, 3, ij).unwrap();
         mat.add_f64_matrix("xy", 3, 3, xy).unwrap();
         mat.write().unwrap();
@@ -1141,7 +1273,8 @@ mod tests {
 
     fn write_pm1(patch: &Path) {
         let mut mat = MatFile::new(patch.join("pm1.mat"));
-        mat.add_f64_row_vector("coh_ps", vec![0.8, 0.7, 0.6]).unwrap();
+        mat.add_f64_row_vector("coh_ps", vec![0.8, 0.7, 0.6])
+            .unwrap();
         mat.write().unwrap();
     }
 
@@ -1149,15 +1282,19 @@ mod tests {
         let mut mat = MatFile::new(patch.join("select1.mat"));
         mat.add_f64_col_vector("ix", vec![1.0, 2.0, 3.0]).unwrap();
         mat.add_u8_matrix("keep_ix", 3, 1, vec![1, 1, 1]).unwrap();
-        mat.add_f64_col_vector("K_ps2", vec![0.0, 0.0, 0.0]).unwrap();
-        mat.add_f64_col_vector("C_ps2", vec![0.0, 0.0, 0.0]).unwrap();
-        mat.add_f64_col_vector("coh_ps2", vec![0.8, 0.7, 0.6]).unwrap();
+        mat.add_f64_col_vector("K_ps2", vec![0.0, 0.0, 0.0])
+            .unwrap();
+        mat.add_f64_col_vector("C_ps2", vec![0.0, 0.0, 0.0])
+            .unwrap();
+        mat.add_f64_col_vector("coh_ps2", vec![0.8, 0.7, 0.6])
+            .unwrap();
         mat.write().unwrap();
     }
 
     fn write_hgt1(patch: &Path) {
         let mut mat = MatFile::new(patch.join("hgt1.mat"));
-        mat.add_f32_col_vector("hgt", vec![10.0, 11.0, 12.0]).unwrap();
+        mat.add_f32_col_vector("hgt", vec![10.0, 11.0, 12.0])
+            .unwrap();
         mat.write().unwrap();
     }
 

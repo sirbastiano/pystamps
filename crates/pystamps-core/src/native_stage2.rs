@@ -3,9 +3,11 @@ use num_complex::{Complex32, Complex64};
 use pystamps_mat::{ComplexMatrixF32, MatData, MatFile, Matrix};
 use rayon::prelude::*;
 use rustfft::FftPlanner;
+use std::fs;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const DEFAULT_GRID_SIZE: f64 = 50.0;
 const DEFAULT_CLAP_WIN: f64 = 32.0;
@@ -18,7 +20,13 @@ const DEFAULT_MEAN_INCIDENCE: f64 = 23.0_f64.to_radians();
 const COH_BIN_COUNT: usize = 100;
 const COH_BIN_START: f64 = 0.005;
 const COH_BIN_STEP: f64 = 0.01;
-const STAGE2_TOPOFIT_NEAR_MAX_COH_TOL: f64 = 2.0e-4;
+const HDF5_SIGNATURE: &[u8; 8] = b"\x89HDF\r\n\x1a\n";
+const HDF5_SIGNATURE_SCAN_BYTES: usize = 1024 * 1024;
+const STAGE2_RANDOM_SEED: u32 = 2005;
+#[cfg(not(test))]
+const STAGE2_RANDOM_COUNT: usize = 300_000;
+#[cfg(test)]
+const STAGE2_RANDOM_COUNT: usize = 10_000;
 
 #[derive(Clone, Copy, Debug)]
 struct Stage2Options {
@@ -80,10 +88,13 @@ struct Stage2Prepared {
     d_a: Vec<f64>,
     low_pass: Matrix<f64>,
     coh_bins: Vec<f64>,
+    nr_base: Vec<f64>,
+    nr_max_nz_ix: f64,
     n_trial_wraps: f64,
     trial_values: Vec<f64>,
     grid_size: f64,
     clap_window: usize,
+    low_coh_thresh: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -128,10 +139,9 @@ pub fn run_stage2_native_with_options(
 }
 
 fn run_stage2_native_inner(patch_dir: &Path) -> Result<String, CoreError> {
-    let parms_mat =
-        resolve_file_optional(patch_dir, "parms.mat").and_then(|path| MatData::read(path).ok());
-    let parms = load_stage2_parms(parms_mat.as_ref());
-    let options = load_stage2_options(parms_mat.as_ref());
+    let parms_source = Stage2ParmSource::from_patch(patch_dir);
+    let parms = load_stage2_parms(&parms_source);
+    let options = load_stage2_options(&parms_source);
     let prepared = prepare_stage2_inputs(patch_dir, &parms, &options)?;
     eprintln!(
         "stage2 native setup: n_ps={} n_ifg={} grid={}x{} clap_window={} trial_values={} max_iterations={} threads={}",
@@ -161,9 +171,8 @@ fn run_stage2_native_inner(patch_dir: &Path) -> Result<String, CoreError> {
     let mut ph_grid = vec![Complex32::new(0.0, 0.0); prepared.n_i * prepared.n_j * prepared.n_ifg];
     let mut ph_filt = vec![Complex32::new(0.0, 0.0); prepared.n_i * prepared.n_j * prepared.n_ifg];
     let mut ph_weight = vec![Complex32::new(0.0, 0.0); prepared.n_ps * prepared.n_ifg];
-    let nr_base = vec![1.0; prepared.coh_bins.len()];
-    let mut nr_scaled_last = nr_base.clone();
-    let nr_max_nz_ix = prepared.coh_bins.len() as f64;
+    let mut nr_scaled_last = prepared.nr_base.clone();
+    let debug_pm_iterations = std::env::var_os("PYSTAMPS_STAGE2_NATIVE_DEBUG_PM").is_some();
 
     let mut i_loop = 1usize;
     loop {
@@ -225,6 +234,7 @@ fn run_stage2_native_inner(patch_dir: &Path) -> Result<String, CoreError> {
             );
             write_pm1(
                 patch_dir,
+                "pm1.mat",
                 &prepared,
                 &k_ps,
                 &c_ps,
@@ -235,11 +245,31 @@ fn run_stage2_native_inner(patch_dir: &Path) -> Result<String, CoreError> {
                 &ph_grid,
                 &ph_weight,
                 &nr_scaled_last,
-                nr_max_nz_ix,
+                prepared.nr_max_nz_ix,
                 &coh_ps_save,
                 gamma_change_save,
                 iteration,
             )?;
+            if debug_pm_iterations {
+                write_pm1(
+                    patch_dir,
+                    &format!("pm1_iter_{iteration:02}.mat"),
+                    &prepared,
+                    &k_ps,
+                    &c_ps,
+                    &coh_ps,
+                    &n_opt,
+                    &ph_res,
+                    &ph_patch,
+                    &ph_grid,
+                    &ph_weight,
+                    &nr_scaled_last,
+                    prepared.nr_max_nz_ix,
+                    &coh_ps_save,
+                    gamma_change_save,
+                    iteration,
+                )?;
+            }
             break;
         }
         eprintln!(
@@ -249,22 +279,42 @@ fn run_stage2_native_inner(patch_dir: &Path) -> Result<String, CoreError> {
 
         if parms.filter_weighting.eq_ignore_ascii_case("P-square") {
             let na = hist_with_centers(&coh_ps, &prepared.coh_bins);
-            let low_coh_thresh = if parms.small_baseline_flag.eq_ignore_ascii_case("y") {
-                15
-            } else {
-                31
-            };
-            let denom: f64 = nr_base.iter().take(low_coh_thresh).sum();
+            let denom: f64 = prepared.nr_base.iter().take(prepared.low_coh_thresh).sum();
             let scale = if denom > 0.0 {
-                na.iter().take(low_coh_thresh).sum::<f64>() / denom
+                na.iter().take(prepared.low_coh_thresh).sum::<f64>() / denom
             } else {
                 1.0
             };
-            nr_scaled_last = nr_base.iter().map(|value| value * scale).collect();
-            weighting =
-                psquare_weighting(&nr_scaled_last, &na, low_coh_thresh, nr_max_nz_ix, &coh_ps);
+            nr_scaled_last = prepared.nr_base.iter().map(|value| value * scale).collect();
+            weighting = psquare_weighting(
+                &nr_scaled_last,
+                &na,
+                prepared.low_coh_thresh,
+                prepared.nr_max_nz_ix,
+                &coh_ps,
+            );
         } else {
             weighting = snr_weighting(&prepared, &ph_res);
+        }
+        if debug_pm_iterations {
+            write_pm1(
+                patch_dir,
+                &format!("pm1_iter_{iteration:02}.mat"),
+                &prepared,
+                &k_ps,
+                &c_ps,
+                &coh_ps,
+                &n_opt,
+                &ph_res,
+                &ph_patch,
+                &ph_grid,
+                &ph_weight,
+                &nr_scaled_last,
+                prepared.nr_max_nz_ix,
+                &coh_ps_save,
+                gamma_change_save,
+                iteration,
+            )?;
         }
         i_loop += 1;
     }
@@ -297,7 +347,10 @@ fn prepare_stage2_inputs(
             "ps1.master_ix must be 1-based within ph1 width {n_ifg_full}; got {master_ix}"
         ));
     }
-    let bperp_full = vector_f64(&ps, "bperp", "ps1.bperp")?;
+    let bperp_full = vector_f64(&ps, "bperp", "ps1.bperp")?
+        .into_iter()
+        .map(|value| value as f32 as f64)
+        .collect::<Vec<_>>();
     if bperp_full.len() != n_ifg_full {
         return stage2_err(format!(
             "ps1.bperp has length {} but ph1.ph has {n_ifg_full} interferograms",
@@ -381,6 +434,20 @@ fn prepare_stage2_inputs(
     );
     let n_trial_wraps = ((max_bp - min_bp) * max_k / (2.0 * std::f64::consts::PI)) as f64;
     let trial_values = trial_values(n_trial_wraps);
+    let low_coh_thresh = if parms.small_baseline_flag.eq_ignore_ascii_case("y") {
+        15
+    } else {
+        31
+    };
+    let (nr_base, nr_max_nz_ix) = random_coherence_histogram(
+        &bperp_nm,
+        n_trial_wraps,
+        &trial_values,
+        &coh_bins,
+        parms,
+        &ps,
+        n_ifg,
+    )?;
 
     Ok(Stage2Prepared {
         n_ps,
@@ -397,10 +464,13 @@ fn prepare_stage2_inputs(
         d_a,
         low_pass,
         coh_bins,
+        nr_base,
+        nr_max_nz_ix,
         n_trial_wraps,
         trial_values,
         grid_size: options.grid_size,
         clap_window: (options.clap_win * 0.75).round().max(1.0) as usize,
+        low_coh_thresh,
     })
 }
 
@@ -1091,26 +1161,9 @@ fn topofit_row(cpx: &[Complex64], bperp: &[f64], trial_mult: &[f64]) -> TopofitR
         }
         coh_trial[trial_ix] = sum.norm() / denom;
     }
-    let candidate_ix = near_max_trial_indices(&coh_trial);
-    let mut refined = Vec::with_capacity(candidate_ix.len());
-    let mut candidate_coh = Vec::with_capacity(candidate_ix.len());
-    for &trial_ix in &candidate_ix {
-        let coarse_k0 = (std::f64::consts::PI / 4.0) / bperp_range * trial_mult[trial_ix];
-        refined.push(refine_candidate(&valid, cpx.len(), coarse_k0));
-        candidate_coh.push(coh_trial[trial_ix]);
-    }
-    let refined_coh = refined.iter().map(|row| row.coh).collect::<Vec<_>>();
-    let selected_trial_ix = select_candidate(
-        &candidate_ix,
-        &candidate_coh,
-        &refined_coh,
-        trial_mult.len(),
-    );
-    let selected_local_ix = candidate_ix
-        .iter()
-        .position(|&trial_ix| trial_ix == selected_trial_ix)
-        .unwrap_or(0);
-    refined.remove(selected_local_ix)
+    let trial_ix = argmax_first(&coh_trial);
+    let coarse_k0 = (std::f64::consts::PI / 4.0) / bperp_range * trial_mult[trial_ix];
+    refine_candidate(&valid, cpx.len(), coarse_k0)
 }
 
 fn refine_candidate(valid: &[(usize, Complex64, f64)], n_col: usize, coarse_k0: f64) -> TopofitRow {
@@ -1163,47 +1216,205 @@ fn trial_values(n_trial_wraps: f64) -> Vec<f64> {
     (-trial_n..=trial_n).map(|value| value as f64).collect()
 }
 
-fn near_max_trial_indices(coh_trial: &[f64]) -> Vec<usize> {
-    if coh_trial.len() <= 1 {
-        return vec![0];
-    }
-    let mut local_max = vec![false; coh_trial.len()];
-    local_max[0] = coh_trial[0] >= coh_trial[1];
-    local_max[coh_trial.len() - 1] =
-        coh_trial[coh_trial.len() - 1] >= coh_trial[coh_trial.len() - 2];
-    for idx in 1..coh_trial.len() - 1 {
-        local_max[idx] =
-            coh_trial[idx] >= coh_trial[idx - 1] && coh_trial[idx] >= coh_trial[idx + 1];
-    }
-    let max_coh = coh_trial.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let mut out = local_max
+fn random_coherence_histogram(
+    bperp_nm: &[f64],
+    _n_trial_wraps: f64,
+    trial_values: &[f64],
+    coh_bins: &[f64],
+    parms: &Stage2Parms,
+    ps: &MatData,
+    n_ifg: usize,
+) -> Result<(Vec<f64>, f64), CoreError> {
+    let mut rng = MatlabV5UniformRng::new(STAGE2_RANDOM_SEED);
+    let small_baseline = parms.small_baseline_flag.eq_ignore_ascii_case("y");
+    let nr = if small_baseline {
+        let (image_a, image_b, n_image) = small_baseline_random_indices(ps, n_ifg)?;
+        let mut image_phase = rng.uniform_flat(STAGE2_RANDOM_COUNT * n_image);
+        for value in &mut image_phase {
+            *value *= 2.0 * std::f64::consts::PI;
+        }
+        histogram_random_rows(
+            coh_bins,
+            STAGE2_RANDOM_COUNT,
+            |row, ifg| {
+                image_phase[row + image_b[ifg] * STAGE2_RANDOM_COUNT]
+                    - image_phase[row + image_a[ifg] * STAGE2_RANDOM_COUNT]
+            },
+            bperp_nm,
+            trial_values,
+        )
+    } else {
+        let mut ifg_phase = rng.uniform_flat(STAGE2_RANDOM_COUNT * n_ifg);
+        for value in &mut ifg_phase {
+            *value *= 2.0 * std::f64::consts::PI;
+        }
+        histogram_random_rows(
+            coh_bins,
+            STAGE2_RANDOM_COUNT,
+            |row, ifg| ifg_phase[row + ifg * STAGE2_RANDOM_COUNT],
+            bperp_nm,
+            trial_values,
+        )
+    };
+    let nr_max_nz_ix = nr
         .iter()
-        .enumerate()
-        .filter_map(|(idx, &is_local_max)| {
-            (is_local_max && coh_trial[idx] >= max_coh - STAGE2_TOPOFIT_NEAR_MAX_COH_TOL)
-                .then_some(idx)
-        })
-        .collect::<Vec<_>>();
-    if out.is_empty() {
-        out.push(argmax_first(coh_trial));
-    }
-    out
+        .rposition(|&value| value > 0.0)
+        .map(|ix| (ix + 1) as f64)
+        .unwrap_or(1.0);
+    Ok((nr, nr_max_nz_ix))
 }
 
-fn select_candidate(
-    candidate_ix: &[usize],
-    candidate_coh: &[f64],
-    refined_coh: &[f64],
-    trial_count: usize,
-) -> usize {
-    let coarse_best = candidate_ix[argmax_first(candidate_coh)];
-    if candidate_ix.len() == 1 {
-        return coarse_best;
+fn small_baseline_random_indices(
+    ps: &MatData,
+    n_ifg: usize,
+) -> Result<(Vec<usize>, Vec<usize>, usize), CoreError> {
+    let source = ps
+        .get_f64_matrix("ifgday_ix")
+        .map_err(|err| CoreError::NativeStage {
+            stage: 2,
+            message: format!("ps1.ifgday_ix is missing or invalid: {err}"),
+        })?;
+    let matrix = if source.rows == n_ifg && source.cols == 2 {
+        source
+    } else if source.rows == 2 && source.cols == n_ifg {
+        let mut values = Vec::with_capacity(source.values.len());
+        for row in 0..source.cols {
+            for col in 0..source.rows {
+                values.push(source.values[col * source.cols + row]);
+            }
+        }
+        Matrix {
+            name: source.name,
+            rows: source.cols,
+            cols: source.rows,
+            values,
+        }
+    } else {
+        return stage2_err(format!(
+            "ps1.ifgday_ix has incompatible shape {}x{} for n_ifg={n_ifg}",
+            source.rows, source.cols
+        ));
+    };
+    let mut image_a = Vec::with_capacity(n_ifg);
+    let mut image_b = Vec::with_capacity(n_ifg);
+    let mut n_image = 0usize;
+    for row in 0..n_ifg {
+        let a = matrix.values[row * 2].round() as isize;
+        let b = matrix.values[row * 2 + 1].round() as isize;
+        if a <= 0 || b <= 0 {
+            return stage2_err("ps1.ifgday_ix must contain positive one-based image ids");
+        }
+        n_image = n_image.max(a as usize).max(b as usize);
+        image_a.push(a as usize - 1);
+        image_b.push(b as usize - 1);
     }
-    if candidate_ix.len() == 2 && candidate_ix[0] == 0 && candidate_ix[1] == trial_count - 1 {
-        return coarse_best;
+    Ok((image_a, image_b, n_image))
+}
+
+fn histogram_random_rows<F>(
+    coh_bins: &[f64],
+    n_row: usize,
+    phase_at: F,
+    bperp: &[f64],
+    trial_values: &[f64],
+) -> Vec<f64>
+where
+    F: Fn(usize, usize) -> f64 + Sync,
+{
+    (0..n_row)
+        .into_par_iter()
+        .fold(
+            || vec![0.0; coh_bins.len()],
+            |mut hist, row| {
+                let coh = topofit_phase_row_coh(bperp.len(), bperp, trial_values, |ifg| {
+                    phase_at(row, ifg)
+                });
+                add_hist_value(&mut hist, coh_bins, coh);
+                hist
+            },
+        )
+        .reduce(
+            || vec![0.0; coh_bins.len()],
+            |mut left, right| {
+                for (left_value, right_value) in left.iter_mut().zip(right) {
+                    *left_value += right_value;
+                }
+                left
+            },
+        )
+}
+
+fn topofit_phase_row_coh<F>(
+    n_col: usize,
+    bperp: &[f64],
+    trial_values: &[f64],
+    mut phase_at: F,
+) -> f64
+where
+    F: FnMut(usize) -> f64,
+{
+    if n_col == 0 {
+        return f64::NAN;
     }
-    candidate_ix[argmax_first(refined_coh)]
+    let min_bp = bperp.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_bp = bperp.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let bperp_range = (max_bp - min_bp).max(1.0);
+    let denom = n_col as f64;
+    let mut coh_trial = vec![0.0; trial_values.len()];
+    for (trial_ix, &trial_value) in trial_values.iter().enumerate() {
+        let mut sum_re = 0.0;
+        let mut sum_im = 0.0;
+        for (ifg, &bp) in bperp.iter().enumerate().take(n_col) {
+            let phase =
+                phase_at(ifg) - (bp / bperp_range) * (std::f64::consts::PI / 4.0) * trial_value;
+            let (sn, cs) = phase.sin_cos();
+            sum_re += cs;
+            sum_im += sn;
+        }
+        coh_trial[trial_ix] = sum_re.hypot(sum_im) / denom;
+    }
+    let trial_ix = argmax_first(&coh_trial);
+    let coarse_k0 = (std::f64::consts::PI / 4.0) / bperp_range * trial_values[trial_ix];
+    refine_phase_candidate_coh(n_col, bperp, coarse_k0, |ifg| phase_at(ifg))
+}
+
+fn refine_phase_candidate_coh<F>(
+    n_col: usize,
+    bperp: &[f64],
+    coarse_k0: f64,
+    mut phase_at: F,
+) -> f64
+where
+    F: FnMut(usize) -> f64,
+{
+    let mut offset = Complex64::new(0.0, 0.0);
+    for (ifg, &bp) in bperp.iter().enumerate().take(n_col) {
+        let phase = phase_at(ifg) - coarse_k0 * bp;
+        let (sn, cs) = phase.sin_cos();
+        offset += Complex64::new(cs, sn);
+    }
+    let offset_conj = offset.conj();
+    let mut mopt_num = 0.0;
+    let mut den_lin = 0.0;
+    for (ifg, &bp) in bperp.iter().enumerate().take(n_col) {
+        den_lin += bp * bp;
+        let phase = phase_at(ifg) - coarse_k0 * bp;
+        let (sn, cs) = phase.sin_cos();
+        mopt_num += bp * (Complex64::new(cs, sn) * offset_conj).arg();
+    }
+    if den_lin == 0.0 {
+        den_lin = 1.0;
+    }
+    let k = coarse_k0 + mopt_num / den_lin;
+    let mut sum_re = 0.0;
+    let mut sum_im = 0.0;
+    for (ifg, &bp) in bperp.iter().enumerate().take(n_col) {
+        let phase = phase_at(ifg) - k * bp;
+        let (sn, cs) = phase.sin_cos();
+        sum_re += cs;
+        sum_im += sn;
+    }
+    sum_re.hypot(sum_im) / n_col.max(1) as f64
 }
 
 fn argmax_first(values: &[f64]) -> usize {
@@ -1223,20 +1434,102 @@ fn hist_with_centers(values: &[f64], centers: &[f64]) -> Vec<f64> {
         return Vec::new();
     }
     if centers.len() == 1 {
-        return vec![values.len() as f64];
+        return vec![values.iter().filter(|value| value.is_finite()).count() as f64];
     }
-    let mids = centers
-        .windows(2)
-        .map(|pair| (pair[0] + pair[1]) / 2.0)
-        .collect::<Vec<_>>();
+    let equal_spacing = histogram_centers_equal_spacing(centers);
+    let mids = (!equal_spacing).then(|| {
+        centers
+            .windows(2)
+            .map(|pair| (pair[0] + pair[1]) / 2.0)
+            .collect::<Vec<_>>()
+    });
     let mut out = vec![0.0; centers.len()];
     for &value in values {
-        let ix = mids
-            .partition_point(|&mid| mid < value)
-            .min(centers.len() - 1);
-        out[ix] += 1.0;
+        if let Some(ix) = histogram_center_index(value, centers, equal_spacing, mids.as_deref()) {
+            out[ix] += 1.0;
+        }
     }
     out
+}
+
+fn add_hist_value(out: &mut [f64], centers: &[f64], value: f64) {
+    if centers.is_empty() {
+        return;
+    }
+    if centers.len() == 1 {
+        if value.is_finite() {
+            out[0] += 1.0;
+        }
+        return;
+    }
+    if let Some(ix) = histogram_center_index(
+        value,
+        centers,
+        histogram_centers_equal_spacing(centers),
+        None,
+    ) {
+        out[ix] += 1.0;
+    }
+}
+
+fn histogram_center_index(
+    value: f64,
+    centers: &[f64],
+    equal_spacing: bool,
+    mids: Option<&[f64]>,
+) -> Option<usize> {
+    if !value.is_finite() || centers.is_empty() {
+        return None;
+    }
+    if centers.len() == 1 {
+        return Some(0);
+    }
+    if equal_spacing {
+        let d = if centers.len() < 3 {
+            1.0
+        } else {
+            (centers[centers.len() - 1] - centers[0]) / (centers.len() - 1) as f64
+        };
+        if d == 0.0 {
+            return Some(0);
+        }
+        let cutoff0 = (centers[0] + centers[1]) / 2.0;
+        let assignment =
+            ((value - cutoff0) / d).ceil().clamp(0.0, (centers.len() - 1) as f64);
+        return Some(assignment as usize);
+    }
+    let owned_mids;
+    let mids = if let Some(mids) = mids {
+        mids
+    } else {
+        owned_mids = centers
+            .windows(2)
+            .map(|pair| (pair[0] + pair[1]) / 2.0)
+            .collect::<Vec<_>>();
+        &owned_mids
+    };
+    Some(
+        mids.partition_point(|&mid| mid < value)
+            .min(centers.len() - 1),
+    )
+}
+
+fn histogram_centers_equal_spacing(centers: &[f64]) -> bool {
+    if centers.len() < 2 {
+        return true;
+    }
+    let diffs = centers
+        .windows(2)
+        .map(|pair| pair[1] - pair[0])
+        .collect::<Vec<_>>();
+    let reference = diffs[0];
+    let max_center = centers
+        .iter()
+        .copied()
+        .map(f64::abs)
+        .fold(0.0_f64, f64::max);
+    let tol = f64::EPSILON * max_center.max(1.0);
+    diffs.iter().all(|&diff| (diff - reference).abs() <= tol)
 }
 
 fn psquare_weighting(
@@ -1257,14 +1550,202 @@ fn psquare_weighting(
     for ix in (nr_max_nz_ix as usize).min(prand.len())..prand.len() {
         prand[ix] = 0.0;
     }
+    let win = gausswin(7, 2.5);
+    let win_sum = win.iter().sum::<f64>();
+    let mut padded = vec![1.0; 7];
+    padded.extend_from_slice(&prand);
+    let filtered = lfilter(&win, &padded);
+    for (dst, src) in prand.iter_mut().zip(filtered.iter().skip(7)) {
+        *dst = *src / win_sum;
+    }
+    let mut interp_input = Vec::with_capacity(prand.len() + 1);
+    interp_input.push(1.0);
+    interp_input.extend_from_slice(&prand);
+    let mut prand_hi = matlab_interp(&interp_input, 10);
+    let keep = prand_hi.len().saturating_sub(9);
+    prand_hi.truncate(keep);
     coh_ps
         .iter()
         .map(|&coh| {
-            let ix = ((coh * 1000.0).round() as usize / 10).min(prand.len().saturating_sub(1));
-            let p = prand[ix];
+            let ix = round_half_away_from_zero(coh * 1000.0)
+                .clamp(0.0, prand_hi.len().saturating_sub(1) as f64) as usize;
+            let p = prand_hi[ix];
             (1.0 - p) * (1.0 - p)
         })
         .collect()
+}
+
+fn gausswin(n: usize, alpha: f64) -> Vec<f64> {
+    if n == 0 {
+        return Vec::new();
+    }
+    if n == 1 || alpha <= 0.0 {
+        return vec![1.0; n];
+    }
+    let std = (n as f64 - 1.0) / (2.0 * alpha);
+    (0..n)
+        .map(|ix| {
+            let x = ix as f64 - (n as f64 - 1.0) / 2.0;
+            (-0.5 * (x / std) * (x / std)).exp()
+        })
+        .collect()
+}
+
+fn lfilter(kernel: &[f64], values: &[f64]) -> Vec<f64> {
+    let mut out = vec![0.0; values.len()];
+    for ix in 0..values.len() {
+        let mut sum = 0.0;
+        for (k_ix, &coef) in kernel.iter().enumerate() {
+            if ix >= k_ix {
+                sum += coef * values[ix - k_ix];
+            }
+        }
+        out[ix] = sum;
+    }
+    out
+}
+
+fn matlab_interp(values: &[f64], factor: usize) -> Vec<f64> {
+    if factor <= 1 || values.is_empty() {
+        return values.to_vec();
+    }
+    let n = 4usize;
+    let mut expanded = vec![0.0; values.len() * factor + factor * n + 1];
+    for (ix, &value) in values.iter().enumerate() {
+        expanded[ix * factor] = value;
+    }
+    let taps = firwin_hamming_lowpass(2 * factor * n + 2, 0.5 / factor as f64);
+    let filtered = lfilter(&taps, &expanded);
+    filtered
+        .into_iter()
+        .skip(factor * n + 1)
+        .map(|value| value * factor as f64)
+        .collect()
+}
+
+fn firwin_hamming_lowpass(numtaps: usize, cutoff: f64) -> Vec<f64> {
+    let alpha = (numtaps as f64 - 1.0) / 2.0;
+    let mut taps = Vec::with_capacity(numtaps);
+    for ix in 0..numtaps {
+        let m = ix as f64 - alpha;
+        let hamming =
+            0.54 - 0.46 * (2.0 * std::f64::consts::PI * ix as f64 / (numtaps as f64 - 1.0)).cos();
+        taps.push(cutoff * sinc(cutoff * m) * hamming);
+    }
+    let sum = taps.iter().sum::<f64>();
+    if sum != 0.0 {
+        for tap in &mut taps {
+            *tap /= sum;
+        }
+    }
+    taps
+}
+
+fn sinc(value: f64) -> f64 {
+    if value == 0.0 {
+        1.0
+    } else {
+        let arg = std::f64::consts::PI * value;
+        arg.sin() / arg
+    }
+}
+
+fn round_half_away_from_zero(value: f64) -> f64 {
+    if value >= 0.0 {
+        (value + 0.5).floor()
+    } else {
+        (value - 0.5).ceil()
+    }
+}
+
+struct MatlabV5UniformRng {
+    index: usize,
+    borrow: f64,
+    j: u32,
+    state: [f64; 32],
+}
+
+impl MatlabV5UniformRng {
+    const ULP: f64 = 1.110_223_024_625_156_5e-16;
+    const MASK52: u64 = (1_u64 << 52) - 1;
+
+    fn new(seed: u32) -> Self {
+        let j = if seed == 0 { 1_u32 << 31 } else { seed };
+        let state = Self::randsetup(j);
+        Self {
+            index: 0,
+            borrow: 0.0,
+            j,
+            state,
+        }
+    }
+
+    fn uniform_flat(&mut self, size: usize) -> Vec<f64> {
+        let mut out = Vec::with_capacity(size);
+        for _ in 0..size {
+            let mut value = self.state[(self.index + 20) & 31]
+                - self.state[(self.index + 5) & 31]
+                - self.borrow;
+            if value < 0.0 {
+                value += 1.0;
+                self.borrow = Self::ULP;
+            } else {
+                self.borrow = 0.0;
+            }
+            self.state[self.index] = value;
+            self.index = (self.index + 1) & 31;
+            out.push(self.randbits(value));
+        }
+        out
+    }
+
+    fn randsetup(seed: u32) -> [f64; 32] {
+        let mut state = [0.0; 32];
+        let mut j = seed;
+        for value in &mut state {
+            let mut x = 0_u64;
+            for _ in 0..53 {
+                j = Self::randint32(j);
+                x = (x << 1) | (((j >> 19) & 1) as u64);
+            }
+            *value = (x as f64) * Self::ULP;
+        }
+        state
+    }
+
+    fn randint32(mut value: u32) -> u32 {
+        value ^= value << 13;
+        value ^= value >> 17;
+        value ^= value << 5;
+        value
+    }
+
+    fn randbits(&mut self, value: f64) -> f64 {
+        let jlo = self.j;
+        let jhi = Self::randint32(jlo);
+        self.j = jhi;
+        let mask = (((jhi as u64) << 32) & Self::MASK52) ^ jlo as u64;
+        let (mantissa, exp) = frexp_mantissa53(value);
+        ((mantissa ^ mask) as f64) * 2.0_f64.powi(exp - 53)
+    }
+}
+
+fn frexp_mantissa53(value: f64) -> (u64, i32) {
+    if value == 0.0 {
+        return (0, 0);
+    }
+    let bits = value.to_bits();
+    let exp_bits = ((bits >> 52) & 0x7ff) as i32;
+    let mantissa_bits = bits & ((1_u64 << 52) - 1);
+    if exp_bits == 0 {
+        let leading = 63 - mantissa_bits.leading_zeros() as i32;
+        let exp = leading - 1073;
+        let mantissa = mantissa_bits << (52 - leading);
+        (mantissa, exp)
+    } else {
+        let exp = exp_bits - 1022;
+        ((1_u64 << 52) | mantissa_bits, exp)
+    }
 }
 
 fn snr_weighting(prepared: &Stage2Prepared, ph_res: &[f32]) -> Vec<f64> {
@@ -1293,6 +1774,7 @@ fn snr_weighting(prepared: &Stage2Prepared, ph_res: &[f32]) -> Vec<f64> {
 
 fn write_pm1(
     patch_dir: &Path,
+    filename: &str,
     prepared: &Stage2Prepared,
     k_ps: &[f64],
     c_ps: &[f64],
@@ -1308,7 +1790,7 @@ fn write_pm1(
     gamma_change_save: f64,
     i_loop: usize,
 ) -> Result<(), CoreError> {
-    let mut mat = MatFile::new(patch_dir.join("pm1.mat"));
+    let mut mat = MatFile::new(patch_dir.join(filename));
     mat.add_f64_col_vector("K_ps", k_ps.to_vec())?;
     mat.add_f64_col_vector("C_ps", c_ps.to_vec())?;
     mat.add_f64_col_vector("coh_ps", coh_ps.to_vec())?;
@@ -1321,10 +1803,11 @@ fn write_pm1(
         complex32_pairs(ph_patch),
     )?;
     mat.add_f64_scalar("step_number", 1.0)?;
-    mat.add_complex_f32_matrix(
+    mat.add_complex_f32_array3(
         "ph_grid",
         prepared.n_i,
-        prepared.n_j * prepared.n_ifg,
+        prepared.n_j,
+        prepared.n_ifg,
         complex32_pairs(ph_grid),
     )?;
     mat.add_f32_scalar("n_trial_wraps", prepared.n_trial_wraps as f32)?;
@@ -1449,42 +1932,74 @@ fn rms_difference(left: &[f64], right: &[f64]) -> f64 {
         .sqrt()
 }
 
-fn load_stage2_options(mat: Option<&MatData>) -> Stage2Options {
-    let mut options = Stage2Options::default();
-    if let Some(mat) = mat {
-        options.grid_size = scalar_from_mat_default(mat, "filter_grid_size", options.grid_size);
-        options.clap_win = scalar_from_mat_default(mat, "clap_win", options.clap_win);
-        options.clap_low_pass_wavelength = scalar_from_mat_default(
-            mat,
-            "clap_low_pass_wavelength",
-            options.clap_low_pass_wavelength,
-        );
-        options.clap_alpha = scalar_from_mat_default(mat, "clap_alpha", options.clap_alpha);
-        options.clap_beta = scalar_from_mat_default(mat, "clap_beta", options.clap_beta);
-        options.max_topo_err = scalar_from_mat_default(mat, "max_topo_err", options.max_topo_err);
-        options.lambda_m = scalar_from_mat_default(mat, "lambda", options.lambda_m);
+#[derive(Clone, Debug, Default)]
+struct Stage2ParmSource {
+    path: Option<PathBuf>,
+    mat: Option<MatData>,
+}
+
+impl Stage2ParmSource {
+    fn from_patch(patch_dir: &Path) -> Self {
+        let path = resolve_file_optional(patch_dir, "parms.mat");
+        let mat = path.as_ref().and_then(|path| MatData::read(path).ok());
+        Self { path, mat }
     }
+
+    fn scalar(&self, name: &str, default: f64) -> f64 {
+        self.mat
+            .as_ref()
+            .and_then(|mat| optional_vector_f64(mat, name))
+            .and_then(|values| values.into_iter().next())
+            .or_else(|| {
+                self.path
+                    .as_ref()
+                    .and_then(|path| read_hdf5_scalar_f64(path, name).ok())
+            })
+            .unwrap_or(default)
+    }
+
+    fn text(&self, name: &str, default: &str) -> String {
+        let text = self
+            .mat
+            .as_ref()
+            .map(|mat| text_from_mat(mat, name, ""))
+            .filter(|value| !value.is_empty())
+            .or_else(|| {
+                self.path
+                    .as_ref()
+                    .and_then(|path| read_hdf5_text(path, name).ok())
+            })
+            .unwrap_or_else(|| default.to_string());
+        if text.is_empty() {
+            default.to_string()
+        } else {
+            text
+        }
+    }
+}
+
+fn load_stage2_options(source: &Stage2ParmSource) -> Stage2Options {
+    let mut options = Stage2Options::default();
+    options.grid_size = source.scalar("filter_grid_size", options.grid_size);
+    options.clap_win = source.scalar("clap_win", options.clap_win);
+    options.clap_low_pass_wavelength =
+        source.scalar("clap_low_pass_wavelength", options.clap_low_pass_wavelength);
+    options.clap_alpha = source.scalar("clap_alpha", options.clap_alpha);
+    options.clap_beta = source.scalar("clap_beta", options.clap_beta);
+    options.max_topo_err = source.scalar("max_topo_err", options.max_topo_err);
+    options.lambda_m = source.scalar("lambda", options.lambda_m);
     options
 }
 
-fn load_stage2_parms(mat: Option<&MatData>) -> Stage2Parms {
+fn load_stage2_parms(source: &Stage2ParmSource) -> Stage2Parms {
     let mut parms = Stage2Parms::default();
-    if let Some(mat) = mat {
-        parms.small_baseline_flag =
-            text_from_mat(mat, "small_baseline_flag", &parms.small_baseline_flag);
-        parms.filter_weighting = text_from_mat(mat, "filter_weighting", &parms.filter_weighting);
-        parms.gamma_change_convergence = scalar_from_mat_default(
-            mat,
-            "gamma_change_convergence",
-            parms.gamma_change_convergence,
-        );
-        parms.gamma_max_iterations = scalar_from_mat_default(
-            mat,
-            "gamma_max_iterations",
-            parms.gamma_max_iterations as f64,
-        )
+    parms.small_baseline_flag = source.text("small_baseline_flag", &parms.small_baseline_flag);
+    parms.filter_weighting = source.text("filter_weighting", &parms.filter_weighting);
+    parms.gamma_change_convergence =
+        source.scalar("gamma_change_convergence", parms.gamma_change_convergence);
+    parms.gamma_max_iterations = source
+        .scalar("gamma_max_iterations", parms.gamma_max_iterations as f64)
         .round() as usize;
-    }
     parms
 }
 
@@ -1507,7 +2022,115 @@ fn stage2_trial_wrap_mean_incidence(patch_dir: &Path, ps: &MatData) -> f64 {
             }
         }
     }
-    scalar_from_mat_default(ps, "mean_incidence", DEFAULT_MEAN_INCIDENCE)
+    optional_vector_f64(ps, "mean_incidence")
+        .and_then(|values| values.into_iter().next())
+        .map(|value| value + 0.052)
+        .unwrap_or(DEFAULT_MEAN_INCIDENCE)
+}
+
+fn read_hdf5_scalar_f64(path: &Path, variable: &str) -> Result<f64, String> {
+    match read_hdf5_scalar_f64_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_scalar_f64_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_scalar_f64_direct(path: &Path, variable: &str) -> Result<f64, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset.read_raw::<f64>().map_err(|err| err.to_string())?;
+    values
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("{variable} has no scalar values"))
+}
+
+fn read_hdf5_text(path: &Path, variable: &str) -> Result<String, String> {
+    match read_hdf5_text_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_text_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_text_direct(path: &Path, variable: &str) -> Result<String, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset.read_raw::<u16>().map_err(|err| err.to_string())?;
+    let text = values
+        .into_iter()
+        .filter_map(|value| char::from_u32(value as u32))
+        .filter(|&ch| ch != '\0')
+        .collect::<String>()
+        .trim()
+        .to_string();
+    if text.is_empty() {
+        Err(format!("{variable} has empty text"))
+    } else {
+        Ok(text)
+    }
+}
+
+fn read_hdf5_from_userblock<T, F>(path: &Path, offset: usize, read_direct: F) -> Result<T, String>
+where
+    F: FnOnce(&Path) -> Result<T, String>,
+{
+    let temp_path = std::env::temp_dir().join(format!(
+        "pystamps-stage2-hdf5-{}-{}.h5",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| err.to_string())?
+            .as_nanos()
+    ));
+    let mut input = fs::File::open(path).map_err(|err| err.to_string())?;
+    input
+        .seek(SeekFrom::Start(offset as u64))
+        .map_err(|err| err.to_string())?;
+    {
+        let mut output = fs::File::create(&temp_path).map_err(|err| err.to_string())?;
+        std::io::copy(&mut input, &mut output).map_err(|err| err.to_string())?;
+        output.flush().map_err(|err| err.to_string())?;
+    }
+    let result = read_direct(&temp_path);
+    let _ = fs::remove_file(&temp_path);
+    result
+}
+
+fn find_hdf5_signature_offset(path: &Path) -> Result<usize, String> {
+    let mut file = fs::File::open(path).map_err(|err| err.to_string())?;
+    let mut buffer = vec![0_u8; HDF5_SIGNATURE_SCAN_BYTES];
+    let read_len = file.read(&mut buffer).map_err(|err| err.to_string())?;
+    buffer.truncate(read_len);
+    buffer
+        .windows(HDF5_SIGNATURE.len())
+        .position(|window| window == HDF5_SIGNATURE)
+        .ok_or_else(|| "HDF5 signature not found".to_string())
 }
 
 fn scalar_from_mat(mat: &MatData, name: &str, default: f64) -> f64 {
@@ -1714,6 +2337,104 @@ mod tests {
     use std::time::Instant;
 
     #[test]
+    fn matlab_v5_uniform_rng_matches_python_reference() {
+        let mut rng = MatlabV5UniformRng::new(2005);
+        let values = rng.uniform_flat(1_000_001);
+        let expected = [
+            (0, 0.092958990583191195),
+            (1, 0.37373775840752277),
+            (2, 0.44877057937117765),
+            (9, 0.574897127600281),
+            (10, 0.067322284274237226),
+            (31, 0.43152622807181651),
+            (32, 0.88306283014597708),
+            (33, 0.074287163034898504),
+            (1000, 0.35920165460545467),
+            (99_999, 0.020806164093088213),
+            (1_000_000, 0.4917673475125352),
+        ];
+        for (ix, expected) in expected {
+            let observed = values[ix];
+            assert!((observed - expected).abs() <= 1.0e-15);
+        }
+    }
+
+    #[test]
+    fn psquare_weighting_matches_python_smoothing_reference() {
+        let nr = (0..100).map(|ix| ix as f64).collect::<Vec<_>>();
+        let na = (100..200).map(|ix| ix as f64).collect::<Vec<_>>();
+        let coh = vec![0.0, 0.0049, 0.005, 0.3144, 0.3145, 0.9999, 1.1];
+
+        let weighting = psquare_weighting(&nr, &na, 31, 45.0, &coh);
+
+        let expected = [
+            0.052159239626102791,
+            0.0029095255364919221,
+            0.0029095255364919221,
+            1.5402358377538873e-07,
+            3.4841978752396286e-06,
+            1.0,
+            1.0,
+        ];
+        for (observed, expected) in weighting.iter().zip(expected) {
+            assert!(
+                (observed - expected).abs() <= 1.0e-12,
+                "observed={observed} expected={expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn histogram_with_centers_matches_equal_spacing_octave_rule() {
+        let centers = vec![0.005, 0.015, 0.025, 0.035];
+        let values = vec![0.01, 0.02, 0.03, f64::NAN];
+
+        let observed = hist_with_centers(&values, &centers);
+
+        assert_eq!(observed, vec![1.0, 1.0, 1.0, 0.0]);
+    }
+
+    #[test]
+    fn random_coherence_histogram_matches_python_reference() {
+        let root = temp_root("stage2-random-hist");
+        let ps_path = root.join("ps1.mat");
+        let mut ps_mat = MatFile::new(&ps_path);
+        ps_mat.add_f64_scalar("n_ps", 1.0).unwrap();
+        ps_mat.write().unwrap();
+        let ps = MatData::read(&ps_path).unwrap();
+        let bperp = vec![-20.0, -5.0, 0.0, 13.0, 27.0];
+        let n_trial_wraps = 0.5;
+        let coh_bins = (0..COH_BIN_COUNT)
+            .map(|ix| COH_BIN_START + COH_BIN_STEP * ix as f64)
+            .collect::<Vec<_>>();
+
+        let (nr, nr_max_nz_ix) = random_coherence_histogram(
+            &bperp,
+            n_trial_wraps,
+            &trial_values(n_trial_wraps),
+            &coh_bins,
+            &Stage2Parms::default(),
+            &ps,
+            bperp.len(),
+        )
+        .unwrap();
+
+        let expected = [
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 4.0, 5.0,
+            0.0, 2.0, 7.0, 5.0, 14.0, 14.0, 15.0, 10.0, 29.0, 21.0, 26.0, 29.0, 44.0, 42.0, 57.0,
+            54.0, 63.0, 71.0, 68.0, 71.0, 87.0, 87.0, 76.0, 98.0, 111.0, 100.0, 137.0, 123.0,
+            139.0, 154.0, 148.0, 149.0, 162.0, 195.0, 212.0, 202.0, 200.0, 203.0, 228.0, 209.0,
+            222.0, 227.0, 223.0, 239.0, 201.0, 199.0, 231.0, 203.0, 192.0, 184.0, 187.0, 188.0,
+            185.0, 180.0, 183.0, 186.0, 163.0, 152.0, 147.0, 155.0, 158.0, 171.0, 169.0, 155.0,
+            139.0, 140.0, 144.0, 126.0, 125.0, 125.0, 115.0, 110.0, 116.0, 104.0, 95.0, 75.0, 74.0,
+            85.0, 73.0, 56.0, 61.0, 37.0, 26.0,
+        ];
+        assert_eq!(nr, expected);
+        assert_eq!(nr_max_nz_ix, 100.0);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn synthetic_stage2_matches_python_empty_clap_fixture_and_is_faster() {
         let root = temp_root("stage2-native");
         let python_root = root.join("python");
@@ -1793,6 +2514,57 @@ mod tests {
     }
 
     #[test]
+    fn stage2_reads_hdf5_parms_when_v5_reader_cannot() {
+        let root = temp_root("stage2-hdf5-parms");
+        let patch = root.join("PATCH_1");
+        fs::create_dir_all(&patch).unwrap();
+        let raw_hdf5 = patch.join("parms-raw.h5");
+        let h5 = rust_hdf5::H5File::create(&raw_hdf5).unwrap();
+        h5.new_dataset::<f64>()
+            .shape([1, 1])
+            .create("lambda")
+            .unwrap()
+            .write_raw(&[0.05546576_f64])
+            .unwrap();
+        h5.new_dataset::<f64>()
+            .shape([1, 1])
+            .create("gamma_max_iterations")
+            .unwrap()
+            .write_raw(&[7.0_f64])
+            .unwrap();
+        h5.new_dataset::<u16>()
+            .shape([1, 1])
+            .create("small_baseline_flag")
+            .unwrap()
+            .write_raw(&['n' as u16])
+            .unwrap();
+        h5.new_dataset::<u16>()
+            .shape([8, 1])
+            .create("filter_weighting")
+            .unwrap()
+            .write_raw(&"P-square".chars().map(|ch| ch as u16).collect::<Vec<_>>())
+            .unwrap();
+        h5.close().unwrap();
+
+        let mut matlab_hdf5 = fs::File::create(patch.join("parms.mat")).unwrap();
+        matlab_hdf5.write_all(&vec![b' '; 512]).unwrap();
+        matlab_hdf5
+            .write_all(&fs::read(&raw_hdf5).unwrap())
+            .unwrap();
+        fs::remove_file(raw_hdf5).unwrap();
+
+        let source = Stage2ParmSource::from_patch(&patch);
+        let options = load_stage2_options(&source);
+        let parms = load_stage2_parms(&source);
+
+        assert_eq!(options.lambda_m, 0.05546576);
+        assert_eq!(parms.gamma_max_iterations, 7);
+        assert_eq!(parms.small_baseline_flag, "n");
+        assert_eq!(parms.filter_weighting, "P-square");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn coverage_reports_stage2_native_after_parity_certification() {
         let coverage = crate::processing_chain_coverage(2, 2).unwrap();
         assert_eq!(coverage.len(), 1);
@@ -1860,6 +2632,11 @@ mod tests {
         let mut da = MatFile::new(patch.join("da1.mat"));
         da.add_f64_row_vector("D_A", vec![1.0; n_ps]).unwrap();
         da.write().unwrap();
+
+        let mut la = MatFile::new(patch.join("la1.mat"));
+        la.add_f64_row_vector("la", vec![DEFAULT_MEAN_INCIDENCE; n_ps])
+            .unwrap();
+        la.write().unwrap();
 
         let mut parms = MatFile::new(patch.join("parms.mat"));
         parms.add_f64_scalar("gamma_max_iterations", 1.0).unwrap();

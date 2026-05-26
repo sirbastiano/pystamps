@@ -45,7 +45,10 @@ fn coverage_subcommand_reports_stage_matrix() {
 
 #[test]
 fn run_dry_run_plans_stages_for_existing_patch_tree() {
-    let root = std::env::temp_dir().join(format!("pystamps-core-native-run-dry-run-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "pystamps-core-native-run-dry-run-{}",
+        std::process::id()
+    ));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(root.join("PATCH_1")).unwrap();
 
@@ -72,7 +75,10 @@ fn run_dry_run_plans_stages_for_existing_patch_tree() {
 
 #[test]
 fn run_rejects_unsupported_runtime_backend() {
-    let root = std::env::temp_dir().join(format!("pystamps-core-native-run-error-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!(
+        "pystamps-core-native-run-error-{}",
+        std::process::id()
+    ));
     let _ = std::fs::create_dir(&root);
 
     let output = Command::new(env!("CARGO_BIN_EXE_pystamps-native"))

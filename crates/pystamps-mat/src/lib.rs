@@ -62,7 +62,9 @@ pub enum MatError {
     UnsupportedClass { name: String, class: u32 },
     #[error("MAT variable {name} has unsupported data type {data_type}")]
     UnsupportedDataType { name: String, data_type: u32 },
-    #[error("MAT variable {name} has malformed dimensions {dims:?}; expected exactly 2 dimensions")]
+    #[error(
+        "MAT variable {name} has malformed dimensions {dims:?}; expected exactly 2 dimensions"
+    )]
     MalformedDimensions { name: String, dims: Vec<i32> },
     #[error("MAT variable {name} is malformed: {message}")]
     MalformedVariable { name: String, message: String },
@@ -92,6 +94,7 @@ enum MatVar {
     U8(Matrix<u8>),
     ComplexF64(ComplexMatrixF64),
     ComplexF32(ComplexMatrixF32),
+    ComplexF32Array(ComplexArrayF32),
 }
 
 #[derive(Clone, Debug)]
@@ -116,6 +119,13 @@ pub struct ComplexMatrixF64 {
     pub rows: usize,
     pub cols: usize,
     pub values: Vec<(f64, f64)>,
+}
+
+#[derive(Clone, Debug)]
+struct ComplexArrayF32 {
+    name: String,
+    dims: Vec<usize>,
+    values: Vec<(f32, f32)>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -228,11 +238,19 @@ impl MatFile {
         self.add_f64_matrix(name, 1, 1, vec![value])
     }
 
-    pub fn add_f64_row_vector(&mut self, name: impl Into<String>, values: Vec<f64>) -> Result<(), MatError> {
+    pub fn add_f64_row_vector(
+        &mut self,
+        name: impl Into<String>,
+        values: Vec<f64>,
+    ) -> Result<(), MatError> {
         self.add_f64_matrix(name, 1, values.len(), values)
     }
 
-    pub fn add_f64_col_vector(&mut self, name: impl Into<String>, values: Vec<f64>) -> Result<(), MatError> {
+    pub fn add_f64_col_vector(
+        &mut self,
+        name: impl Into<String>,
+        values: Vec<f64>,
+    ) -> Result<(), MatError> {
         self.add_f64_matrix(name, values.len(), 1, values)
     }
 
@@ -252,11 +270,19 @@ impl MatFile {
         self.add_f32_matrix(name, 1, 1, vec![value])
     }
 
-    pub fn add_f32_row_vector(&mut self, name: impl Into<String>, values: Vec<f32>) -> Result<(), MatError> {
+    pub fn add_f32_row_vector(
+        &mut self,
+        name: impl Into<String>,
+        values: Vec<f32>,
+    ) -> Result<(), MatError> {
         self.add_f32_matrix(name, 1, values.len(), values)
     }
 
-    pub fn add_f32_col_vector(&mut self, name: impl Into<String>, values: Vec<f32>) -> Result<(), MatError> {
+    pub fn add_f32_col_vector(
+        &mut self,
+        name: impl Into<String>,
+        values: Vec<f32>,
+    ) -> Result<(), MatError> {
         self.add_f32_matrix(name, values.len(), 1, values)
     }
 
@@ -308,6 +334,43 @@ impl MatFile {
         Ok(())
     }
 
+    pub fn add_complex_f32_array3(
+        &mut self,
+        name: impl Into<String>,
+        dim0: usize,
+        dim1: usize,
+        dim2: usize,
+        values: Vec<(f32, f32)>,
+    ) -> Result<(), MatError> {
+        let name = name.into();
+        let Some(expected) = dim0
+            .checked_mul(dim1)
+            .and_then(|value| value.checked_mul(dim2))
+        else {
+            return Err(MatError::Shape {
+                name,
+                rows: dim0,
+                cols: dim1.saturating_mul(dim2),
+                actual: values.len(),
+            });
+        };
+        if values.len() != expected {
+            return Err(MatError::Shape {
+                name,
+                rows: dim0,
+                cols: dim1.saturating_mul(dim2),
+                actual: values.len(),
+            });
+        }
+        self.variables
+            .push(MatVar::ComplexF32Array(ComplexArrayF32 {
+                name,
+                dims: vec![dim0, dim1, dim2],
+                values,
+            }));
+        Ok(())
+    }
+
     pub fn add_complex_f64_matrix(
         &mut self,
         name: impl Into<String>,
@@ -350,7 +413,9 @@ impl MatData {
     }
 
     pub fn variables(&self) -> impl Iterator<Item = (&str, &MatArray)> {
-        self.variables.iter().map(|(name, array)| (name.as_str(), array))
+        self.variables
+            .iter()
+            .map(|(name, array)| (name.as_str(), array))
     }
 
     pub fn get(&self, name: &str) -> Result<&MatArray, MatError> {
@@ -518,28 +583,63 @@ impl Ps1Artifact {
     pub fn write(&self, path: impl AsRef<Path>) -> Result<(), MatError> {
         let mut mat = MatFile::new(path);
         mat.add_f64_matrix(VAR_IJ, self.ij.rows, self.ij.cols, self.ij.values.clone())?;
-        mat.add_f64_matrix(VAR_LONLAT, self.lonlat.rows, self.lonlat.cols, self.lonlat.values.clone())?;
+        mat.add_f64_matrix(
+            VAR_LONLAT,
+            self.lonlat.rows,
+            self.lonlat.cols,
+            self.lonlat.values.clone(),
+        )?;
         mat.add_f32_matrix(VAR_XY, self.xy.rows, self.xy.cols, self.xy.values.clone())?;
-        mat.add_f64_matrix(VAR_BPERP, self.bperp.rows, self.bperp.cols, self.bperp.values.clone())?;
-        mat.add_f64_matrix(VAR_DAY, self.day.rows, self.day.cols, self.day.values.clone())?;
+        mat.add_f64_matrix(
+            VAR_BPERP,
+            self.bperp.rows,
+            self.bperp.cols,
+            self.bperp.values.clone(),
+        )?;
+        mat.add_f64_matrix(
+            VAR_DAY,
+            self.day.rows,
+            self.day.cols,
+            self.day.values.clone(),
+        )?;
         mat.add_f64_scalar(VAR_MASTER_DAY, self.master_day)?;
         mat.add_f64_scalar(VAR_MASTER_IX, self.master_ix)?;
         mat.add_f64_scalar(VAR_N_IFG, self.n_ifg)?;
         mat.add_f64_scalar(VAR_N_IMAGE, self.n_image)?;
         mat.add_f64_scalar(VAR_N_PS, self.n_ps)?;
-        mat.add_f64_matrix(VAR_SORT_IX, self.sort_ix.rows, self.sort_ix.cols, self.sort_ix.values.clone())?;
-        mat.add_f64_matrix(VAR_LL0, self.ll0.rows, self.ll0.cols, self.ll0.values.clone())?;
+        mat.add_f64_matrix(
+            VAR_SORT_IX,
+            self.sort_ix.rows,
+            self.sort_ix.cols,
+            self.sort_ix.values.clone(),
+        )?;
+        mat.add_f64_matrix(
+            VAR_LL0,
+            self.ll0.rows,
+            self.ll0.cols,
+            self.ll0.values.clone(),
+        )?;
         mat.add_f64_scalar(VAR_MEAN_RANGE, self.mean_range)?;
         mat.add_f64_scalar(VAR_MEAN_INCIDENCE, self.mean_incidence)?;
         mat.write()
     }
 }
 
-pub fn f64_matrix(name: impl Into<String>, rows: usize, cols: usize, values: Vec<f64>) -> Result<Matrix<f64>, MatError> {
+pub fn f64_matrix(
+    name: impl Into<String>,
+    rows: usize,
+    cols: usize,
+    values: Vec<f64>,
+) -> Result<Matrix<f64>, MatError> {
     matrix_with_values(name.into(), rows, cols, values)
 }
 
-pub fn f32_matrix(name: impl Into<String>, rows: usize, cols: usize, values: Vec<f32>) -> Result<Matrix<f32>, MatError> {
+pub fn f32_matrix(
+    name: impl Into<String>,
+    rows: usize,
+    cols: usize,
+    values: Vec<f32>,
+) -> Result<Matrix<f32>, MatError> {
     matrix_with_values(name.into(), rows, cols, values)
 }
 
@@ -701,16 +801,44 @@ fn write_header(file: &mut File) -> io::Result<()> {
 fn write_variable(file: &mut File, variable: &MatVar) -> io::Result<()> {
     let mut body = Vec::new();
     match variable {
-        MatVar::F64(matrix) => write_real_matrix(&mut body, MX_DOUBLE_CLASS, MI_DOUBLE, matrix, write_f64_value)?,
-        MatVar::F32(matrix) => write_real_matrix(&mut body, MX_SINGLE_CLASS, MI_SINGLE, matrix, write_f32_value)?,
-        MatVar::I32(matrix) => write_real_matrix(&mut body, MX_INT32_CLASS, MI_INT32, matrix, write_i32_value)?,
-        MatVar::U32(matrix) => write_real_matrix(&mut body, MX_UINT32_CLASS, MI_UINT32, matrix, write_u32_value)?,
-        MatVar::U8(matrix) => write_real_matrix(&mut body, MX_UINT8_CLASS, MI_UINT8, matrix, write_u8_value)?,
+        MatVar::F64(matrix) => write_real_matrix(
+            &mut body,
+            MX_DOUBLE_CLASS,
+            MI_DOUBLE,
+            matrix,
+            write_f64_value,
+        )?,
+        MatVar::F32(matrix) => write_real_matrix(
+            &mut body,
+            MX_SINGLE_CLASS,
+            MI_SINGLE,
+            matrix,
+            write_f32_value,
+        )?,
+        MatVar::I32(matrix) => {
+            write_real_matrix(&mut body, MX_INT32_CLASS, MI_INT32, matrix, write_i32_value)?
+        }
+        MatVar::U32(matrix) => write_real_matrix(
+            &mut body,
+            MX_UINT32_CLASS,
+            MI_UINT32,
+            matrix,
+            write_u32_value,
+        )?,
+        MatVar::U8(matrix) => {
+            write_real_matrix(&mut body, MX_UINT8_CLASS, MI_UINT8, matrix, write_u8_value)?
+        }
         MatVar::ComplexF32(matrix) => {
             write_array_flags(&mut body, MX_SINGLE_CLASS, true)?;
             write_dimensions(&mut body, matrix.rows, matrix.cols)?;
             write_name(&mut body, &matrix.name)?;
             write_complex_f32(matrix, &mut body)?;
+        }
+        MatVar::ComplexF32Array(array) => {
+            write_array_flags(&mut body, MX_SINGLE_CLASS, true)?;
+            write_dimensions_nd(&mut body, &array.dims)?;
+            write_name(&mut body, &array.name)?;
+            write_complex_f32_array(array, &mut body)?;
         }
         MatVar::ComplexF64(matrix) => {
             write_array_flags(&mut body, MX_DOUBLE_CLASS, true)?;
@@ -734,7 +862,14 @@ fn write_real_matrix<T>(
     write_array_flags(out, class, false)?;
     write_dimensions(out, matrix.rows, matrix.cols)?;
     write_name(out, &matrix.name)?;
-    write_numeric_data(out, data_type, matrix.rows, matrix.cols, &matrix.values, write_value)
+    write_numeric_data(
+        out,
+        data_type,
+        matrix.rows,
+        matrix.cols,
+        &matrix.values,
+        write_value,
+    )
 }
 
 fn write_array_flags(out: &mut Vec<u8>, class: u32, complex: bool) -> io::Result<()> {
@@ -752,6 +887,15 @@ fn write_dimensions(out: &mut Vec<u8>, rows: usize, cols: usize) -> io::Result<(
     write_tag(out, MI_INT32, 8)?;
     out.write_all(&(rows as i32).to_le_bytes())?;
     out.write_all(&(cols as i32).to_le_bytes())
+}
+
+fn write_dimensions_nd(out: &mut Vec<u8>, dims: &[usize]) -> io::Result<()> {
+    let byte_len = dims.len() * std::mem::size_of::<i32>();
+    write_tag(out, MI_INT32, byte_len)?;
+    for &dim in dims {
+        out.write_all(&(dim as i32).to_le_bytes())?;
+    }
+    pad_to_8(out, byte_len)
 }
 
 fn write_name(out: &mut Vec<u8>, name: &str) -> io::Result<()> {
@@ -781,15 +925,86 @@ fn write_numeric_data<T>(
 fn write_complex_f32(matrix: &ComplexMatrixF32, out: &mut Vec<u8>) -> io::Result<()> {
     let real: Vec<f32> = matrix.values.iter().map(|value| value.0).collect();
     let imag: Vec<f32> = matrix.values.iter().map(|value| value.1).collect();
-    write_numeric_data(out, MI_SINGLE, matrix.rows, matrix.cols, &real, write_f32_value)?;
-    write_numeric_data(out, MI_SINGLE, matrix.rows, matrix.cols, &imag, write_f32_value)
+    write_numeric_data(
+        out,
+        MI_SINGLE,
+        matrix.rows,
+        matrix.cols,
+        &real,
+        write_f32_value,
+    )?;
+    write_numeric_data(
+        out,
+        MI_SINGLE,
+        matrix.rows,
+        matrix.cols,
+        &imag,
+        write_f32_value,
+    )
+}
+
+fn write_complex_f32_array(array: &ComplexArrayF32, out: &mut Vec<u8>) -> io::Result<()> {
+    let real: Vec<f32> = array.values.iter().map(|value| value.0).collect();
+    let imag: Vec<f32> = array.values.iter().map(|value| value.1).collect();
+    write_numeric_data_nd(out, MI_SINGLE, &array.dims, &real, write_f32_value)?;
+    write_numeric_data_nd(out, MI_SINGLE, &array.dims, &imag, write_f32_value)
 }
 
 fn write_complex_f64(matrix: &ComplexMatrixF64, out: &mut Vec<u8>) -> io::Result<()> {
     let real: Vec<f64> = matrix.values.iter().map(|value| value.0).collect();
     let imag: Vec<f64> = matrix.values.iter().map(|value| value.1).collect();
-    write_numeric_data(out, MI_DOUBLE, matrix.rows, matrix.cols, &real, write_f64_value)?;
-    write_numeric_data(out, MI_DOUBLE, matrix.rows, matrix.cols, &imag, write_f64_value)
+    write_numeric_data(
+        out,
+        MI_DOUBLE,
+        matrix.rows,
+        matrix.cols,
+        &real,
+        write_f64_value,
+    )?;
+    write_numeric_data(
+        out,
+        MI_DOUBLE,
+        matrix.rows,
+        matrix.cols,
+        &imag,
+        write_f64_value,
+    )
+}
+
+fn write_numeric_data_nd<T>(
+    out: &mut Vec<u8>,
+    data_type: u32,
+    dims: &[usize],
+    values: &[T],
+    write_value: fn(&mut Vec<u8>, &T) -> io::Result<()>,
+) -> io::Result<()> {
+    let byte_len = std::mem::size_of_val(values);
+    write_tag(out, data_type, byte_len)?;
+    let mut indices = vec![0usize; dims.len()];
+    for _ in 0..values.len() {
+        let source_ix = row_major_index(&indices, dims);
+        write_value(out, &values[source_ix])?;
+        increment_col_major_index(&mut indices, dims);
+    }
+    pad_to_8(out, byte_len)
+}
+
+fn row_major_index(indices: &[usize], dims: &[usize]) -> usize {
+    let mut out = 0usize;
+    for (&index, &dim) in indices.iter().zip(dims.iter()) {
+        out = out * dim + index;
+    }
+    out
+}
+
+fn increment_col_major_index(indices: &mut [usize], dims: &[usize]) {
+    for (index, &dim) in indices.iter_mut().zip(dims.iter()) {
+        *index += 1;
+        if *index < dim {
+            return;
+        }
+        *index = 0;
+    }
 }
 
 fn write_f64_value(out: &mut Vec<u8>, value: &f64) -> io::Result<()> {
@@ -846,9 +1061,11 @@ fn parse_mat_file(path: &Path, bytes: &[u8]) -> Result<MatData, MatError> {
     let mut offset = 128;
     let mut variables = BTreeMap::new();
     while offset < bytes.len() {
-        let element = read_element(bytes, &mut offset, endian).map_err(|message| MatError::MalformedFile {
-            path: path.to_path_buf(),
-            message,
+        let element = read_element(bytes, &mut offset, endian).map_err(|message| {
+            MatError::MalformedFile {
+                path: path.to_path_buf(),
+                message,
+            }
         })?;
         if element.data_type == 0 && element.data.is_empty() {
             break;
@@ -877,9 +1094,11 @@ fn parse_mat_file(path: &Path, bytes: &[u8]) -> Result<MatData, MatError> {
 
 fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatError> {
     let mut offset = 0;
-    let flags = read_element(bytes, &mut offset, endian).map_err(|message| MatError::MalformedVariable {
-        name: "<unknown>".to_string(),
-        message,
+    let flags = read_element(bytes, &mut offset, endian).map_err(|message| {
+        MatError::MalformedVariable {
+            name: "<unknown>".to_string(),
+            message,
+        }
     })?;
     if flags.data_type != MI_UINT32 || flags.data.len() < 4 {
         return Err(MatError::MalformedVariable {
@@ -892,9 +1111,11 @@ fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatErr
     let is_complex = (flag_word & MX_COMPLEX_FLAG) != 0;
     let _is_logical = (flag_word & MX_LOGICAL_FLAG) != 0;
 
-    let dims_element = read_element(bytes, &mut offset, endian).map_err(|message| MatError::MalformedVariable {
-        name: "<unknown>".to_string(),
-        message,
+    let dims_element = read_element(bytes, &mut offset, endian).map_err(|message| {
+        MatError::MalformedVariable {
+            name: "<unknown>".to_string(),
+            message,
+        }
     })?;
     if dims_element.data_type != MI_INT32 || dims_element.data.len() % 4 != 0 {
         return Err(MatError::MalformedVariable {
@@ -908,9 +1129,11 @@ fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatErr
         .map(|chunk| endian.read_i32(chunk))
         .collect::<Vec<_>>();
 
-    let name_element = read_element(bytes, &mut offset, endian).map_err(|message| MatError::MalformedVariable {
-        name: "<unknown>".to_string(),
-        message,
+    let name_element = read_element(bytes, &mut offset, endian).map_err(|message| {
+        MatError::MalformedVariable {
+            name: "<unknown>".to_string(),
+            message,
+        }
     })?;
     let name = if name_element.data_type == MI_INT8 || name_element.data_type == MI_UINT8 {
         String::from_utf8_lossy(name_element.data).to_string()
@@ -924,10 +1147,12 @@ fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatErr
     let rows = dims[0] as usize;
     let mut cols = 1_usize;
     for dim in &dims[1..] {
-        cols = cols.checked_mul(*dim as usize).ok_or_else(|| MatError::MalformedVariable {
-            name: name.clone(),
-            message: "dimensions overflow usize".to_string(),
-        })?;
+        cols = cols
+            .checked_mul(*dim as usize)
+            .ok_or_else(|| MatError::MalformedVariable {
+                name: name.clone(),
+                message: "dimensions overflow usize".to_string(),
+            })?;
     }
     let Some(expected_len) = rows.checked_mul(cols) else {
         return Err(MatError::MalformedVariable {
@@ -939,18 +1164,38 @@ fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatErr
         return Err(MatError::UnsupportedClass { name, class });
     }
 
-    let real_element = read_element(bytes, &mut offset, endian).map_err(|message| MatError::MalformedVariable {
-        name: name.clone(),
-        message,
-    })?;
-    let real = decode_numeric_data(&name, real_element.data_type, real_element.data, endian, rows, cols, expected_len)?;
-    let numeric_type = real.numeric_type();
-    let imag = if is_complex {
-        let imag_element = read_element(bytes, &mut offset, endian).map_err(|message| MatError::MalformedVariable {
+    let real_element = read_element(bytes, &mut offset, endian).map_err(|message| {
+        MatError::MalformedVariable {
             name: name.clone(),
             message,
+        }
+    })?;
+    let real = decode_numeric_data(
+        &name,
+        real_element.data_type,
+        real_element.data,
+        endian,
+        rows,
+        cols,
+        expected_len,
+    )?;
+    let numeric_type = real.numeric_type();
+    let imag = if is_complex {
+        let imag_element = read_element(bytes, &mut offset, endian).map_err(|message| {
+            MatError::MalformedVariable {
+                name: name.clone(),
+                message,
+            }
         })?;
-        let imag = decode_numeric_data(&name, imag_element.data_type, imag_element.data, endian, rows, cols, expected_len)?;
+        let imag = decode_numeric_data(
+            &name,
+            imag_element.data_type,
+            imag_element.data,
+            endian,
+            rows,
+            cols,
+            expected_len,
+        )?;
         if imag.numeric_type() != numeric_type {
             return Err(MatError::MalformedVariable {
                 name,
@@ -982,29 +1227,52 @@ fn decode_numeric_data(
     expected_len: usize,
 ) -> Result<NumericData, MatError> {
     match data_type {
-        MI_DOUBLE => decode_fixed_width(name, bytes, expected_len, 8, |chunk| NumericValue::F64(endian.read_f64(chunk)))
-            .map(|values| NumericData::F64(row_major_f64(values, rows, cols))),
-        MI_SINGLE => decode_fixed_width(name, bytes, expected_len, 4, |chunk| NumericValue::F32(endian.read_f32(chunk)))
-            .map(|values| NumericData::F32(row_major_f32(values, rows, cols))),
-        MI_INT8 => decode_i8(name, bytes, expected_len).map(|values| NumericData::I8(row_major_i8(values, rows, cols))),
-        MI_UINT8 => decode_u8(name, bytes, expected_len).map(|values| NumericData::U8(row_major_u8(values, rows, cols))),
-        MI_INT16 => decode_fixed_width(name, bytes, expected_len, 2, |chunk| NumericValue::I16(endian.read_i16(chunk)))
-            .map(|values| NumericData::I16(row_major_i16(values, rows, cols))),
-        MI_UINT16 => decode_fixed_width(name, bytes, expected_len, 2, |chunk| NumericValue::U16(endian.read_u16(chunk)))
-            .map(|values| NumericData::U16(row_major_u16(values, rows, cols))),
-        MI_INT32 => decode_fixed_width(name, bytes, expected_len, 4, |chunk| NumericValue::I32(endian.read_i32(chunk)))
-            .map(|values| NumericData::I32(row_major_i32(values, rows, cols))),
-        MI_UINT32 => decode_fixed_width(name, bytes, expected_len, 4, |chunk| NumericValue::U32(endian.read_u32(chunk)))
-            .map(|values| NumericData::U32(row_major_u32(values, rows, cols))),
-        MI_INT64 => decode_fixed_width(name, bytes, expected_len, 8, |chunk| NumericValue::I64(endian.read_i64(chunk)))
-            .map(|values| NumericData::I64(row_major_i64(values, rows, cols))),
-        MI_UINT64 => decode_fixed_width(name, bytes, expected_len, 8, |chunk| NumericValue::U64(endian.read_u64(chunk)))
-            .map(|values| NumericData::U64(row_major_u64(values, rows, cols))),
-        MI_UTF8 => decode_u8(name, bytes, expected_len).map(|values| NumericData::U8(row_major_u8(values, rows, cols))),
-        MI_UTF16 => decode_fixed_width(name, bytes, expected_len, 2, |chunk| NumericValue::U16(endian.read_u16(chunk)))
-            .map(|values| NumericData::U16(row_major_u16(values, rows, cols))),
-        MI_UTF32 => decode_fixed_width(name, bytes, expected_len, 4, |chunk| NumericValue::U32(endian.read_u32(chunk)))
-            .map(|values| NumericData::U32(row_major_u32(values, rows, cols))),
+        MI_DOUBLE => decode_fixed_width(name, bytes, expected_len, 8, |chunk| {
+            NumericValue::F64(endian.read_f64(chunk))
+        })
+        .map(|values| NumericData::F64(row_major_f64(values, rows, cols))),
+        MI_SINGLE => decode_fixed_width(name, bytes, expected_len, 4, |chunk| {
+            NumericValue::F32(endian.read_f32(chunk))
+        })
+        .map(|values| NumericData::F32(row_major_f32(values, rows, cols))),
+        MI_INT8 => decode_i8(name, bytes, expected_len)
+            .map(|values| NumericData::I8(row_major_i8(values, rows, cols))),
+        MI_UINT8 => decode_u8(name, bytes, expected_len)
+            .map(|values| NumericData::U8(row_major_u8(values, rows, cols))),
+        MI_INT16 => decode_fixed_width(name, bytes, expected_len, 2, |chunk| {
+            NumericValue::I16(endian.read_i16(chunk))
+        })
+        .map(|values| NumericData::I16(row_major_i16(values, rows, cols))),
+        MI_UINT16 => decode_fixed_width(name, bytes, expected_len, 2, |chunk| {
+            NumericValue::U16(endian.read_u16(chunk))
+        })
+        .map(|values| NumericData::U16(row_major_u16(values, rows, cols))),
+        MI_INT32 => decode_fixed_width(name, bytes, expected_len, 4, |chunk| {
+            NumericValue::I32(endian.read_i32(chunk))
+        })
+        .map(|values| NumericData::I32(row_major_i32(values, rows, cols))),
+        MI_UINT32 => decode_fixed_width(name, bytes, expected_len, 4, |chunk| {
+            NumericValue::U32(endian.read_u32(chunk))
+        })
+        .map(|values| NumericData::U32(row_major_u32(values, rows, cols))),
+        MI_INT64 => decode_fixed_width(name, bytes, expected_len, 8, |chunk| {
+            NumericValue::I64(endian.read_i64(chunk))
+        })
+        .map(|values| NumericData::I64(row_major_i64(values, rows, cols))),
+        MI_UINT64 => decode_fixed_width(name, bytes, expected_len, 8, |chunk| {
+            NumericValue::U64(endian.read_u64(chunk))
+        })
+        .map(|values| NumericData::U64(row_major_u64(values, rows, cols))),
+        MI_UTF8 => decode_u8(name, bytes, expected_len)
+            .map(|values| NumericData::U8(row_major_u8(values, rows, cols))),
+        MI_UTF16 => decode_fixed_width(name, bytes, expected_len, 2, |chunk| {
+            NumericValue::U16(endian.read_u16(chunk))
+        })
+        .map(|values| NumericData::U16(row_major_u16(values, rows, cols))),
+        MI_UTF32 => decode_fixed_width(name, bytes, expected_len, 4, |chunk| {
+            NumericValue::U32(endian.read_u32(chunk))
+        })
+        .map(|values| NumericData::U32(row_major_u32(values, rows, cols))),
         other => Err(MatError::UnsupportedDataType {
             name: name.to_string(),
             data_type: other,
@@ -1031,14 +1299,20 @@ fn decode_fixed_width(
     width: usize,
     decode: impl Fn(&[u8]) -> NumericValue,
 ) -> Result<Vec<NumericValue>, MatError> {
-    let expected_bytes = expected_len.checked_mul(width).ok_or_else(|| MatError::MalformedVariable {
-        name: name.to_string(),
-        message: "payload byte count overflow".to_string(),
-    })?;
+    let expected_bytes =
+        expected_len
+            .checked_mul(width)
+            .ok_or_else(|| MatError::MalformedVariable {
+                name: name.to_string(),
+                message: "payload byte count overflow".to_string(),
+            })?;
     if bytes.len() != expected_bytes {
         return Err(MatError::MalformedVariable {
             name: name.to_string(),
-            message: format!("payload has {} bytes, expected {expected_bytes}", bytes.len()),
+            message: format!(
+                "payload has {} bytes, expected {expected_bytes}",
+                bytes.len()
+            ),
         });
     }
     Ok(bytes.chunks_exact(width).map(decode).collect())
@@ -1182,7 +1456,11 @@ struct DataElement<'a> {
     data: &'a [u8],
 }
 
-fn read_element<'a>(bytes: &'a [u8], offset: &mut usize, endian: Endian) -> Result<DataElement<'a>, String> {
+fn read_element<'a>(
+    bytes: &'a [u8],
+    offset: &mut usize,
+    endian: Endian,
+) -> Result<DataElement<'a>, String> {
     if *offset == bytes.len() {
         return Ok(DataElement {
             data_type: 0,
@@ -1197,12 +1475,18 @@ fn read_element<'a>(bytes: &'a [u8], offset: &mut usize, endian: Endian) -> Resu
     let small_size = endian.read_u16(&bytes[*offset + 2..*offset + 4]) as u32;
     if small_size > 0 {
         if small_size > 4 {
-            return Err(format!("small data element at byte {} has {small_size} bytes", *offset));
+            return Err(format!(
+                "small data element at byte {} has {small_size} bytes",
+                *offset
+            ));
         }
         let data_start = *offset + 4;
         let data_end = data_start + small_size as usize;
         if data_end > bytes.len() {
-            return Err(format!("small data element at byte {} exceeds file length", *offset));
+            return Err(format!(
+                "small data element at byte {} exceeds file length",
+                *offset
+            ));
         }
         *offset += 8;
         return Ok(DataElement {
@@ -1227,9 +1511,17 @@ fn read_element<'a>(bytes: &'a [u8], offset: &mut usize, endian: Endian) -> Resu
     }
     let padded_end = data_end
         .checked_add((8 - (data_size % 8)) % 8)
-        .ok_or_else(|| format!("data element at byte {} padded length overflows usize", *offset))?;
+        .ok_or_else(|| {
+            format!(
+                "data element at byte {} padded length overflows usize",
+                *offset
+            )
+        })?;
     if padded_end > bytes.len() {
-        return Err(format!("data element at byte {} padding exceeds file length", *offset));
+        return Err(format!(
+            "data element at byte {} padding exceeds file length",
+            *offset
+        ));
     }
     *offset = padded_end;
     Ok(DataElement {
@@ -1246,7 +1538,9 @@ mod tests {
     #[test]
     fn rejects_shape_mismatch() {
         let mut mat = MatFile::new("unused.mat");
-        let err = mat.add_f64_matrix("x", 2, 2, vec![1.0, 2.0, 3.0]).unwrap_err();
+        let err = mat
+            .add_f64_matrix("x", 2, 2, vec![1.0, 2.0, 3.0])
+            .unwrap_err();
         assert!(err.to_string().contains("3 values for 2x2"));
     }
 
@@ -1257,16 +1551,23 @@ mod tests {
         mat.add_f64_scalar("scalar", 7.5).unwrap();
         mat.add_f32_row_vector("row", vec![1.0, 2.0, 3.0]).unwrap();
         mat.add_i32_matrix("col", 3, 1, vec![4, 5, 6]).unwrap();
-        mat.add_f64_matrix("matrix", 2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        mat.add_f64_matrix("matrix", 2, 3, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+            .unwrap();
         mat.write().unwrap();
 
         let data = MatData::read(&path).unwrap();
         let scalar = data.get_f64_matrix("scalar").unwrap();
         assert_eq!((scalar.rows, scalar.cols, scalar.values), (1, 1, vec![7.5]));
         let row = data.get_f32_matrix("row").unwrap();
-        assert_eq!((row.rows, row.cols, row.values), (1, 3, vec![1.0, 2.0, 3.0]));
+        assert_eq!(
+            (row.rows, row.cols, row.values),
+            (1, 3, vec![1.0, 2.0, 3.0])
+        );
         let col = data.get_f64_matrix("col").unwrap();
-        assert_eq!((col.rows, col.cols, col.values), (3, 1, vec![4.0, 5.0, 6.0]));
+        assert_eq!(
+            (col.rows, col.cols, col.values),
+            (3, 1, vec![4.0, 5.0, 6.0])
+        );
         let matrix = data.get_f64_matrix("matrix").unwrap();
         assert_eq!((matrix.rows, matrix.cols), (2, 3));
         assert_eq!(matrix.values, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
@@ -1276,7 +1577,13 @@ mod tests {
     #[test]
     fn writes_complex_ph_matrix_readable_by_scipy() {
         let path = temp_path("pystamps-mat-scipy-ph");
-        write_phase_artifact(&path, 2, 2, vec![(1.0, 2.0), (3.0, 4.0), (5.0, -6.0), (7.0, -8.0)]).unwrap();
+        write_phase_artifact(
+            &path,
+            2,
+            2,
+            vec![(1.0, 2.0), (3.0, 4.0), (5.0, -6.0), (7.0, -8.0)],
+        )
+        .unwrap();
 
         let data = MatData::read(&path).unwrap();
         let ph = data.get_complex_f32_matrix(VAR_PH).unwrap();
@@ -1291,7 +1598,57 @@ mod tests {
             .args(["run", "python", "-c", &script])
             .status()
             .expect("uv run python should be available for pySTAMPS tests");
-        assert!(status.success(), "scipy.io.loadmat failed for Rust-written ph matrix");
+        assert!(
+            status.success(),
+            "scipy.io.loadmat failed for Rust-written ph matrix"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn writes_complex_3d_array_readable_by_scipy() {
+        let path = temp_path("pystamps-mat-scipy-3d");
+        let mut mat = MatFile::new(&path);
+        mat.add_complex_f32_array3(
+            "ph_grid",
+            2,
+            3,
+            2,
+            vec![
+                (1.0, 0.0),
+                (2.0, 0.0),
+                (3.0, 0.0),
+                (4.0, 0.0),
+                (5.0, 0.0),
+                (6.0, 0.0),
+                (7.0, 0.0),
+                (8.0, 0.0),
+                (9.0, 0.0),
+                (10.0, 0.0),
+                (11.0, 0.0),
+                (12.0, 0.0),
+            ],
+        )
+        .unwrap();
+        mat.write().unwrap();
+
+        let data = MatData::read(&path).unwrap();
+        let flat = data.get_complex_f32_matrix("ph_grid").unwrap();
+        assert_eq!((flat.rows, flat.cols), (2, 6));
+        assert_eq!(flat.values[5], (6.0, 0.0));
+
+        let script = format!(
+            "import numpy as np; from scipy.io import loadmat; ph=loadmat({path:?})['ph_grid']; assert ph.shape == (2, 3, 2); np.testing.assert_allclose(ph.reshape(-1), np.arange(1, 13, dtype=np.complex64))",
+            path = path.to_string_lossy()
+        );
+        let status = Command::new("uv")
+            .args(["run", "python", "-c", &script])
+            .status()
+            .expect("uv run python should be available for pySTAMPS tests");
+        assert!(
+            status.success(),
+            "scipy.io.loadmat failed for Rust-written 3-D complex array"
+        );
         std::fs::remove_file(path).unwrap();
     }
 

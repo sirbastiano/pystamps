@@ -83,11 +83,15 @@ fn parse_indices(values: &[i64], upper_bound: usize, label: &str) -> PyResult<Ve
     let mut out = Vec::with_capacity(values.len());
     for &value in values {
         if value < 0 {
-            return Err(PyValueError::new_err(format!("{label} entries must be non-negative")));
+            return Err(PyValueError::new_err(format!(
+                "{label} entries must be non-negative"
+            )));
         }
         let idx = value as usize;
         if idx >= upper_bound {
-            return Err(PyValueError::new_err(format!("{label} entry {idx} exceeds width {upper_bound}")));
+            return Err(PyValueError::new_err(format!(
+                "{label} entry {idx} exceeds width {upper_bound}"
+            )));
         }
         out.push(idx);
     }
@@ -167,7 +171,11 @@ fn invert_small_matrix_with_jitter(matrix: &[f64], n: usize) -> Vec<f64> {
         if let Some(inverse) = invert_small_matrix(&adjusted, n) {
             return inverse;
         }
-        jitter = if jitter == 0.0 { 1.0e-10 } else { jitter * 10.0 };
+        jitter = if jitter == 0.0 {
+            1.0e-10
+        } else {
+            jitter * 10.0
+        };
         if jitter > 1.0e-3 {
             let mut identity = vec![0.0; n * n];
             for diag in 0..n {
@@ -229,16 +237,24 @@ fn stage7_outputs(
     threads: usize,
 ) -> PyResult<Stage7Outputs> {
     if unwrap_ix.len() < 2 {
-        return Err(PyValueError::new_err("stage7_scla requires at least two unwrap indices"));
+        return Err(PyValueError::new_err(
+            "stage7_scla requires at least two unwrap indices",
+        ));
     }
     if solve_ix.len() < 2 {
-        return Err(PyValueError::new_err("stage7_scla requires at least two solve indices"));
+        return Err(PyValueError::new_err(
+            "stage7_scla requires at least two solve indices",
+        ));
     }
     if master_ix == 0 || master_ix > n_ifg {
-        return Err(PyValueError::new_err("master_ix must be 1-based within the interferogram width"));
+        return Err(PyValueError::new_err(
+            "master_ix must be 1-based within the interferogram width",
+        ));
     }
     if day.len() != n_ifg || ifg_std.len() != n_ifg {
-        return Err(PyValueError::new_err("day and ifg_std must match the interferogram width"));
+        return Err(PyValueError::new_err(
+            "day and ifg_std must match the interferogram width",
+        ));
     }
 
     let unwrap_obs = unwrap_ix.len() - 1;
@@ -265,7 +281,10 @@ fn stage7_outputs(
             design_seq[row_offset + 2] = day_diff;
         }
     }
-    let inv_seq = invert_small_matrix_with_jitter(&design_gram(&design_seq, unwrap_obs, seq_coeff), seq_coeff);
+    let inv_seq = invert_small_matrix_with_jitter(
+        &design_gram(&design_seq, unwrap_obs, seq_coeff),
+        seq_coeff,
+    );
 
     let master_zero = day[master_ix - 1];
     let mut solve_design = Vec::new();
@@ -304,7 +323,11 @@ fn stage7_outputs(
         })
         .collect();
     let s0: f64 = weights_mv.iter().sum();
-    let s1: f64 = weights_mv.iter().zip(time_diff.iter()).map(|(&w, &t)| w * t).sum();
+    let s1: f64 = weights_mv
+        .iter()
+        .zip(time_diff.iter())
+        .map(|(&w, &t)| w * t)
+        .sum();
     let s2: f64 = weights_mv
         .iter()
         .zip(time_diff.iter())
@@ -312,7 +335,10 @@ fn stage7_outputs(
         .sum();
     let det = s0 * s2 - s1 * s1;
 
-    let ifg_var: Vec<f64> = ifg_std.iter().map(|&std| (std * PI / 180.0) * (std * PI / 180.0)).collect();
+    let ifg_var: Vec<f64> = ifg_std
+        .iter()
+        .map(|&std| (std * PI / 180.0) * (std * PI / 180.0))
+        .collect();
     let mut ifg_vcm = vec![0.0; n_ifg * n_ifg];
     for diag_ix in 0..n_ifg {
         ifg_vcm[diag_ix * n_ifg + diag_ix] = ifg_var[diag_ix];
@@ -327,10 +353,14 @@ fn stage7_outputs(
                     let row_offset = row_ix * n_ifg;
                     let mut ph_seq = vec![0.0; unwrap_obs];
                     for obs_ix in 0..unwrap_obs {
-                        ph_seq[obs_ix] =
-                            ph_proc[row_offset + unwrap_ix[obs_ix + 1]] - ph_proc[row_offset + unwrap_ix[obs_ix]];
+                        ph_seq[obs_ix] = ph_proc[row_offset + unwrap_ix[obs_ix + 1]]
+                            - ph_proc[row_offset + unwrap_ix[obs_ix]];
                     }
-                    let coeff_seq = mat_vec(&inv_seq, &design_rhs(&design_seq, &ph_seq, unwrap_obs, seq_coeff), seq_coeff);
+                    let coeff_seq = mat_vec(
+                        &inv_seq,
+                        &design_rhs(&design_seq, &ph_seq, unwrap_obs, seq_coeff),
+                        seq_coeff,
+                    );
                     let k = coeff_seq[1];
 
                     let mut ph_scla_row = vec![0.0_f32; n_ifg];
@@ -344,7 +374,11 @@ fn stage7_outputs(
                             let resid = ph_proc[row_offset + ifg_ix] - ph_scla_row[ifg_ix] as f64;
                             resid_weighted[obs_ix] = resid / solve_scales[obs_ix];
                         }
-                        mat_vec(inv_c_ref, &design_rhs(&solve_design, &resid_weighted, solve_ix.len(), 2), 2)[0] as f32
+                        mat_vec(
+                            inv_c_ref,
+                            &design_rhs(&solve_design, &resid_weighted, solve_ix.len(), 2),
+                            2,
+                        )[0] as f32
                     } else {
                         let mut accum = 0.0;
                         for &ifg_ix in solve_ix {
@@ -389,10 +423,14 @@ fn stage7_outputs(
                     let row_offset = row_ix * n_ifg;
                     let mut ph_seq = vec![0.0; unwrap_obs];
                     for obs_ix in 0..unwrap_obs {
-                        ph_seq[obs_ix] =
-                            ph_proc[row_offset + unwrap_ix[obs_ix + 1]] - ph_proc[row_offset + unwrap_ix[obs_ix]];
+                        ph_seq[obs_ix] = ph_proc[row_offset + unwrap_ix[obs_ix + 1]]
+                            - ph_proc[row_offset + unwrap_ix[obs_ix]];
                     }
-                    let coeff_seq = mat_vec(&inv_seq, &design_rhs(&design_seq, &ph_seq, unwrap_obs, seq_coeff), seq_coeff);
+                    let coeff_seq = mat_vec(
+                        &inv_seq,
+                        &design_rhs(&design_seq, &ph_seq, unwrap_obs, seq_coeff),
+                        seq_coeff,
+                    );
                     let k = coeff_seq[1];
 
                     let mut ph_scla_row = vec![0.0_f32; n_ifg];
@@ -406,7 +444,11 @@ fn stage7_outputs(
                             let resid = ph_proc[row_offset + ifg_ix] - ph_scla_row[ifg_ix] as f64;
                             resid_weighted[obs_ix] = resid / solve_scales[obs_ix];
                         }
-                        mat_vec(inv_c_ref, &design_rhs(&solve_design, &resid_weighted, solve_ix.len(), 2), 2)[0] as f32
+                        mat_vec(
+                            inv_c_ref,
+                            &design_rhs(&solve_design, &resid_weighted, solve_ix.len(), 2),
+                            2,
+                        )[0] as f32
                     } else {
                         let mut accum = 0.0;
                         for &ifg_ix in solve_ix {
@@ -489,10 +531,12 @@ fn near_max_trial_indices(coh_trial: &[f64]) -> Vec<usize> {
 
     let mut local_max = vec![false; coh_trial.len()];
     local_max[0] = coh_trial[0] >= coh_trial[1];
-    local_max[coh_trial.len() - 1] = coh_trial[coh_trial.len() - 1] >= coh_trial[coh_trial.len() - 2];
+    local_max[coh_trial.len() - 1] =
+        coh_trial[coh_trial.len() - 1] >= coh_trial[coh_trial.len() - 2];
     if coh_trial.len() > 2 {
         for idx in 1..coh_trial.len() - 1 {
-            local_max[idx] = coh_trial[idx] >= coh_trial[idx - 1] && coh_trial[idx] >= coh_trial[idx + 1];
+            local_max[idx] =
+                coh_trial[idx] >= coh_trial[idx - 1] && coh_trial[idx] >= coh_trial[idx + 1];
         }
     }
 
@@ -514,7 +558,12 @@ fn near_max_trial_indices(coh_trial: &[f64]) -> Vec<usize> {
     candidate_ix
 }
 
-fn select_candidate(candidate_ix: &[usize], candidate_coh: &[f64], refined_coh: &[f64], trial_count: usize) -> usize {
+fn select_candidate(
+    candidate_ix: &[usize],
+    candidate_coh: &[f64],
+    refined_coh: &[f64],
+    trial_count: usize,
+) -> usize {
     if candidate_ix.is_empty() {
         return 0;
     }
@@ -525,8 +574,9 @@ fn select_candidate(candidate_ix: &[usize], candidate_coh: &[f64], refined_coh: 
         return coarse_best_trial_ix;
     }
 
-    let endpoint_symmetric =
-        candidate_ix.len() == 2 && candidate_ix[0] == 0 && candidate_ix[candidate_ix.len() - 1] == trial_count - 1;
+    let endpoint_symmetric = candidate_ix.len() == 2
+        && candidate_ix[0] == 0
+        && candidate_ix[candidate_ix.len() - 1] == trial_count - 1;
     if endpoint_symmetric {
         return coarse_best_trial_ix;
     }
@@ -579,7 +629,11 @@ fn collect_row(cpx_row: &[Complex64], bp_row: &[f64]) -> RowData {
         den_lin = 1.0;
     }
 
-    let mut bperp_range = if valid_cols.is_empty() { 1.0 } else { bperp_max - bperp_min };
+    let mut bperp_range = if valid_cols.is_empty() {
+        1.0
+    } else {
+        bperp_max - bperp_min
+    };
     if bperp_range == 0.0 {
         bperp_range = 1.0;
     }
@@ -642,7 +696,11 @@ fn collect_row_single(cpx_row: &[Complex32], bp_row: &[f32]) -> RowDataSingle {
         den_lin = 1.0;
     }
 
-    let mut bperp_range = if valid_cols.is_empty() { 1.0 } else { bperp_max - bperp_min };
+    let mut bperp_range = if valid_cols.is_empty() {
+        1.0
+    } else {
+        bperp_max - bperp_min
+    };
     if bperp_range == 0.0 {
         bperp_range = 1.0;
     }
@@ -692,7 +750,11 @@ fn coherence_trials_generic_single(row: &RowDataSingle, trial_mult: &[f32]) -> V
     coh_trial
 }
 
-fn coherence_trials_row_invariant(row: &RowData, basis: &[Complex64], trial_count: usize) -> Vec<f64> {
+fn coherence_trials_row_invariant(
+    row: &RowData,
+    basis: &[Complex64],
+    trial_count: usize,
+) -> Vec<f64> {
     let mut coh_trial = vec![0.0; trial_count];
     for trial_ix in 0..trial_count {
         let basis_row = &basis[trial_ix * row.n_col..(trial_ix + 1) * row.n_col];
@@ -805,7 +867,12 @@ fn refine_candidate_single(row: &RowDataSingle, coarse_k0: f32, store_phase: boo
     }
 }
 
-fn solve_row_generic(cpx_row: &[Complex64], bp_row: &[f64], trial_mult: &[f64], store_phase: bool) -> RefinedRow {
+fn solve_row_generic(
+    cpx_row: &[Complex64],
+    bp_row: &[f64],
+    trial_mult: &[f64],
+    store_phase: bool,
+) -> RefinedRow {
     let row = collect_row(cpx_row, bp_row);
     if row.cpx.is_empty() {
         return RefinedRow {
@@ -820,7 +887,12 @@ fn solve_row_generic(cpx_row: &[Complex64], bp_row: &[f64], trial_mult: &[f64], 
     solve_row_from_trials(&row, trial_mult, &coh_trial, store_phase)
 }
 
-fn solve_row_generic_single(cpx_row: &[Complex32], bp_row: &[f32], trial_mult: &[f32], store_phase: bool) -> RefinedRow {
+fn solve_row_generic_single(
+    cpx_row: &[Complex32],
+    bp_row: &[f32],
+    trial_mult: &[f32],
+    store_phase: bool,
+) -> RefinedRow {
     let row = collect_row_single(cpx_row, bp_row);
     if row.cpx.is_empty() {
         return RefinedRow {
@@ -847,7 +919,12 @@ fn solve_row_generic_single(cpx_row: &[Complex32], bp_row: &[f32], trial_mult: &
         candidate_coh.push(coh_trial_f64[trial_ix]);
     }
     let refined_coh = refined.iter().map(|row| row.coh).collect::<Vec<_>>();
-    let selected_trial_ix = select_candidate(&candidate_ix, &candidate_coh, &refined_coh, trial_mult.len());
+    let selected_trial_ix = select_candidate(
+        &candidate_ix,
+        &candidate_coh,
+        &refined_coh,
+        trial_mult.len(),
+    );
     let selected_local_ix = candidate_ix
         .iter()
         .position(|&trial_ix| trial_ix == selected_trial_ix)
@@ -876,7 +953,12 @@ fn solve_row_row_invariant(
     solve_row_from_trials(&row, trial_mult, &coh_trial, store_phase)
 }
 
-fn solve_row_from_trials(row: &RowData, trial_mult: &[f64], coh_trial: &[f64], store_phase: bool) -> RefinedRow {
+fn solve_row_from_trials(
+    row: &RowData,
+    trial_mult: &[f64],
+    coh_trial: &[f64],
+    store_phase: bool,
+) -> RefinedRow {
     let candidate_ix = near_max_trial_indices(coh_trial);
     if candidate_ix.len() == 1 {
         let coarse_k0 = QUARTER_PI / row.bperp_range * trial_mult[candidate_ix[0]];
@@ -891,7 +973,12 @@ fn solve_row_from_trials(row: &RowData, trial_mult: &[f64], coh_trial: &[f64], s
         candidate_coh.push(coh_trial[trial_ix]);
     }
     let refined_coh = refined.iter().map(|row| row.coh).collect::<Vec<_>>();
-    let selected_trial_ix = select_candidate(&candidate_ix, &candidate_coh, &refined_coh, trial_mult.len());
+    let selected_trial_ix = select_candidate(
+        &candidate_ix,
+        &candidate_coh,
+        &refined_coh,
+        trial_mult.len(),
+    );
     let selected_local_ix = candidate_ix
         .iter()
         .position(|&trial_ix| trial_ix == selected_trial_ix)
@@ -938,7 +1025,9 @@ fn accumulate_weighted_grid<'py>(
         return Err(PyValueError::new_err("ph_weight must be a 2-D matrix"));
     }
     if grid_view.len() != ph_view.shape()[0] {
-        return Err(PyValueError::new_err("grid_lin length must match ph_weight row count"));
+        return Err(PyValueError::new_err(
+            "grid_lin length must match ph_weight row count",
+        ));
     }
 
     let ph_slice = ph_view
@@ -1056,8 +1145,9 @@ fn ps_topofit_batch_generic_f64_impl<'py>(
     let coh_values: Vec<f64> = rows.iter().map(|row| row.coh).collect();
     let residual: Vec<Complex32> = rows.into_iter().flat_map(|row| row.residual).collect();
 
-    let residual_array = Array2::from_shape_vec((n_row, n_col), residual)
-        .map_err(|err| PyValueError::new_err(format!("failed to build topofit residual output: {err}")))?;
+    let residual_array = Array2::from_shape_vec((n_row, n_col), residual).map_err(|err| {
+        PyValueError::new_err(format!("failed to build topofit residual output: {err}"))
+    })?;
     Ok((
         Array1::from_vec(k_values).into_pyarray(py),
         Array1::from_vec(c_values).into_pyarray(py),
@@ -1095,7 +1185,10 @@ fn ps_topofit_batch_generic_f32<'py>(
         .ok_or_else(|| PyValueError::new_err("bperp must be C-contiguous"))?;
     let n_row = cpx_view.shape()[0];
     let n_col = cpx_view.shape()[1];
-    let trial_mult: Vec<f32> = trial_values(n_trial_wraps).into_iter().map(|value| value as f32).collect();
+    let trial_mult: Vec<f32> = trial_values(n_trial_wraps)
+        .into_iter()
+        .map(|value| value as f32)
+        .collect();
     let pool = build_pool(threads)?;
 
     let rows = py.detach(move || {
@@ -1126,8 +1219,9 @@ fn ps_topofit_batch_generic_f32<'py>(
     let coh_values: Vec<f64> = rows.iter().map(|row| row.coh).collect();
     let residual: Vec<Complex32> = rows.into_iter().flat_map(|row| row.residual).collect();
 
-    let residual_array = Array2::from_shape_vec((n_row, n_col), residual)
-        .map_err(|err| PyValueError::new_err(format!("failed to build topofit residual output: {err}")))?;
+    let residual_array = Array2::from_shape_vec((n_row, n_col), residual).map_err(|err| {
+        PyValueError::new_err(format!("failed to build topofit residual output: {err}"))
+    })?;
     Ok((
         Array1::from_vec(k_values).into_pyarray(py),
         Array1::from_vec(c_values).into_pyarray(py),
@@ -1180,7 +1274,9 @@ fn ps_topofit_batch_row_invariant<'py>(
     let n_row = cpx_view.shape()[0];
     let n_col = cpx_view.shape()[1];
     if bp_view.len() != n_col {
-        return Err(PyValueError::new_err("row-invariant bperp vector length must match cpxphase width"));
+        return Err(PyValueError::new_err(
+            "row-invariant bperp vector length must match cpxphase width",
+        ));
     }
 
     let trial_mult = trial_values(n_trial_wraps);
@@ -1213,8 +1309,11 @@ fn ps_topofit_batch_row_invariant<'py>(
     let coh_values: Vec<f64> = rows.iter().map(|row| row.coh).collect();
     let residual: Vec<Complex32> = rows.into_iter().flat_map(|row| row.residual).collect();
 
-    let residual_array = Array2::from_shape_vec((n_row, n_col), residual)
-        .map_err(|err| PyValueError::new_err(format!("failed to build row-invariant residual output: {err}")))?;
+    let residual_array = Array2::from_shape_vec((n_row, n_col), residual).map_err(|err| {
+        PyValueError::new_err(format!(
+            "failed to build row-invariant residual output: {err}"
+        ))
+    })?;
     Ok((
         Array1::from_vec(k_values).into_pyarray(py),
         Array1::from_vec(c_values).into_pyarray(py),
@@ -1246,7 +1345,9 @@ fn ps_topofit_coh_row_invariant<'py>(
     let n_row = cpx_view.shape()[0];
     let n_col = cpx_view.shape()[1];
     if bp_view.len() != n_col {
-        return Err(PyValueError::new_err("row-invariant bperp vector length must match cpxphase width"));
+        return Err(PyValueError::new_err(
+            "row-invariant bperp vector length must match cpxphase width",
+        ));
     }
 
     let trial_mult = trial_values(n_trial_wraps);
@@ -1301,18 +1402,22 @@ fn histogram_with_centers<'py>(
         return Ok(Array1::from_vec(out).into_pyarray(py));
     }
 
-    let diffs: Vec<f64> = center_slice.windows(2).map(|pair| pair[1] - pair[0]).collect();
+    let diffs: Vec<f64> = center_slice
+        .windows(2)
+        .map(|pair| pair[1] - pair[0])
+        .collect();
     let max_abs_center = center_slice
         .iter()
         .fold(0.0_f64, |acc, &value| acc.max(value.abs()));
-    let equal_spacing = diffs.iter().all(|&diff| {
-        (diff - diffs[0]).abs() <= f64::EPSILON * (1.0_f64).max(max_abs_center)
-    });
+    let equal_spacing = diffs
+        .iter()
+        .all(|&diff| (diff - diffs[0]).abs() <= f64::EPSILON * (1.0_f64).max(max_abs_center));
     if equal_spacing {
         let d = if center_slice.len() < 3 {
             1.0_f64
         } else {
-            (center_slice[center_slice.len() - 1] - center_slice[0]) / ((center_slice.len() - 1) as f64)
+            (center_slice[center_slice.len() - 1] - center_slice[0])
+                / ((center_slice.len() - 1) as f64)
         };
         let cutoff0 = (center_slice[0] + center_slice[1]) / 2.0;
         let max_bin = (center_slice.len() - 1) as f64;
@@ -1326,7 +1431,10 @@ fn histogram_with_centers<'py>(
         return Ok(Array1::from_vec(out).into_pyarray(py));
     }
 
-    let mids: Vec<f64> = center_slice.windows(2).map(|pair| (pair[0] + pair[1]) / 2.0).collect();
+    let mids: Vec<f64> = center_slice
+        .windows(2)
+        .map(|pair| (pair[0] + pair[1]) / 2.0)
+        .collect();
     for &value in value_slice {
         if !value.is_finite() {
             continue;
@@ -1351,7 +1459,13 @@ fn wrap_phase(value: f64) -> f64 {
     value.sin().atan2(value.cos())
 }
 
-fn weighted_affine_fit_rows(time_diff: &[f64], y: &[f64], n_row: usize, n_col: usize, w: &[f64]) -> (Vec<f64>, Vec<f64>) {
+fn weighted_affine_fit_rows(
+    time_diff: &[f64],
+    y: &[f64],
+    n_row: usize,
+    n_col: usize,
+    w: &[f64],
+) -> (Vec<f64>, Vec<f64>) {
     let mut intercept = vec![0.0_f64; n_row];
     let mut slope = vec![0.0_f64; n_row];
     if n_row == 0 || n_col == 0 {
@@ -1359,7 +1473,11 @@ fn weighted_affine_fit_rows(time_diff: &[f64], y: &[f64], n_row: usize, n_col: u
     }
 
     let s0: f64 = w.iter().copied().sum();
-    let s1: f64 = w.iter().zip(time_diff.iter()).map(|(&wi, &ti)| wi * ti).sum();
+    let s1: f64 = w
+        .iter()
+        .zip(time_diff.iter())
+        .map(|(&wi, &ti)| wi * ti)
+        .sum();
     let s2: f64 = w
         .iter()
         .zip(time_diff.iter())
@@ -1394,7 +1512,13 @@ fn weighted_affine_fit_rows(time_diff: &[f64], y: &[f64], n_row: usize, n_col: u
     (intercept, slope)
 }
 
-fn weighted_slope_fit_rows_real(x: &[f64], y: &[f64], n_row: usize, n_col: usize, w: &[f64]) -> Vec<f64> {
+fn weighted_slope_fit_rows_real(
+    x: &[f64],
+    y: &[f64],
+    n_row: usize,
+    n_col: usize,
+    w: &[f64],
+) -> Vec<f64> {
     let mut out = vec![0.0_f64; n_row];
     if n_row == 0 || n_col == 0 {
         return out;
@@ -1423,7 +1547,13 @@ fn weighted_slope_fit_rows_real(x: &[f64], y: &[f64], n_row: usize, n_col: usize
     let pos_idx: Vec<usize> = w
         .iter()
         .enumerate()
-        .filter_map(|(idx, &value)| if value.is_finite() && value > 0.0 { Some(idx) } else { None })
+        .filter_map(|(idx, &value)| {
+            if value.is_finite() && value > 0.0 {
+                Some(idx)
+            } else {
+                None
+            }
+        })
         .collect();
     if pos_idx.is_empty() {
         return out;
@@ -1478,7 +1608,13 @@ fn weighted_slope_fit_rows_complex(
     let pos_idx: Vec<usize> = w
         .iter()
         .enumerate()
-        .filter_map(|(idx, &value)| if value.is_finite() && value > 0.0 { Some(idx) } else { None })
+        .filter_map(|(idx, &value)| {
+            if value.is_finite() && value > 0.0 {
+                Some(idx)
+            } else {
+                None
+            }
+        })
         .collect();
     if pos_idx.is_empty() {
         return out;
@@ -1548,7 +1684,12 @@ fn variance_cols_complex(data: &[Complex64], n_row: usize, n_col: usize, ddof: u
     out
 }
 
-fn std_max_rows_real(data: &[f64], n_row: usize, n_col: usize, ddof: usize) -> (Vec<f64>, Vec<f64>) {
+fn std_max_rows_real(
+    data: &[f64],
+    n_row: usize,
+    n_col: usize,
+    ddof: usize,
+) -> (Vec<f64>, Vec<f64>) {
     let mut std = vec![0.0_f64; n_row];
     let mut max_abs = vec![0.0_f64; n_row];
     if n_row == 0 || n_col == 0 {
@@ -1565,7 +1706,11 @@ fn std_max_rows_real(data: &[f64], n_row: usize, n_col: usize, ddof: usize) -> (
             accum += delta * delta;
             max_value = max_value.max(value.abs());
         }
-        std[row_ix] = if denom == 0 { 0.0 } else { (accum / denom as f64).sqrt() };
+        std[row_ix] = if denom == 0 {
+            0.0
+        } else {
+            (accum / denom as f64).sqrt()
+        };
         max_abs[row_ix] = max_value;
     }
     (std, max_abs)
@@ -1601,7 +1746,8 @@ fn stage4_edge_stats_outputs(
                     let a_ix = edge_a[edge_ix];
                     let b_ix = edge_b[edge_ix];
                     for ifg_ix in 0..n_ifg {
-                        row[ifg_ix] = ph_slice[b_ix * n_ifg + ifg_ix] * ph_slice[a_ix * n_ifg + ifg_ix].conj();
+                        row[ifg_ix] = ph_slice[b_ix * n_ifg + ifg_ix]
+                            * ph_slice[a_ix * n_ifg + ifg_ix].conj();
                     }
                 });
         }),
@@ -1611,7 +1757,8 @@ fn stage4_edge_stats_outputs(
                 let b_ix = edge_b[edge_ix];
                 let row = &mut dph_space[edge_ix * n_ifg..(edge_ix + 1) * n_ifg];
                 for ifg_ix in 0..n_ifg {
-                    row[ifg_ix] = ph_slice[b_ix * n_ifg + ifg_ix] * ph_slice[a_ix * n_ifg + ifg_ix].conj();
+                    row[ifg_ix] =
+                        ph_slice[b_ix * n_ifg + ifg_ix] * ph_slice[a_ix * n_ifg + ifg_ix].conj();
                 }
             }
         }
@@ -1619,7 +1766,9 @@ fn stage4_edge_stats_outputs(
 
     let (edge_std, edge_max) = if !small_baseline {
         if day.len() != n_ifg {
-            return Err(PyValueError::new_err("stage4_edge_stats day length must match phase width"));
+            return Err(PyValueError::new_err(
+                "stage4_edge_stats day length must match phase width",
+            ));
         }
         let time_win_f = time_win.max(1.0e-6);
         let mut time_diff_all = vec![0.0_f64; n_ifg * n_ifg];
@@ -1705,19 +1854,32 @@ fn stage4_edge_stats_outputs(
                                     (dph_space[edge_ix * n_ifg + col_ix] * mean_conj).arg();
                             }
                         }
-                        let (m0, m1) = weighted_affine_fit_rows(time_diff, &dph_mean_adj, n_edge, n_ifg, weight);
+                        let (m0, m1) = weighted_affine_fit_rows(
+                            time_diff,
+                            &dph_mean_adj,
+                            n_edge,
+                            n_ifg,
+                            weight,
+                        );
                         let mut dph_mean_adj2 = vec![0.0_f64; n_edge * n_ifg];
                         for edge_ix in 0..n_edge {
                             for col_ix in 0..n_ifg {
-                                let detrended =
-                                    dph_mean_adj[edge_ix * n_ifg + col_ix] - (m0[edge_ix] + m1[edge_ix] * time_diff[col_ix]);
+                                let detrended = dph_mean_adj[edge_ix * n_ifg + col_ix]
+                                    - (m0[edge_ix] + m1[edge_ix] * time_diff[col_ix]);
                                 dph_mean_adj2[edge_ix * n_ifg + col_ix] = wrap_phase(detrended);
                             }
                         }
-                        let (m20, _) = weighted_affine_fit_rows(time_diff, &dph_mean_adj2, n_edge, n_ifg, weight);
+                        let (m20, _) = weighted_affine_fit_rows(
+                            time_diff,
+                            &dph_mean_adj2,
+                            n_edge,
+                            n_ifg,
+                            weight,
+                        );
                         let mut column = vec![Complex64::new(0.0, 0.0); n_edge];
                         for edge_ix in 0..n_edge {
-                            column[edge_ix] = dph_mean[edge_ix] * Complex64::from_polar(1.0, m0[edge_ix] + m20[edge_ix]);
+                            column[edge_ix] = dph_mean[edge_ix]
+                                * Complex64::from_polar(1.0, m0[edge_ix] + m20[edge_ix]);
                         }
                         column
                     })
@@ -1739,19 +1901,22 @@ fn stage4_edge_stats_outputs(
                                 (dph_space[edge_ix * n_ifg + col_ix] * mean_conj).arg();
                         }
                     }
-                    let (m0, m1) = weighted_affine_fit_rows(time_diff, &dph_mean_adj, n_edge, n_ifg, weight);
+                    let (m0, m1) =
+                        weighted_affine_fit_rows(time_diff, &dph_mean_adj, n_edge, n_ifg, weight);
                     let mut dph_mean_adj2 = vec![0.0_f64; n_edge * n_ifg];
                     for edge_ix in 0..n_edge {
                         for col_ix in 0..n_ifg {
-                            let detrended =
-                                dph_mean_adj[edge_ix * n_ifg + col_ix] - (m0[edge_ix] + m1[edge_ix] * time_diff[col_ix]);
+                            let detrended = dph_mean_adj[edge_ix * n_ifg + col_ix]
+                                - (m0[edge_ix] + m1[edge_ix] * time_diff[col_ix]);
                             dph_mean_adj2[edge_ix * n_ifg + col_ix] = wrap_phase(detrended);
                         }
                     }
-                    let (m20, _) = weighted_affine_fit_rows(time_diff, &dph_mean_adj2, n_edge, n_ifg, weight);
+                    let (m20, _) =
+                        weighted_affine_fit_rows(time_diff, &dph_mean_adj2, n_edge, n_ifg, weight);
                     let mut column = vec![Complex64::new(0.0, 0.0); n_edge];
                     for edge_ix in 0..n_edge {
-                        column[edge_ix] = dph_mean[edge_ix] * Complex64::from_polar(1.0, m0[edge_ix] + m20[edge_ix]);
+                        column[edge_ix] = dph_mean[edge_ix]
+                            * Complex64::from_polar(1.0, m0[edge_ix] + m20[edge_ix]);
                     }
                     cols.push(column);
                 }
@@ -1770,10 +1935,12 @@ fn stage4_edge_stats_outputs(
         let mut dph_noise2 = vec![0.0_f64; n_edge * n_ifg];
         for edge_ix in 0..n_edge {
             for ifg_ix in 0..n_ifg {
-                dph_noise[edge_ix * n_ifg + ifg_ix] =
-                    (dph_space[edge_ix * n_ifg + ifg_ix] * dph_smooth[edge_ix * n_ifg + ifg_ix].conj()).arg();
-                dph_noise2[edge_ix * n_ifg + ifg_ix] =
-                    (dph_space[edge_ix * n_ifg + ifg_ix] * dph_smooth2[edge_ix * n_ifg + ifg_ix].conj()).arg();
+                dph_noise[edge_ix * n_ifg + ifg_ix] = (dph_space[edge_ix * n_ifg + ifg_ix]
+                    * dph_smooth[edge_ix * n_ifg + ifg_ix].conj())
+                .arg();
+                dph_noise2[edge_ix * n_ifg + ifg_ix] = (dph_space[edge_ix * n_ifg + ifg_ix]
+                    * dph_smooth2[edge_ix * n_ifg + ifg_ix].conj())
+                .arg();
             }
         }
 
@@ -1781,7 +1948,13 @@ fn stage4_edge_stats_outputs(
         let ifg_var = variance_cols_real(&dph_noise2, n_edge, n_ifg, ddof_var);
         let w_ifg: Vec<f64> = ifg_var
             .iter()
-            .map(|&value| if value == 0.0 { f64::INFINITY } else { 1.0 / value })
+            .map(|&value| {
+                if value == 0.0 {
+                    f64::INFINITY
+                } else {
+                    1.0 / value
+                }
+            })
             .collect();
         let k_edge = weighted_slope_fit_rows_real(bperp, &dph_noise, n_edge, n_ifg, &w_ifg);
         for edge_ix in 0..n_edge {
@@ -1797,14 +1970,21 @@ fn stage4_edge_stats_outputs(
         let ifg_var = variance_cols_complex(&dph_space, n_edge, n_ifg, ddof_var);
         let w_ifg: Vec<f64> = ifg_var
             .iter()
-            .map(|&value| if value == 0.0 { f64::INFINITY } else { 1.0 / value })
+            .map(|&value| {
+                if value == 0.0 {
+                    f64::INFINITY
+                } else {
+                    1.0 / value
+                }
+            })
             .collect();
         let k_edge = weighted_slope_fit_rows_complex(bperp, &dph_space, n_edge, n_ifg, &w_ifg);
         let mut ang = vec![0.0_f64; n_edge * n_ifg];
         for edge_ix in 0..n_edge {
             let slope = k_edge[edge_ix];
             for ifg_ix in 0..n_ifg {
-                ang[edge_ix * n_ifg + ifg_ix] = (dph_space[edge_ix * n_ifg + ifg_ix] - slope * bperp[ifg_ix]).arg();
+                ang[edge_ix * n_ifg + ifg_ix] =
+                    (dph_space[edge_ix * n_ifg + ifg_ix] - slope * bperp[ifg_ix]).arg();
             }
         }
         let ddof = if n_ifg > 1 { 1 } else { 0 };
@@ -1841,7 +2021,9 @@ fn stage4_edge_stats<'py>(
     let node_a_view = node_a.as_array();
     let node_b_view = node_b.as_array();
     if node_a_view.len() != node_b_view.len() {
-        return Err(PyValueError::new_err("node_a and node_b must have matching lengths"));
+        return Err(PyValueError::new_err(
+            "node_a and node_b must have matching lengths",
+        ));
     }
     let bperp_view = bperp.as_array();
     let day_view = day.as_array();
@@ -1865,10 +2047,14 @@ fn stage4_edge_stats<'py>(
     let n_node = ph_view.shape()[0];
     let n_ifg = ph_view.shape()[1];
     if bperp_slice.len() != n_ifg {
-        return Err(PyValueError::new_err("stage4_edge_stats bperp length must match phase width"));
+        return Err(PyValueError::new_err(
+            "stage4_edge_stats bperp length must match phase width",
+        ));
     }
     if !small_baseline && day_slice.len() != n_ifg {
-        return Err(PyValueError::new_err("stage4_edge_stats day length must match phase width"));
+        return Err(PyValueError::new_err(
+            "stage4_edge_stats day length must match phase width",
+        ));
     }
     let edge_a = parse_indices(node_a_slice, n_node, "node_a")?;
     let edge_b = parse_indices(node_b_slice, n_node, "node_b")?;
@@ -1910,9 +2096,12 @@ fn stage7_scla_parity<'py>(
     let ph_mean_v_view = ph_mean_v.as_array();
     let bperp_view = bperp_mat.as_array();
     if ph_proc_view.ndim() != 2 || ph_mean_v_view.ndim() != 2 || bperp_view.ndim() != 2 {
-        return Err(PyValueError::new_err("stage7_scla_parity expects 2-D ph_proc, ph_mean_v, and bperp_mat"));
+        return Err(PyValueError::new_err(
+            "stage7_scla_parity expects 2-D ph_proc, ph_mean_v, and bperp_mat",
+        ));
     }
-    if ph_proc_view.shape() != ph_mean_v_view.shape() || ph_proc_view.shape() != bperp_view.shape() {
+    if ph_proc_view.shape() != ph_mean_v_view.shape() || ph_proc_view.shape() != bperp_view.shape()
+    {
         return Err(PyValueError::new_err(
             "stage7_scla_parity expects ph_proc, ph_mean_v, and bperp_mat with matching shapes",
         ));
@@ -1965,31 +2154,47 @@ fn stage7_scla_parity<'py>(
     })?;
 
     let dict = PyDict::new(py);
-    dict.set_item("K_ps_uw", Array1::from_vec(outputs.k_ps_uw).into_pyarray(py))?;
-    dict.set_item("C_ps_uw", Array1::from_vec(outputs.c_ps_uw).into_pyarray(py))?;
+    dict.set_item(
+        "K_ps_uw",
+        Array1::from_vec(outputs.k_ps_uw).into_pyarray(py),
+    )?;
+    dict.set_item(
+        "C_ps_uw",
+        Array1::from_vec(outputs.c_ps_uw).into_pyarray(py),
+    )?;
     dict.set_item(
         "ph_scla",
         Array2::from_shape_vec((n_ps, n_ifg), outputs.ph_scla)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage7 ph_scla output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to build stage7 ph_scla output: {err}"))
+            })?
             .into_pyarray(py),
     )?;
     dict.set_item(
         "ifg_vcm",
         Array2::from_shape_vec((n_ifg, n_ifg), outputs.ifg_vcm)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage7 ifg_vcm output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to build stage7 ifg_vcm output: {err}"))
+            })?
             .into_pyarray(py),
     )?;
     dict.set_item("mean_v", Array1::from_vec(outputs.mean_v).into_pyarray(py))?;
     dict.set_item(
         "m",
         Array2::from_shape_vec((2, n_ps), outputs.m)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage7 mean-velocity output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!(
+                    "failed to build stage7 mean-velocity output: {err}"
+                ))
+            })?
             .into_pyarray(py),
     )?;
     dict.set_item(
         "ph_ramp",
         Array2::from_shape_vec((n_ps, n_ifg), outputs.ph_ramp)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage7 ph_ramp output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to build stage7 ph_ramp output: {err}"))
+            })?
             .into_pyarray(py),
     )?;
     Ok(dict)
@@ -2010,12 +2215,16 @@ fn stage7_scla<'py>(
     let bperp_view = bperp_mat.as_array();
     let no_master_view = no_master.as_array();
     if ph_view.ndim() != 2 || bperp_view.ndim() != 2 {
-        return Err(PyValueError::new_err("stage7_scla expects 2-D ph_uw and bperp_mat"));
+        return Err(PyValueError::new_err(
+            "stage7_scla expects 2-D ph_uw and bperp_mat",
+        ));
     }
     let n_ps = ph_view.shape()[0];
     let n_ifg = ph_view.shape()[1];
     if no_master_view.len() != n_ifg || day.as_array().len() != n_ifg {
-        return Err(PyValueError::new_err("stage7_scla no_master/day length must match ph_uw width"));
+        return Err(PyValueError::new_err(
+            "stage7_scla no_master/day length must match ph_uw width",
+        ));
     }
 
     let ph_slice = ph_view
@@ -2061,31 +2270,47 @@ fn stage7_scla<'py>(
     })?;
 
     let dict = PyDict::new(py);
-    dict.set_item("K_ps_uw", Array1::from_vec(outputs.k_ps_uw).into_pyarray(py))?;
-    dict.set_item("C_ps_uw", Array1::from_vec(outputs.c_ps_uw).into_pyarray(py))?;
+    dict.set_item(
+        "K_ps_uw",
+        Array1::from_vec(outputs.k_ps_uw).into_pyarray(py),
+    )?;
+    dict.set_item(
+        "C_ps_uw",
+        Array1::from_vec(outputs.c_ps_uw).into_pyarray(py),
+    )?;
     dict.set_item(
         "ph_scla",
         Array2::from_shape_vec((n_ps, n_ifg), outputs.ph_scla)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage7 shim ph_scla output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to build stage7 shim ph_scla output: {err}"))
+            })?
             .into_pyarray(py),
     )?;
     dict.set_item(
         "ifg_vcm",
         Array2::from_shape_vec((n_ifg, n_ifg), outputs.ifg_vcm)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage7 shim ifg_vcm output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to build stage7 shim ifg_vcm output: {err}"))
+            })?
             .into_pyarray(py),
     )?;
     dict.set_item("mean_v", Array1::from_vec(outputs.mean_v).into_pyarray(py))?;
     dict.set_item(
         "m",
         Array2::from_shape_vec((2, n_ps), outputs.m)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage7 shim mean-velocity output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!(
+                    "failed to build stage7 shim mean-velocity output: {err}"
+                ))
+            })?
             .into_pyarray(py),
     )?;
     dict.set_item(
         "ph_ramp",
         Array2::from_shape_vec((n_ps, n_ifg), outputs.ph_ramp)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage7 shim ph_ramp output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to build stage7 shim ph_ramp output: {err}"))
+            })?
             .into_pyarray(py),
     )?;
     Ok(dict)
@@ -2107,7 +2332,9 @@ fn stage8_edge_noise<'py>(
         return Err(PyValueError::new_err("uw_ph must be a 2-D matrix"));
     }
     if node_a_view.len() != node_b_view.len() {
-        return Err(PyValueError::new_err("node_a and node_b must have matching lengths"));
+        return Err(PyValueError::new_err(
+            "node_a and node_b must have matching lengths",
+        ));
     }
 
     let ph_slice = ph_view
@@ -2143,9 +2370,15 @@ fn stage8_edge_noise<'py>(
                         dph_space[ifg_ix] = phase;
                         sum += phase as f64;
                     }
-                    let mean = if n_ifg == 0 { 0.0_f32 } else { (sum / n_ifg as f64) as f32 };
-                    let dph_noise: Vec<f32> =
-                        dph_space.iter().map(|&value| (value - mean) * STAGE8_NOISE_SCALE).collect();
+                    let mean = if n_ifg == 0 {
+                        0.0_f32
+                    } else {
+                        (sum / n_ifg as f64) as f32
+                    };
+                    let dph_noise: Vec<f32> = dph_space
+                        .iter()
+                        .map(|&value| (value - mean) * STAGE8_NOISE_SCALE)
+                        .collect();
                     (dph_noise, dph_space)
                 })
                 .collect::<Vec<_>>()
@@ -2165,9 +2398,15 @@ fn stage8_edge_noise<'py>(
                         dph_space[ifg_ix] = phase;
                         sum += phase as f64;
                     }
-                    let mean = if n_ifg == 0 { 0.0_f32 } else { (sum / n_ifg as f64) as f32 };
-                    let dph_noise: Vec<f32> =
-                        dph_space.iter().map(|&value| (value - mean) * STAGE8_NOISE_SCALE).collect();
+                    let mean = if n_ifg == 0 {
+                        0.0_f32
+                    } else {
+                        (sum / n_ifg as f64) as f32
+                    };
+                    let dph_noise: Vec<f32> = dph_space
+                        .iter()
+                        .map(|&value| (value - mean) * STAGE8_NOISE_SCALE)
+                        .collect();
                     (dph_noise, dph_space)
                 })
                 .collect::<Vec<_>>(),
@@ -2185,13 +2424,17 @@ fn stage8_edge_noise<'py>(
     dict.set_item(
         "dph_noise",
         Array2::from_shape_vec((n_edge, n_ifg), dph_noise)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage8 dph_noise output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to build stage8 dph_noise output: {err}"))
+            })?
             .into_pyarray(py),
     )?;
     dict.set_item(
         "dph_space_uw",
         Array2::from_shape_vec((n_edge, n_ifg), dph_space_uw)
-            .map_err(|err| PyValueError::new_err(format!("failed to build stage8 dph_space_uw output: {err}")))?
+            .map_err(|err| {
+                PyValueError::new_err(format!("failed to build stage8 dph_space_uw output: {err}"))
+            })?
             .into_pyarray(py),
     )?;
     Ok(dict)
