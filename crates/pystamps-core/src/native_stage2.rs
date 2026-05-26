@@ -1,8 +1,11 @@
 use crate::CoreError;
 use num_complex::{Complex32, Complex64};
 use pystamps_mat::{ComplexMatrixF32, MatData, MatFile, Matrix};
+use rayon::prelude::*;
 use rustfft::FftPlanner;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
 
 const DEFAULT_GRID_SIZE: f64 = 50.0;
 const DEFAULT_CLAP_WIN: f64 = 32.0;
@@ -78,6 +81,7 @@ struct Stage2Prepared {
     low_pass: Matrix<f64>,
     coh_bins: Vec<f64>,
     n_trial_wraps: f64,
+    trial_values: Vec<f64>,
     grid_size: f64,
     clap_window: usize,
 }
@@ -90,13 +94,56 @@ struct TopofitRow {
     residual: Vec<Complex32>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Stage2RuntimeOptions {
+    pub native_threads: usize,
+}
+
 pub fn run_stage2_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreError> {
+    run_stage2_native_with_options(patch_dir, Stage2RuntimeOptions::default())
+}
+
+pub fn run_stage2_native_with_threads(
+    patch_dir: impl AsRef<Path>,
+    native_threads: usize,
+) -> Result<String, CoreError> {
+    run_stage2_native_with_options(patch_dir, Stage2RuntimeOptions { native_threads })
+}
+
+pub fn run_stage2_native_with_options(
+    patch_dir: impl AsRef<Path>,
+    runtime: Stage2RuntimeOptions,
+) -> Result<String, CoreError> {
     let patch_dir = patch_dir.as_ref();
-    let parms_mat = resolve_file_optional(patch_dir, "parms.mat")
-        .and_then(|path| MatData::read(path).ok());
+    if runtime.native_threads > 0 {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(runtime.native_threads)
+            .build()
+            .map_err(|err| {
+                stage2_err_owned(format!("unable to initialize stage-2 thread pool: {err}"))
+            })?;
+        return pool.install(|| run_stage2_native_inner(patch_dir));
+    }
+    run_stage2_native_inner(patch_dir)
+}
+
+fn run_stage2_native_inner(patch_dir: &Path) -> Result<String, CoreError> {
+    let parms_mat =
+        resolve_file_optional(patch_dir, "parms.mat").and_then(|path| MatData::read(path).ok());
     let parms = load_stage2_parms(parms_mat.as_ref());
     let options = load_stage2_options(parms_mat.as_ref());
     let prepared = prepare_stage2_inputs(patch_dir, &parms, &options)?;
+    eprintln!(
+        "stage2 native setup: n_ps={} n_ifg={} grid={}x{} clap_window={} trial_values={} max_iterations={} threads={}",
+        prepared.n_ps,
+        prepared.n_ifg,
+        prepared.n_i,
+        prepared.n_j,
+        prepared.clap_window,
+        prepared.trial_values.len(),
+        parms.gamma_max_iterations,
+        rayon::current_num_threads(),
+    );
 
     let mut weighting = prepared
         .d_a
@@ -120,8 +167,22 @@ pub fn run_stage2_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
 
     let mut i_loop = 1usize;
     loop {
+        let iteration = i_loop;
+        let iteration_start = Instant::now();
+        let phase_start = Instant::now();
         fill_phase_weight(&prepared, &k_ps, &weighting, &mut ph_weight)?;
-        accumulate_grid(&ph_weight, &prepared.grid_lin, prepared.n_i, prepared.n_j, prepared.n_ifg, &mut ph_grid);
+        let fill_elapsed = phase_start.elapsed();
+        let phase_start = Instant::now();
+        accumulate_grid(
+            &ph_weight,
+            &prepared.grid_lin,
+            prepared.n_i,
+            prepared.n_j,
+            prepared.n_ifg,
+            &mut ph_grid,
+        );
+        let grid_elapsed = phase_start.elapsed();
+        let phase_start = Instant::now();
         clap_filter_grid_stack(
             &ph_grid,
             prepared.n_i,
@@ -133,48 +194,22 @@ pub fn run_stage2_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
             &prepared.low_pass.values,
             &mut ph_filt,
         );
+        let clap_elapsed = phase_start.elapsed();
+        let phase_start = Instant::now();
         extract_patch_phase(&prepared, &ph_filt, &mut ph_patch);
+        let extract_elapsed = phase_start.elapsed();
 
-        k_ps.fill(f64::NAN);
-        c_ps.fill(0.0);
-        coh_ps.fill(0.0);
-        n_opt.fill(0.0);
-        ph_res.fill(0.0);
-        for row in 0..prepared.n_ps {
-            let row_start = row * prepared.n_ifg;
-            let row_end = row_start + prepared.n_ifg;
-            let mut psdph = vec![Complex64::new(0.0, 0.0); prepared.n_ifg];
-            let mut valid = false;
-            for col in 0..prepared.n_ifg {
-                let patch_value = ph_patch[row_start + col].conj();
-                let ph_value = prepared.ph_nm[row_start + col];
-                let value = Complex64::new(patch_value.re as f64, patch_value.im as f64)
-                    * Complex64::new(ph_value.re as f64, ph_value.im as f64);
-                if value != Complex64::new(0.0, 0.0) {
-                    valid = true;
-                }
-                psdph[col] = value;
-            }
-            if !valid {
-                continue;
-            }
-            let bperp_row = if prepared.row_invariant_bperp {
-                prepared.row_bperp_nm.as_slice()
-            } else {
-                let Some(mat) = prepared.bperp_mat.as_ref() else {
-                    return stage2_err("bp1.bperp_mat is required for non-invariant stage-2 baselines");
-                };
-                &mat.values[row_start..row_end]
-            };
-            let row_fit = topofit_row(&psdph, bperp_row, prepared.n_trial_wraps);
-            k_ps[row] = row_fit.k;
-            c_ps[row] = row_fit.c;
-            coh_ps[row] = row_fit.coh;
-            n_opt[row] = 1.0;
-            for (col, value) in row_fit.residual.iter().enumerate() {
-                ph_res[row_start + col] = value.arg();
-            }
-        }
+        let phase_start = Instant::now();
+        fit_stage2_rows(
+            &prepared,
+            &ph_patch,
+            &mut k_ps,
+            &mut c_ps,
+            &mut coh_ps,
+            &mut n_opt,
+            &mut ph_res,
+        )?;
+        let topofit_elapsed = phase_start.elapsed();
 
         let gamma_change_rms = rms_difference(&coh_ps, &coh_ps_save);
         let gamma_change_change = gamma_change_rms - gamma_change_save;
@@ -183,25 +218,11 @@ pub fn run_stage2_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
 
         let should_stop = gamma_change_change.abs() < parms.gamma_change_convergence
             || i_loop >= parms.gamma_max_iterations.max(1);
-        if !should_stop {
-            if parms.filter_weighting.eq_ignore_ascii_case("P-square") {
-                let na = hist_with_centers(&coh_ps, &prepared.coh_bins);
-                let low_coh_thresh = if parms.small_baseline_flag.eq_ignore_ascii_case("y") { 15 } else { 31 };
-                let denom: f64 = nr_base.iter().take(low_coh_thresh).sum();
-                let scale = if denom > 0.0 {
-                    na.iter().take(low_coh_thresh).sum::<f64>() / denom
-                } else {
-                    1.0
-                };
-                nr_scaled_last = nr_base.iter().map(|value| value * scale).collect();
-                weighting = psquare_weighting(&nr_scaled_last, &na, low_coh_thresh, nr_max_nz_ix, &coh_ps);
-            } else {
-                weighting = snr_weighting(&prepared, &ph_res);
-            }
-            i_loop += 1;
-        }
-
         if should_stop {
+            eprintln!(
+                "stage2 native iteration {iteration} complete: fill={fill_elapsed:?} grid={grid_elapsed:?} clap={clap_elapsed:?} extract={extract_elapsed:?} topofit={topofit_elapsed:?} total={:?} gamma_change={gamma_change_save:.6e} gamma_delta={gamma_change_change:.6e} stop=true",
+                iteration_start.elapsed(),
+            );
             write_pm1(
                 patch_dir,
                 &prepared,
@@ -217,13 +238,42 @@ pub fn run_stage2_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
                 nr_max_nz_ix,
                 &coh_ps_save,
                 gamma_change_save,
-                i_loop,
+                iteration,
             )?;
             break;
         }
+        eprintln!(
+            "stage2 native iteration {iteration} complete: fill={fill_elapsed:?} grid={grid_elapsed:?} clap={clap_elapsed:?} extract={extract_elapsed:?} topofit={topofit_elapsed:?} total={:?} gamma_change={gamma_change_save:.6e} gamma_delta={gamma_change_change:.6e} stop=false",
+            iteration_start.elapsed(),
+        );
+
+        if parms.filter_weighting.eq_ignore_ascii_case("P-square") {
+            let na = hist_with_centers(&coh_ps, &prepared.coh_bins);
+            let low_coh_thresh = if parms.small_baseline_flag.eq_ignore_ascii_case("y") {
+                15
+            } else {
+                31
+            };
+            let denom: f64 = nr_base.iter().take(low_coh_thresh).sum();
+            let scale = if denom > 0.0 {
+                na.iter().take(low_coh_thresh).sum::<f64>() / denom
+            } else {
+                1.0
+            };
+            nr_scaled_last = nr_base.iter().map(|value| value * scale).collect();
+            weighting =
+                psquare_weighting(&nr_scaled_last, &na, low_coh_thresh, nr_max_nz_ix, &coh_ps);
+        } else {
+            weighting = snr_weighting(&prepared, &ph_res);
+        }
+        i_loop += 1;
     }
 
-    Ok(format!("Stage 2 computed coherence for {} candidates in {i_loop} iterations", prepared.n_ps))
+    Ok(format!(
+        "Stage 2 computed coherence for {} candidates in {i_loop} iterations using {} native threads",
+        prepared.n_ps,
+        rayon::current_num_threads()
+    ))
 }
 
 fn prepare_stage2_inputs(
@@ -243,7 +293,9 @@ fn prepare_stage2_inputs(
     let n_ifg_full = ph_full.cols;
     let master_ix = scalar_from_mat(&ps, "master_ix", 1.0).round() as usize;
     if master_ix == 0 || master_ix > n_ifg_full {
-        return stage2_err(format!("ps1.master_ix must be 1-based within ph1 width {n_ifg_full}; got {master_ix}"));
+        return stage2_err(format!(
+            "ps1.master_ix must be 1-based within ph1 width {n_ifg_full}; got {master_ix}"
+        ));
     }
     let bperp_full = vector_f64(&ps, "bperp", "ps1.bperp")?;
     if bperp_full.len() != n_ifg_full {
@@ -254,7 +306,9 @@ fn prepare_stage2_inputs(
     }
 
     let small_baseline = parms.small_baseline_flag.eq_ignore_ascii_case("y");
-    let no_master: Vec<usize> = (0..n_ifg_full).filter(|&ix| small_baseline || ix != master_ix - 1).collect();
+    let no_master: Vec<usize> = (0..n_ifg_full)
+        .filter(|&ix| small_baseline || ix != master_ix - 1)
+        .collect();
     let n_ifg = no_master.len();
     let mut ph_nm = Vec::with_capacity(n_ps * n_ifg);
     let mut amp = Vec::with_capacity(n_ps * n_ifg);
@@ -265,11 +319,23 @@ fn prepare_stage2_inputs(
             let mag = value.norm();
             let safe_mag = if mag == 0.0 { 1.0 } else { mag };
             amp.push(safe_mag);
-            ph_nm.push(if safe_mag != 0.0 { value / safe_mag } else { Complex32::new(0.0, 0.0) });
+            ph_nm.push(if safe_mag != 0.0 {
+                value / safe_mag
+            } else {
+                Complex32::new(0.0, 0.0)
+            });
         }
     }
     let bperp_nm: Vec<f64> = no_master.iter().map(|&ix| bperp_full[ix]).collect();
-    let bperp_mat = load_bperp_mat(patch_dir, n_ps, n_ifg_full, n_ifg, &no_master, small_baseline, &bperp_nm)?;
+    let bperp_mat = load_bperp_mat(
+        patch_dir,
+        n_ps,
+        n_ifg_full,
+        n_ifg,
+        &no_master,
+        small_baseline,
+        &bperp_nm,
+    )?;
     let row_invariant_bperp = bperp_rows_are_invariant(bperp_mat.as_ref());
     let row_bperp_nm = if row_invariant_bperp {
         bperp_mat
@@ -283,8 +349,17 @@ fn prepare_stage2_inputs(
     let d_a = load_da(patch_dir, n_ps)?;
     let xy = ps_dim_f32(&ps, "xy", n_ps, 3, "ps1.xy")?;
     let grid_ij = stage2_grid_indices(&xy, options.grid_size);
-    let n_i = grid_ij.values.iter().step_by(2).fold(1usize, |acc, &value| acc.max(value as usize));
-    let n_j = grid_ij.values.iter().skip(1).step_by(2).fold(1usize, |acc, &value| acc.max(value as usize));
+    let n_i = grid_ij
+        .values
+        .iter()
+        .step_by(2)
+        .fold(1usize, |acc, &value| acc.max(value as usize));
+    let n_j = grid_ij
+        .values
+        .iter()
+        .skip(1)
+        .step_by(2)
+        .fold(1usize, |acc, &value| acc.max(value as usize));
     let mut grid_lin = Vec::with_capacity(n_ps);
     for row in 0..n_ps {
         let i = grid_ij.values[row * 2] as usize - 1;
@@ -298,13 +373,14 @@ fn prepare_stage2_inputs(
         .collect::<Vec<_>>();
     let mean_incidence = stage2_trial_wrap_mean_incidence(patch_dir, &ps);
     let rho = 830_000.0;
-    let max_k = options.max_topo_err / (options.lambda_m * rho * mean_incidence.sin() / (4.0 * std::f64::consts::PI));
-    let (min_bp, max_bp) = bperp_nm
-        .iter()
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min_v, max_v), &value| {
-            (min_v.min(value), max_v.max(value))
-        });
+    let max_k = options.max_topo_err
+        / (options.lambda_m * rho * mean_incidence.sin() / (4.0 * std::f64::consts::PI));
+    let (min_bp, max_bp) = bperp_nm.iter().fold(
+        (f64::INFINITY, f64::NEG_INFINITY),
+        |(min_v, max_v), &value| (min_v.min(value), max_v.max(value)),
+    );
     let n_trial_wraps = ((max_bp - min_bp) * max_k / (2.0 * std::f64::consts::PI)) as f64;
+    let trial_values = trial_values(n_trial_wraps);
 
     Ok(Stage2Prepared {
         n_ps,
@@ -322,6 +398,7 @@ fn prepare_stage2_inputs(
         low_pass,
         coh_bins,
         n_trial_wraps,
+        trial_values,
         grid_size: options.grid_size,
         clap_window: (options.clap_win * 0.75).round().max(1.0) as usize,
     })
@@ -352,7 +429,8 @@ fn load_bperp_mat(
         }
         return Ok(None);
     }
-    let bp = MatData::read(path).map_err(|err| stage2_err_owned(format!("unable to read bp1.mat: {err}")))?;
+    let bp = MatData::read(path)
+        .map_err(|err| stage2_err_owned(format!("unable to read bp1.mat: {err}")))?;
     let source = ps_matrix_f64(&bp, "bperp_mat", n_ps, "bp1.bperp_mat")?;
     if source.cols == n_ifg {
         return Ok(Some(source));
@@ -382,7 +460,8 @@ fn load_da(patch_dir: &Path, n_ps: usize) -> Result<Vec<f64>, CoreError> {
     if !path.exists() {
         return Ok(vec![1.0; n_ps]);
     }
-    let da = MatData::read(path).map_err(|err| stage2_err_owned(format!("unable to read da1.mat: {err}")))?;
+    let da = MatData::read(path)
+        .map_err(|err| stage2_err_owned(format!("unable to read da1.mat: {err}")))?;
     let values = optional_vector_f64(&da, "D_A").unwrap_or_else(|| vec![1.0; n_ps]);
     if values.len() == n_ps {
         Ok(values)
@@ -397,25 +476,93 @@ fn fill_phase_weight(
     weighting: &[f64],
     out: &mut [Complex32],
 ) -> Result<(), CoreError> {
-    for row in 0..prepared.n_ps {
-        for col in 0..prepared.n_ifg {
-            let bp = if prepared.row_invariant_bperp {
-                prepared.row_bperp_nm[col]
-            } else {
-                let Some(mat) = prepared.bperp_mat.as_ref() else {
-                    return stage2_err("bp1.bperp_mat is required for non-invariant stage-2 baselines");
+    out.par_chunks_mut(prepared.n_ifg).enumerate().try_for_each(
+        |(row, out_row)| -> Result<(), CoreError> {
+            for col in 0..prepared.n_ifg {
+                let bp = if prepared.row_invariant_bperp {
+                    prepared.row_bperp_nm[col]
+                } else {
+                    let Some(mat) = prepared.bperp_mat.as_ref() else {
+                        return stage2_err(
+                            "bp1.bperp_mat is required for non-invariant stage-2 baselines",
+                        );
+                    };
+                    mat.values[row * prepared.n_ifg + col]
                 };
-                mat.values[row * prepared.n_ifg + col]
-            };
-            let phase = -(bp * k_ps[row]);
-            let (sn, cs) = phase.sin_cos();
-            let ramp = Complex64::new(cs, sn);
-            let src = prepared.ph_nm[row * prepared.n_ifg + col];
-            let value = Complex64::new(src.re as f64, src.im as f64) * ramp * weighting[row];
-            out[row * prepared.n_ifg + col] = Complex32::new(value.re as f32, value.im as f32);
-        }
-    }
-    Ok(())
+                let phase = -(bp * k_ps[row]);
+                let (sn, cs) = phase.sin_cos();
+                let ramp = Complex64::new(cs, sn);
+                let src = prepared.ph_nm[row * prepared.n_ifg + col];
+                let value = Complex64::new(src.re as f64, src.im as f64) * ramp * weighting[row];
+                out_row[col] = Complex32::new(value.re as f32, value.im as f32);
+            }
+            Ok(())
+        },
+    )
+}
+
+fn fit_stage2_rows(
+    prepared: &Stage2Prepared,
+    ph_patch: &[Complex32],
+    k_ps: &mut [f64],
+    c_ps: &mut [f64],
+    coh_ps: &mut [f64],
+    n_opt: &mut [f64],
+    ph_res: &mut [f32],
+) -> Result<(), CoreError> {
+    k_ps.par_iter_mut()
+        .zip(c_ps.par_iter_mut())
+        .zip(coh_ps.par_iter_mut())
+        .zip(n_opt.par_iter_mut())
+        .zip(ph_res.par_chunks_mut(prepared.n_ifg))
+        .enumerate()
+        .try_for_each(
+            |(row, ((((k_out, c_out), coh_out), n_opt_out), ph_res_row))| -> Result<(), CoreError> {
+                *k_out = f64::NAN;
+                *c_out = 0.0;
+                *coh_out = 0.0;
+                *n_opt_out = 0.0;
+                ph_res_row.fill(0.0);
+
+                let row_start = row * prepared.n_ifg;
+                let row_end = row_start + prepared.n_ifg;
+                let mut psdph = vec![Complex64::new(0.0, 0.0); prepared.n_ifg];
+                let mut valid = false;
+                for col in 0..prepared.n_ifg {
+                    let patch_value = ph_patch[row_start + col].conj();
+                    let ph_value = prepared.ph_nm[row_start + col];
+                    let value = Complex64::new(patch_value.re as f64, patch_value.im as f64)
+                        * Complex64::new(ph_value.re as f64, ph_value.im as f64);
+                    if value != Complex64::new(0.0, 0.0) {
+                        valid = true;
+                    }
+                    psdph[col] = value;
+                }
+                if !valid {
+                    return Ok(());
+                }
+
+                let bperp_row = if prepared.row_invariant_bperp {
+                    prepared.row_bperp_nm.as_slice()
+                } else {
+                    let Some(mat) = prepared.bperp_mat.as_ref() else {
+                        return stage2_err(
+                            "bp1.bperp_mat is required for non-invariant stage-2 baselines",
+                        );
+                    };
+                    &mat.values[row_start..row_end]
+                };
+                let row_fit = topofit_row(&psdph, bperp_row, &prepared.trial_values);
+                *k_out = row_fit.k;
+                *c_out = row_fit.c;
+                *coh_out = row_fit.coh;
+                *n_opt_out = 1.0;
+                for (col, value) in row_fit.residual.iter().enumerate() {
+                    ph_res_row[col] = value.arg();
+                }
+                Ok(())
+            },
+        )
 }
 
 fn accumulate_grid(
@@ -458,65 +605,190 @@ fn clap_filter_grid_stack(
     }
 
     let n_win_ex = low_pass_dim(low_pass).unwrap_or(n_win);
-    let kernel = clap_filter_kernel();
+    let kernel = clap_filter_kernel_1d();
+    let window_weight = clap_window_weight(n_win);
     let windows = clap_windows(n_i, n_j, n_win, n_inc, n_win_i as usize, n_win_j as usize);
-    let mut accum = vec![Complex64::new(0.0, 0.0); n_i * n_j * n_ifg];
+    let grid_cells = n_i * n_j;
+    let alpha_is_one = (alpha - 1.0).abs() <= f64::EPSILON;
+    eprintln!(
+        "stage2 native clap start: ifg={} windows={} window={} fft_dim={}",
+        n_ifg,
+        windows.len(),
+        n_win,
+        n_win_ex
+    );
+    let completed_ifg = AtomicUsize::new(0);
+    let filtered_by_ifg = (0..n_ifg)
+        .into_par_iter()
+        .map(|ifg| {
+            let ph_grid_ifg = extract_ifg_grid(ph_grid, grid_cells, n_ifg, ifg);
+            let filtered = clap_filter_one_ifg(
+                &ph_grid_ifg,
+                n_i,
+                n_j,
+                n_win,
+                n_win_ex,
+                alpha,
+                alpha_is_one,
+                beta,
+                low_pass,
+                &kernel,
+                &window_weight,
+                &windows,
+            );
+            let done = completed_ifg.fetch_add(1, Ordering::Relaxed) + 1;
+            if done == n_ifg || done % 8 == 0 {
+                eprintln!("stage2 native clap progress: {done}/{n_ifg} ifg");
+            }
+            filtered
+        })
+        .collect::<Vec<_>>();
+
+    out.par_chunks_mut(n_ifg)
+        .enumerate()
+        .for_each(|(cell, out_cell)| {
+            for ifg in 0..n_ifg {
+                out_cell[ifg] = filtered_by_ifg[ifg][cell];
+            }
+        });
+}
+
+fn extract_ifg_grid(
+    ph_grid: &[Complex32],
+    grid_cells: usize,
+    n_ifg: usize,
+    ifg: usize,
+) -> Vec<Complex32> {
+    let mut out = Vec::with_capacity(grid_cells);
+    for cell in 0..grid_cells {
+        out.push(ph_grid[cell * n_ifg + ifg]);
+    }
+    out
+}
+
+fn clap_filter_one_ifg(
+    ph_grid: &[Complex32],
+    n_i: usize,
+    n_j: usize,
+    n_win: usize,
+    n_win_ex: usize,
+    alpha: f64,
+    alpha_is_one: bool,
+    beta: f64,
+    low_pass: &[f64],
+    kernel: &[f64],
+    window_weight: &[f64],
+    windows: &[ClapWindow],
+) -> Vec<Complex32> {
+    let mut accum = vec![Complex64::new(0.0, 0.0); n_i * n_j];
+    let mut scratch = ClapScratch::new(n_win_ex);
     let mut planner = FftPlanner::<f64>::new();
     let fft_row = planner.plan_fft_forward(n_win_ex);
     let ifft_row = planner.plan_fft_inverse(n_win_ex);
     let fft_col = planner.plan_fft_forward(n_win_ex);
     let ifft_col = planner.plan_fft_inverse(n_win_ex);
+    let inv_scale = 1.0 / (n_win_ex * n_win_ex) as f64;
 
     for window in windows {
-        for ifg in 0..n_ifg {
-            let mut ph_bit = vec![Complex64::new(0.0, 0.0); n_win_ex * n_win_ex];
-            for local_i in 0..n_win {
-                let src_i = window.i1 + local_i;
-                for local_j in 0..n_win {
-                    let src_j = window.j1 + local_j;
-                    let value = ph_grid[(src_i * n_j + src_j) * n_ifg + ifg];
-                    ph_bit[local_i * n_win_ex + local_j] = if value.re.is_nan() || value.im.is_nan() {
+        scratch.ph_bit.fill(Complex64::new(0.0, 0.0));
+        for local_i in 0..n_win {
+            let src_i = window.i1 + local_i;
+            for local_j in 0..n_win {
+                let src_j = window.j1 + local_j;
+                let value = ph_grid[src_i * n_j + src_j];
+                scratch.ph_bit[local_i * n_win_ex + local_j] =
+                    if value.re.is_nan() || value.im.is_nan() {
                         Complex64::new(0.0, 0.0)
                     } else {
                         Complex64::new(value.re as f64, value.im as f64)
                     };
-                }
             }
-            fft2_in_place(&mut ph_bit, n_win_ex, &fft_row, &fft_col);
-            let h_abs = ph_bit.iter().map(|value| value.norm()).collect::<Vec<_>>();
-            let h_shift = fftshift_real(&h_abs, n_win_ex, n_win_ex);
-            let h_conv = convolve_same_symmetric(&h_shift, n_win_ex, n_win_ex, &kernel, 7);
-            let mut h_smooth = ifftshift_real(&h_conv, n_win_ex, n_win_ex);
-            let mean_h = median(&mut h_smooth.clone());
+        }
+        fft2_in_place(
+            &mut scratch.ph_bit,
+            n_win_ex,
+            &fft_row,
+            &fft_col,
+            &mut scratch.fft_scratch,
+        );
+        for (ix, value) in scratch.ph_bit.iter().enumerate() {
+            scratch.h_abs[ix] = value.norm();
+        }
+        fftshift_real_into(&scratch.h_abs, n_win_ex, n_win_ex, &mut scratch.h_shift);
+        convolve_same_separable(
+            &scratch.h_shift,
+            n_win_ex,
+            n_win_ex,
+            kernel,
+            &mut scratch.h_conv_tmp,
+            &mut scratch.h_filter,
+        );
+        ifftshift_real_into(&scratch.h_filter, n_win_ex, n_win_ex, &mut scratch.h_shift);
+        let mean_h = median_from_copy(&scratch.h_shift, &mut scratch.h_median);
+        for ix in 0..scratch.h_shift.len() {
+            let mut value = scratch.h_shift[ix];
             if mean_h != 0.0 {
-                for value in &mut h_smooth {
-                    *value /= mean_h;
-                }
+                value /= mean_h;
             }
-            for (ix, value) in h_smooth.iter_mut().enumerate() {
-                *value = value.powf(alpha) - 1.0;
-                if *value < 0.0 {
-                    *value = 0.0;
-                }
-                *value = *value * beta + low_pass[ix];
-                ph_bit[ix] *= *value;
+            value = if alpha_is_one {
+                value - 1.0
+            } else {
+                value.powf(alpha) - 1.0
+            };
+            if value < 0.0 {
+                value = 0.0;
             }
-            ifft2_in_place(&mut ph_bit, n_win_ex, &ifft_row, &ifft_col);
-            let inv_scale = 1.0 / (n_win_ex * n_win_ex) as f64;
-            for local_i in 0..n_win {
-                let dst_i = window.i1 + local_i;
-                for local_j in 0..n_win {
-                    let dst_j = window.j1 + local_j;
-                    let weight = window.weight[local_i * n_win + local_j];
-                    let value = ph_bit[local_i * n_win_ex + local_j] * (weight * inv_scale);
-                    accum[(dst_i * n_j + dst_j) * n_ifg + ifg] += value;
+            scratch.ph_bit[ix] *= value * beta + low_pass[ix];
+        }
+        ifft2_in_place(
+            &mut scratch.ph_bit,
+            n_win_ex,
+            &ifft_row,
+            &ifft_col,
+            &mut scratch.fft_scratch,
+        );
+        for local_i in 0..n_win {
+            let dst_i = window.i1 + local_i;
+            for local_j in 0..n_win {
+                let dst_j = window.j1 + local_j;
+                let weight = clap_window_weight_at(window_weight, n_win, window, local_i, local_j);
+                if weight == 0.0 {
+                    continue;
                 }
+                let value = scratch.ph_bit[local_i * n_win_ex + local_j] * (weight * inv_scale);
+                accum[dst_i * n_j + dst_j] += value;
             }
         }
     }
 
-    for (dst, src) in out.iter_mut().zip(accum.iter()) {
-        *dst = Complex32::new(src.re as f32, src.im as f32);
+    accum
+        .into_iter()
+        .map(|value| Complex32::new(value.re as f32, value.im as f32))
+        .collect()
+}
+
+struct ClapScratch {
+    ph_bit: Vec<Complex64>,
+    fft_scratch: Vec<Complex64>,
+    h_abs: Vec<f64>,
+    h_shift: Vec<f64>,
+    h_conv_tmp: Vec<f64>,
+    h_filter: Vec<f64>,
+    h_median: Vec<f64>,
+}
+
+impl ClapScratch {
+    fn new(n: usize) -> Self {
+        let n2 = n * n;
+        Self {
+            ph_bit: vec![Complex64::new(0.0, 0.0); n2],
+            fft_scratch: vec![Complex64::new(0.0, 0.0); n],
+            h_abs: vec![0.0; n2],
+            h_shift: vec![0.0; n2],
+            h_conv_tmp: vec![0.0; n2],
+            h_filter: vec![0.0; n2],
+            h_median: vec![0.0; n2],
+        }
     }
 }
 
@@ -524,7 +796,8 @@ fn clap_filter_grid_stack(
 struct ClapWindow {
     i1: usize,
     j1: usize,
-    weight: Vec<f64>,
+    row_shift: usize,
+    col_shift: usize,
 }
 
 fn clap_windows(
@@ -535,7 +808,6 @@ fn clap_windows(
     n_win_i: usize,
     n_win_j: usize,
 ) -> Vec<ClapWindow> {
-    let base_weight = clap_window_weight(n_win);
     let mut windows = Vec::with_capacity(n_win_i * n_win_j);
     for ix1 in 0..n_win_i {
         let mut i1 = ix1 * n_inc;
@@ -557,22 +829,32 @@ fn clap_windows(
                 j1 = n_j - n_win;
             }
             let _ = j2;
-            let mut weight = vec![0.0; n_win * n_win];
-            for row in 0..n_win {
-                for col in 0..n_win {
-                    if row < row_shift || col < col_shift {
-                        weight[row * n_win + col] = 0.0;
-                    } else {
-                        let src_row = row - row_shift;
-                        let src_col = col - col_shift;
-                        weight[row * n_win + col] = base_weight[src_row * n_win + src_col];
-                    }
-                }
-            }
-            windows.push(ClapWindow { i1, j1, weight });
+            windows.push(ClapWindow {
+                i1,
+                j1,
+                row_shift,
+                col_shift,
+            });
         }
     }
     windows
+}
+
+#[inline]
+fn clap_window_weight_at(
+    base_weight: &[f64],
+    n_win: usize,
+    window: &ClapWindow,
+    row: usize,
+    col: usize,
+) -> f64 {
+    if row < window.row_shift || col < window.col_shift {
+        0.0
+    } else {
+        let src_row = row - window.row_shift;
+        let src_col = col - window.col_shift;
+        base_weight[src_row * n_win + src_col]
+    }
 }
 
 fn clap_window_weight(n_win: usize) -> Vec<f64> {
@@ -605,7 +887,7 @@ fn low_pass_dim(low_pass: &[f64]) -> Option<usize> {
     (dim > 0 && dim * dim == low_pass.len()).then_some(dim)
 }
 
-fn clap_filter_kernel() -> Vec<f64> {
+fn clap_filter_kernel_1d() -> Vec<f64> {
     let alpha = 2.5;
     let std = (7.0 - 1.0) / (2.0 * alpha);
     let mut g = [0.0; 7];
@@ -613,13 +895,7 @@ fn clap_filter_kernel() -> Vec<f64> {
         let x = ix as f64 - 3.0;
         *value = (-0.5 * (x / std) * (x / std)).exp();
     }
-    let mut kernel = vec![0.0; 49];
-    for row in 0..7 {
-        for col in 0..7 {
-            kernel[row * 7 + col] = g[row] * g[col];
-        }
-    }
-    kernel
+    g.to_vec()
 }
 
 fn fft2_in_place(
@@ -627,16 +903,16 @@ fn fft2_in_place(
     n: usize,
     fft_row: &std::sync::Arc<dyn rustfft::Fft<f64>>,
     fft_col: &std::sync::Arc<dyn rustfft::Fft<f64>>,
+    scratch: &mut [Complex64],
 ) {
     for row in 0..n {
         fft_row.process(&mut values[row * n..(row + 1) * n]);
     }
-    let mut scratch = vec![Complex64::new(0.0, 0.0); n];
     for col in 0..n {
         for row in 0..n {
             scratch[row] = values[row * n + col];
         }
-        fft_col.process(&mut scratch);
+        fft_col.process(scratch);
         for row in 0..n {
             values[row * n + col] = scratch[row];
         }
@@ -648,32 +924,38 @@ fn ifft2_in_place(
     n: usize,
     ifft_row: &std::sync::Arc<dyn rustfft::Fft<f64>>,
     ifft_col: &std::sync::Arc<dyn rustfft::Fft<f64>>,
+    scratch: &mut [Complex64],
 ) {
     for row in 0..n {
         ifft_row.process(&mut values[row * n..(row + 1) * n]);
     }
-    let mut scratch = vec![Complex64::new(0.0, 0.0); n];
     for col in 0..n {
         for row in 0..n {
             scratch[row] = values[row * n + col];
         }
-        ifft_col.process(&mut scratch);
+        ifft_col.process(scratch);
         for row in 0..n {
             values[row * n + col] = scratch[row];
         }
     }
 }
 
-fn fftshift_real(values: &[f64], rows: usize, cols: usize) -> Vec<f64> {
-    shift_real(values, rows, cols, rows / 2, cols / 2)
+fn fftshift_real_into(values: &[f64], rows: usize, cols: usize, out: &mut [f64]) {
+    shift_real_into(values, rows, cols, rows / 2, cols / 2, out)
 }
 
-fn ifftshift_real(values: &[f64], rows: usize, cols: usize) -> Vec<f64> {
-    shift_real(values, rows, cols, rows.div_ceil(2), cols.div_ceil(2))
+fn ifftshift_real_into(values: &[f64], rows: usize, cols: usize, out: &mut [f64]) {
+    shift_real_into(values, rows, cols, rows.div_ceil(2), cols.div_ceil(2), out)
 }
 
-fn shift_real(values: &[f64], rows: usize, cols: usize, row_shift: usize, col_shift: usize) -> Vec<f64> {
-    let mut out = vec![0.0; values.len()];
+fn shift_real_into(
+    values: &[f64],
+    rows: usize,
+    cols: usize,
+    row_shift: usize,
+    col_shift: usize,
+    out: &mut [f64],
+) {
     for row in 0..rows {
         for col in 0..cols {
             let src_row = (row + row_shift) % rows;
@@ -681,36 +963,57 @@ fn shift_real(values: &[f64], rows: usize, cols: usize, row_shift: usize, col_sh
             out[row * cols + col] = values[src_row * cols + src_col];
         }
     }
-    out
 }
 
-fn convolve_same_symmetric(values: &[f64], rows: usize, cols: usize, kernel: &[f64], k: usize) -> Vec<f64> {
-    let mut out = vec![0.0; values.len()];
+fn convolve_same_separable(
+    values: &[f64],
+    rows: usize,
+    cols: usize,
+    kernel: &[f64],
+    tmp: &mut [f64],
+    out: &mut [f64],
+) {
+    let k = kernel.len();
     let radius = k / 2;
     for row in 0..rows {
         for col in 0..cols {
             let mut sum = 0.0;
-            for kr in 0..k {
-                let Some(src_row) = row.checked_add(kr).and_then(|v| v.checked_sub(radius)) else {
+            for kc in 0..k {
+                let Some(src_col) = col
+                    .checked_add(kc)
+                    .and_then(|value| value.checked_sub(radius))
+                else {
                     continue;
                 };
-                if src_row >= rows {
-                    continue;
+                if src_col < cols {
+                    sum += values[row * cols + src_col] * kernel[kc];
                 }
-                for kc in 0..k {
-                    let Some(src_col) = col.checked_add(kc).and_then(|v| v.checked_sub(radius)) else {
-                        continue;
-                    };
-                    if src_col >= cols {
-                        continue;
-                    }
-                    sum += values[src_row * cols + src_col] * kernel[kr * k + kc];
+            }
+            tmp[row * cols + col] = sum;
+        }
+    }
+    for row in 0..rows {
+        for col in 0..cols {
+            let mut sum = 0.0;
+            for kr in 0..k {
+                let Some(src_row) = row
+                    .checked_add(kr)
+                    .and_then(|value| value.checked_sub(radius))
+                else {
+                    continue;
+                };
+                if src_row < rows {
+                    sum += tmp[src_row * cols + col] * kernel[kr];
                 }
             }
             out[row * cols + col] = sum;
         }
     }
-    out
+}
+
+fn median_from_copy(values: &[f64], scratch: &mut [f64]) -> f64 {
+    scratch.copy_from_slice(values);
+    median(scratch)
 }
 
 fn median(values: &mut [f64]) -> f64 {
@@ -727,31 +1030,34 @@ fn median(values: &mut [f64]) -> f64 {
 }
 
 fn extract_patch_phase(prepared: &Stage2Prepared, ph_filt: &[Complex32], out: &mut [Complex32]) {
-    for row in 0..prepared.n_ps {
-        let grid_ix = prepared.grid_lin[row];
-        for col in 0..prepared.n_ifg {
-            out[row * prepared.n_ifg + col] = ph_filt[grid_ix * prepared.n_ifg + col];
-        }
-    }
+    out.par_chunks_mut(prepared.n_ifg)
+        .enumerate()
+        .for_each(|(row, out_row)| {
+            let grid_ix = prepared.grid_lin[row];
+            for col in 0..prepared.n_ifg {
+                out_row[col] = ph_filt[grid_ix * prepared.n_ifg + col];
+            }
+        });
     normalize_complex_unit_magnitude(out);
 }
 
 fn normalize_complex_unit_magnitude(values: &mut [Complex32]) {
-    for value in values {
+    values.par_iter_mut().for_each(|value| {
         let mag = value.norm();
         if mag != 0.0 {
             *value /= mag;
         }
-    }
+    });
 }
 
-fn topofit_row(cpx: &[Complex64], bperp: &[f64], n_trial_wraps: f64) -> TopofitRow {
-    let trial_mult = trial_values(n_trial_wraps);
+fn topofit_row(cpx: &[Complex64], bperp: &[f64], trial_mult: &[f64]) -> TopofitRow {
     let valid = cpx
         .iter()
         .zip(bperp.iter())
         .enumerate()
-        .filter_map(|(ix, (&value, &bp))| (value != Complex64::new(0.0, 0.0)).then_some((ix, value, bp)))
+        .filter_map(|(ix, (&value, &bp))| {
+            (value != Complex64::new(0.0, 0.0)).then_some((ix, value, bp))
+        })
         .collect::<Vec<_>>();
     if valid.is_empty() {
         return TopofitRow {
@@ -761,9 +1067,19 @@ fn topofit_row(cpx: &[Complex64], bperp: &[f64], n_trial_wraps: f64) -> TopofitR
             residual: vec![Complex32::new(0.0, 0.0); cpx.len()],
         };
     }
-    let denom: f64 = valid.iter().map(|(_, value, _)| value.norm()).sum::<f64>().max(1.0);
-    let min_bp = valid.iter().map(|(_, _, bp)| *bp).fold(f64::INFINITY, f64::min);
-    let max_bp = valid.iter().map(|(_, _, bp)| *bp).fold(f64::NEG_INFINITY, f64::max);
+    let denom: f64 = valid
+        .iter()
+        .map(|(_, value, _)| value.norm())
+        .sum::<f64>()
+        .max(1.0);
+    let min_bp = valid
+        .iter()
+        .map(|(_, _, bp)| *bp)
+        .fold(f64::INFINITY, f64::min);
+    let max_bp = valid
+        .iter()
+        .map(|(_, _, bp)| *bp)
+        .fold(f64::NEG_INFINITY, f64::max);
     let bperp_range = (max_bp - min_bp).max(1.0);
     let mut coh_trial = vec![0.0; trial_mult.len()];
     for (trial_ix, &trial_value) in trial_mult.iter().enumerate() {
@@ -784,7 +1100,12 @@ fn topofit_row(cpx: &[Complex64], bperp: &[f64], n_trial_wraps: f64) -> TopofitR
         candidate_coh.push(coh_trial[trial_ix]);
     }
     let refined_coh = refined.iter().map(|row| row.coh).collect::<Vec<_>>();
-    let selected_trial_ix = select_candidate(&candidate_ix, &candidate_coh, &refined_coh, trial_mult.len());
+    let selected_trial_ix = select_candidate(
+        &candidate_ix,
+        &candidate_coh,
+        &refined_coh,
+        trial_mult.len(),
+    );
     let selected_local_ix = candidate_ix
         .iter()
         .position(|&trial_ix| trial_ix == selected_trial_ix)
@@ -848,16 +1169,19 @@ fn near_max_trial_indices(coh_trial: &[f64]) -> Vec<usize> {
     }
     let mut local_max = vec![false; coh_trial.len()];
     local_max[0] = coh_trial[0] >= coh_trial[1];
-    local_max[coh_trial.len() - 1] = coh_trial[coh_trial.len() - 1] >= coh_trial[coh_trial.len() - 2];
+    local_max[coh_trial.len() - 1] =
+        coh_trial[coh_trial.len() - 1] >= coh_trial[coh_trial.len() - 2];
     for idx in 1..coh_trial.len() - 1 {
-        local_max[idx] = coh_trial[idx] >= coh_trial[idx - 1] && coh_trial[idx] >= coh_trial[idx + 1];
+        local_max[idx] =
+            coh_trial[idx] >= coh_trial[idx - 1] && coh_trial[idx] >= coh_trial[idx + 1];
     }
     let max_coh = coh_trial.iter().copied().fold(f64::NEG_INFINITY, f64::max);
     let mut out = local_max
         .iter()
         .enumerate()
         .filter_map(|(idx, &is_local_max)| {
-            (is_local_max && coh_trial[idx] >= max_coh - STAGE2_TOPOFIT_NEAR_MAX_COH_TOL).then_some(idx)
+            (is_local_max && coh_trial[idx] >= max_coh - STAGE2_TOPOFIT_NEAR_MAX_COH_TOL)
+                .then_some(idx)
         })
         .collect::<Vec<_>>();
     if out.is_empty() {
@@ -866,7 +1190,12 @@ fn near_max_trial_indices(coh_trial: &[f64]) -> Vec<usize> {
     out
 }
 
-fn select_candidate(candidate_ix: &[usize], candidate_coh: &[f64], refined_coh: &[f64], trial_count: usize) -> usize {
+fn select_candidate(
+    candidate_ix: &[usize],
+    candidate_coh: &[f64],
+    refined_coh: &[f64],
+    trial_count: usize,
+) -> usize {
     let coarse_best = candidate_ix[argmax_first(candidate_coh)];
     if candidate_ix.len() == 1 {
         return coarse_best;
@@ -896,16 +1225,27 @@ fn hist_with_centers(values: &[f64], centers: &[f64]) -> Vec<f64> {
     if centers.len() == 1 {
         return vec![values.len() as f64];
     }
-    let mids = centers.windows(2).map(|pair| (pair[0] + pair[1]) / 2.0).collect::<Vec<_>>();
+    let mids = centers
+        .windows(2)
+        .map(|pair| (pair[0] + pair[1]) / 2.0)
+        .collect::<Vec<_>>();
     let mut out = vec![0.0; centers.len()];
     for &value in values {
-        let ix = mids.partition_point(|&mid| mid < value).min(centers.len() - 1);
+        let ix = mids
+            .partition_point(|&mid| mid < value)
+            .min(centers.len() - 1);
         out[ix] += 1.0;
     }
     out
 }
 
-fn psquare_weighting(nr: &[f64], na: &[f64], low_coh_thresh: usize, nr_max_nz_ix: f64, coh_ps: &[f64]) -> Vec<f64> {
+fn psquare_weighting(
+    nr: &[f64],
+    na: &[f64],
+    low_coh_thresh: usize,
+    nr_max_nz_ix: f64,
+    coh_ps: &[f64],
+) -> Vec<f64> {
     let mut prand = vec![0.0; nr.len()];
     for ix in 0..nr.len() {
         let denom = if na[ix] == 0.0 { 1.0 } else { na[ix] };
@@ -928,24 +1268,27 @@ fn psquare_weighting(nr: &[f64], na: &[f64], low_coh_thresh: usize, nr_max_nz_ix
 }
 
 fn snr_weighting(prepared: &Stage2Prepared, ph_res: &[f32]) -> Vec<f64> {
-    let mut out = vec![0.0; prepared.n_ps];
-    for row in 0..prepared.n_ps {
-        let mut g = 0.0;
-        let mut amp2 = 0.0;
-        for col in 0..prepared.n_ifg {
-            let ix = row * prepared.n_ifg + col;
-            let amp = prepared.amp[ix] as f64;
-            g += amp * (ph_res[ix] as f64).cos();
-            amp2 += amp * amp;
-        }
-        g /= prepared.n_ifg.max(1) as f64;
-        amp2 /= prepared.n_ifg.max(1) as f64;
-        let sigma_n = (0.5 * (amp2 - g * g)).sqrt();
-        if sigma_n != 0.0 {
-            out[row] = g / sigma_n;
-        }
-    }
-    out
+    (0..prepared.n_ps)
+        .into_par_iter()
+        .map(|row| {
+            let mut g = 0.0;
+            let mut amp2 = 0.0;
+            for col in 0..prepared.n_ifg {
+                let ix = row * prepared.n_ifg + col;
+                let amp = prepared.amp[ix] as f64;
+                g += amp * (ph_res[ix] as f64).cos();
+                amp2 += amp * amp;
+            }
+            g /= prepared.n_ifg.max(1) as f64;
+            amp2 /= prepared.n_ifg.max(1) as f64;
+            let sigma_n = (0.5 * (amp2 - g * g)).sqrt();
+            if sigma_n != 0.0 {
+                g / sigma_n
+            } else {
+                0.0
+            }
+        })
+        .collect()
 }
 
 fn write_pm1(
@@ -971,11 +1314,26 @@ fn write_pm1(
     mat.add_f64_col_vector("coh_ps", coh_ps.to_vec())?;
     mat.add_f64_col_vector("N_opt", n_opt.to_vec())?;
     mat.add_f32_matrix("ph_res", prepared.n_ps, prepared.n_ifg, ph_res.to_vec())?;
-    mat.add_complex_f32_matrix("ph_patch", prepared.n_ps, prepared.n_ifg, complex32_pairs(ph_patch))?;
+    mat.add_complex_f32_matrix(
+        "ph_patch",
+        prepared.n_ps,
+        prepared.n_ifg,
+        complex32_pairs(ph_patch),
+    )?;
     mat.add_f64_scalar("step_number", 1.0)?;
-    mat.add_complex_f32_matrix("ph_grid", prepared.n_i, prepared.n_j * prepared.n_ifg, complex32_pairs(ph_grid))?;
+    mat.add_complex_f32_matrix(
+        "ph_grid",
+        prepared.n_i,
+        prepared.n_j * prepared.n_ifg,
+        complex32_pairs(ph_grid),
+    )?;
     mat.add_f32_scalar("n_trial_wraps", prepared.n_trial_wraps as f32)?;
-    mat.add_f32_matrix("grid_ij", prepared.grid_ij.rows, prepared.grid_ij.cols, prepared.grid_ij.values.clone())?;
+    mat.add_f32_matrix(
+        "grid_ij",
+        prepared.grid_ij.rows,
+        prepared.grid_ij.cols,
+        prepared.grid_ij.values.clone(),
+    )?;
     mat.add_f64_scalar("grid_size", prepared.grid_size)?;
     mat.add_f64_matrix(
         "low_pass",
@@ -984,7 +1342,12 @@ fn write_pm1(
         prepared.low_pass.values.clone(),
     )?;
     mat.add_f64_scalar("i_loop", i_loop as f64)?;
-    mat.add_complex_f32_matrix("ph_weight", prepared.n_ps, prepared.n_ifg, complex32_pairs(ph_weight))?;
+    mat.add_complex_f32_matrix(
+        "ph_weight",
+        prepared.n_ps,
+        prepared.n_ifg,
+        complex32_pairs(ph_weight),
+    )?;
     mat.add_f64_row_vector("Nr", nr.to_vec())?;
     mat.add_f64_scalar("Nr_max_nz_ix", nr_max_nz_ix)?;
     mat.add_f64_row_vector("coh_bins", prepared.coh_bins.clone())?;
@@ -1011,8 +1374,12 @@ fn stage2_grid_indices(xy: &Matrix<f32>, grid_size: f64) -> Matrix<f32> {
     let mut max_i = 1_i32;
     let mut max_j = 1_i32;
     for row in 0..xy.rows {
-        let i = ((xy.values[row * xy.cols + 2] - min_y + eps) / scale).ceil().max(1.0) as i32;
-        let j = ((xy.values[row * xy.cols + 1] - min_x + eps) / scale).ceil().max(1.0) as i32;
+        let i = ((xy.values[row * xy.cols + 2] - min_y + eps) / scale)
+            .ceil()
+            .max(1.0) as i32;
+        let j = ((xy.values[row * xy.cols + 1] - min_x + eps) / scale)
+            .ceil()
+            .max(1.0) as i32;
         values[row * 2] = i as f32;
         values[row * 2 + 1] = j as f32;
         max_i = max_i.max(i);
@@ -1087,8 +1454,11 @@ fn load_stage2_options(mat: Option<&MatData>) -> Stage2Options {
     if let Some(mat) = mat {
         options.grid_size = scalar_from_mat_default(mat, "filter_grid_size", options.grid_size);
         options.clap_win = scalar_from_mat_default(mat, "clap_win", options.clap_win);
-        options.clap_low_pass_wavelength =
-            scalar_from_mat_default(mat, "clap_low_pass_wavelength", options.clap_low_pass_wavelength);
+        options.clap_low_pass_wavelength = scalar_from_mat_default(
+            mat,
+            "clap_low_pass_wavelength",
+            options.clap_low_pass_wavelength,
+        );
         options.clap_alpha = scalar_from_mat_default(mat, "clap_alpha", options.clap_alpha);
         options.clap_beta = scalar_from_mat_default(mat, "clap_beta", options.clap_beta);
         options.max_topo_err = scalar_from_mat_default(mat, "max_topo_err", options.max_topo_err);
@@ -1100,12 +1470,20 @@ fn load_stage2_options(mat: Option<&MatData>) -> Stage2Options {
 fn load_stage2_parms(mat: Option<&MatData>) -> Stage2Parms {
     let mut parms = Stage2Parms::default();
     if let Some(mat) = mat {
-        parms.small_baseline_flag = text_from_mat(mat, "small_baseline_flag", &parms.small_baseline_flag);
+        parms.small_baseline_flag =
+            text_from_mat(mat, "small_baseline_flag", &parms.small_baseline_flag);
         parms.filter_weighting = text_from_mat(mat, "filter_weighting", &parms.filter_weighting);
-        parms.gamma_change_convergence =
-            scalar_from_mat_default(mat, "gamma_change_convergence", parms.gamma_change_convergence);
-        parms.gamma_max_iterations =
-            scalar_from_mat_default(mat, "gamma_max_iterations", parms.gamma_max_iterations as f64).round() as usize;
+        parms.gamma_change_convergence = scalar_from_mat_default(
+            mat,
+            "gamma_change_convergence",
+            parms.gamma_change_convergence,
+        );
+        parms.gamma_max_iterations = scalar_from_mat_default(
+            mat,
+            "gamma_max_iterations",
+            parms.gamma_max_iterations as f64,
+        )
+        .round() as usize;
     }
     parms
 }
@@ -1153,19 +1531,34 @@ fn vector_f64(mat: &MatData, name: &str, label: &str) -> Result<Vec<f64>, CoreEr
     })
 }
 
-fn ps_matrix_f64(mat: &MatData, name: &str, n_ps: usize, label: &str) -> Result<Matrix<f64>, CoreError> {
-    let source = mat.get_f64_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 2,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_matrix_f64(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
+    let source = mat
+        .get_f64_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 2,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     orient_matrix_f64(source, n_ps, label)
 }
 
-fn ps_dim_f32(mat: &MatData, name: &str, n_ps: usize, n_dim: usize, label: &str) -> Result<Matrix<f32>, CoreError> {
-    let source = mat.get_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 2,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+fn ps_dim_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
+    let source = mat
+        .get_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 2,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -1195,10 +1588,12 @@ fn ps_complex_matrix(
     n_ps: usize,
     label: &str,
 ) -> Result<ComplexMatrixF32, CoreError> {
-    let source = mat.get_complex_f32_matrix(name).map_err(|err| CoreError::NativeStage {
-        stage: 2,
-        message: format!("{label} is missing or invalid: {err}"),
-    })?;
+    let source = mat
+        .get_complex_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 2,
+            message: format!("{label} is missing or invalid: {err}"),
+        })?;
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -1222,7 +1617,11 @@ fn ps_complex_matrix(
     ))
 }
 
-fn orient_matrix_f64(source: Matrix<f64>, n_ps: usize, label: &str) -> Result<Matrix<f64>, CoreError> {
+fn orient_matrix_f64(
+    source: Matrix<f64>,
+    n_ps: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -1257,7 +1656,11 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
         .collect::<String>()
         .trim()
         .to_string();
-    if text.is_empty() { default.to_string() } else { text }
+    if text.is_empty() {
+        default.to_string()
+    } else {
+        text
+    }
 }
 
 fn bperp_rows_are_invariant(bperp_mat: Option<&Matrix<f64>>) -> bool {
@@ -1280,7 +1683,10 @@ fn bperp_rows_are_invariant(bperp_mat: Option<&Matrix<f64>>) -> bool {
 fn resolve_file_optional(patch_dir: &Path, filename: &str) -> Option<PathBuf> {
     [
         patch_dir.join(filename),
-        patch_dir.parent().map(|parent| parent.join(filename)).unwrap_or_default(),
+        patch_dir
+            .parent()
+            .map(|parent| parent.join(filename))
+            .unwrap_or_default(),
         patch_dir
             .parent()
             .and_then(|parent| parent.parent())
@@ -1366,9 +1772,23 @@ mod tests {
     fn incompatible_bp1_shape_returns_stage2_error() {
         let root = temp_root("stage2-bad-bp");
         create_stage2_fixture(&root, true);
-        let err = run_stage2_native(root.join("PATCH_1")).unwrap_err().to_string();
+        let err = run_stage2_native(root.join("PATCH_1"))
+            .unwrap_err()
+            .to_string();
         assert!(err.contains("stage 2 native implementation error"));
         assert!(err.contains("bp1.bperp_mat has incompatible shape"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn explicit_stage2_thread_pool_writes_pm1() {
+        let root = temp_root("stage2-threaded");
+        create_stage2_fixture(&root, false);
+
+        let details = run_stage2_native_with_threads(root.join("PATCH_1"), 2).unwrap();
+
+        assert!(details.contains("using 2 native threads"));
+        assert!(root.join("PATCH_1/pm1.mat").exists());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1389,17 +1809,15 @@ mod tests {
         ps.add_f64_scalar("n_ifg", n_ifg as f64).unwrap();
         ps.add_f64_scalar("n_image", n_ifg as f64).unwrap();
         ps.add_f64_scalar("master_ix", 1.0).unwrap();
-        ps.add_f64_row_vector("bperp", vec![0.0, 15.0, 30.0]).unwrap();
-        ps.add_f64_scalar("mean_incidence", DEFAULT_MEAN_INCIDENCE).unwrap();
+        ps.add_f64_row_vector("bperp", vec![0.0, 15.0, 30.0])
+            .unwrap();
+        ps.add_f64_scalar("mean_incidence", DEFAULT_MEAN_INCIDENCE)
+            .unwrap();
         ps.add_f32_matrix(
             "xy",
             n_ps,
             3,
-            vec![
-                1.0, 0.0, 0.0,
-                2.0, 5.0, 5.0,
-                3.0, 10.0, 10.0,
-            ],
+            vec![1.0, 0.0, 0.0, 2.0, 5.0, 5.0, 3.0, 10.0, 10.0],
         )
         .unwrap();
         ps.write().unwrap();
@@ -1410,9 +1828,15 @@ mod tests {
             n_ps,
             n_ifg,
             vec![
-                (1.0, 0.0), (0.8, 0.2), (0.6, 0.4),
-                (1.0, 0.0), (0.7, 0.3), (0.5, 0.5),
-                (1.0, 0.0), (0.9, 0.1), (0.4, 0.6),
+                (1.0, 0.0),
+                (0.8, 0.2),
+                (0.6, 0.4),
+                (1.0, 0.0),
+                (0.7, 0.3),
+                (0.5, 0.5),
+                (1.0, 0.0),
+                (0.9, 0.1),
+                (0.4, 0.6),
             ],
         )
         .unwrap();
@@ -1420,7 +1844,8 @@ mod tests {
 
         let mut bp = MatFile::new(patch.join("bp1.mat"));
         if bad_bp_shape {
-            bp.add_f64_matrix("bperp_mat", n_ps, 1, vec![10.0, 20.0, 30.0]).unwrap();
+            bp.add_f64_matrix("bperp_mat", n_ps, 1, vec![10.0, 20.0, 30.0])
+                .unwrap();
         } else {
             bp.add_f64_matrix(
                 "bperp_mat",

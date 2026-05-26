@@ -1,5 +1,5 @@
 use pystamps_core::native_stage1::run_stage1_native;
-use pystamps_core::native_stage2::run_stage2_native;
+use pystamps_core::native_stage2::{run_stage2_native, run_stage2_native_with_threads};
 use pystamps_core::native_stage3::run_stage3_native;
 use pystamps_core::native_stage4::run_stage4_native;
 use pystamps_core::native_stage5::{run_stage5_merge_native, run_stage5_patch_native};
@@ -7,11 +7,10 @@ use pystamps_core::native_stage6::run_stage6_native;
 use pystamps_core::native_stage7::run_stage7_native;
 use pystamps_core::native_stage8::run_stage8_native;
 use pystamps_core::{
-    plan_pipeline, processing_chain_coverage, RunRequest, StageResult,
-    StageScope, StageStatus,
+    plan_pipeline, processing_chain_coverage, RunRequest, StageResult, StageScope, StageStatus,
 };
-use std::path::PathBuf;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -22,6 +21,28 @@ struct RunTimeConfig {
     io_workers: u16,
     cpu_workers: u16,
     stage2_native_threads: u16,
+}
+
+impl Default for RunTimeConfig {
+    fn default() -> Self {
+        Self {
+            backend: "auto".to_string(),
+            stage2_kernel_backend: "auto".to_string(),
+            io_workers: 8,
+            cpu_workers: 0,
+            stage2_native_threads: 0,
+        }
+    }
+}
+
+impl RunTimeConfig {
+    fn stage2_thread_count(&self) -> usize {
+        if self.stage2_native_threads > 0 {
+            self.stage2_native_threads as usize
+        } else {
+            self.cpu_workers as usize
+        }
+    }
 }
 
 fn main() -> ExitCode {
@@ -41,12 +62,13 @@ fn run(args: Vec<String>) -> Result<(), String> {
     };
     match command.as_str() {
         "run" => {
-            let (request, _runtime) = parse_run_args(rest)?;
-            execute_run_pipeline(&request)
+            let (request, runtime) = parse_run_args(rest)?;
+            execute_run_pipeline(&request, &runtime)
         }
         "coverage" => {
             let (start_step, end_step) = parse_coverage_args(rest)?;
-            let coverage = processing_chain_coverage(start_step, end_step).map_err(|err| err.to_string())?;
+            let coverage =
+                processing_chain_coverage(start_step, end_step).map_err(|err| err.to_string())?;
             let json = serde_json::to_string_pretty(&coverage).map_err(|err| err.to_string())?;
             println!("{json}");
             Ok(())
@@ -110,7 +132,7 @@ fn run(args: Vec<String>) -> Result<(), String> {
     }
 }
 
-fn execute_run_pipeline(request: &RunRequest) -> Result<(), String> {
+fn execute_run_pipeline(request: &RunRequest, runtime: &RunTimeConfig) -> Result<(), String> {
     let mut results = plan_pipeline(request).map_err(|err| err.to_string())?;
     if request.dry_run {
         let json = serde_json::to_string_pretty(&results).map_err(|err| err.to_string())?;
@@ -124,7 +146,7 @@ fn execute_run_pipeline(request: &RunRequest) -> Result<(), String> {
         }
 
         let start = Instant::now();
-        match run_native_stage(request.dataset_root.as_path(), result) {
+        match run_native_stage(request.dataset_root.as_path(), result, runtime) {
             Ok(executed) => {
                 result.status = StageStatus::Completed;
                 result.details = executed;
@@ -143,14 +165,21 @@ fn execute_run_pipeline(request: &RunRequest) -> Result<(), String> {
     Ok(())
 }
 
-fn run_native_stage(dataset_root: &Path, result: &StageResult) -> Result<String, String> {
+fn run_native_stage(
+    dataset_root: &Path,
+    result: &StageResult,
+    runtime: &RunTimeConfig,
+) -> Result<String, String> {
     let target = match result.scope {
         StageScope::Patch => dataset_root.join(&result.target),
         StageScope::Merged => dataset_root.to_path_buf(),
     };
     match (result.stage, result.scope) {
         (1, StageScope::Patch) => run_stage1_native(target).map_err(|err| err.to_string()),
-        (2, StageScope::Patch) => run_stage2_native(target).map_err(|err| err.to_string()),
+        (2, StageScope::Patch) => {
+            run_stage2_native_with_threads(target, runtime.stage2_thread_count())
+                .map_err(|err| err.to_string())
+        }
         (3, StageScope::Patch) => run_stage3_native(target).map_err(|err| err.to_string()),
         (4, StageScope::Patch) => run_stage4_native(target).map_err(|err| err.to_string()),
         (5, StageScope::Patch) => run_stage5_patch_native(target).map_err(|err| err.to_string()),
@@ -158,7 +187,10 @@ fn run_native_stage(dataset_root: &Path, result: &StageResult) -> Result<String,
         (6, StageScope::Merged) => run_stage6_native(target).map_err(|err| err.to_string()),
         (7, StageScope::Merged) => run_stage7_native(target).map_err(|err| err.to_string()),
         (8, StageScope::Merged) => run_stage8_native(target).map_err(|err| err.to_string()),
-        _ => Err(format!("unsupported stage {} for scope {}", result.stage, result.scope)),
+        _ => Err(format!(
+            "unsupported stage {} for scope {}",
+            result.stage, result.scope
+        )),
     }
 }
 
@@ -169,13 +201,7 @@ fn parse_run_args(args: &[String]) -> Result<(RunRequest, RunTimeConfig), String
         end_step: 8,
         dry_run: false,
     };
-    let mut runtime = RunTimeConfig {
-        backend: "auto".to_string(),
-        stage2_kernel_backend: "auto".to_string(),
-        io_workers: 8,
-        cpu_workers: 0,
-        stage2_native_threads: 0,
-    };
+    let mut runtime = RunTimeConfig::default();
     let mut ix = 0;
     while ix < args.len() {
         match args[ix].as_str() {
@@ -203,7 +229,8 @@ fn parse_run_args(args: &[String]) -> Result<(RunRequest, RunTimeConfig), String
                 ix += 2;
             }
             "--stage2-kernel-backend" => {
-                runtime.stage2_kernel_backend = parse_kernel_backend_arg(args, ix, "--stage2-kernel-backend")?;
+                runtime.stage2_kernel_backend =
+                    parse_kernel_backend_arg(args, ix, "--stage2-kernel-backend")?;
                 ix += 2;
             }
             "--io-workers" => {
@@ -215,7 +242,8 @@ fn parse_run_args(args: &[String]) -> Result<(RunRequest, RunTimeConfig), String
                 ix += 2;
             }
             "--stage2-native-threads" => {
-                runtime.stage2_native_threads = parse_u16_value(args, ix, "--stage2-native-threads")?;
+                runtime.stage2_native_threads =
+                    parse_u16_value(args, ix, "--stage2-native-threads")?;
                 ix += 2;
             }
             other => return Err(format!("unexpected run argument '{other}'")),
@@ -237,16 +265,22 @@ fn validate_runtime_config(config: &RunTimeConfig) -> Result<(), String> {
     }
     let kernel_backend = config.stage2_kernel_backend.as_str();
     if !matches!(kernel_backend, "auto" | "python" | "native") {
-        return Err(format!("unsupported stage-2 kernel backend '{kernel_backend}'"));
+        return Err(format!(
+            "unsupported stage-2 kernel backend '{kernel_backend}'"
+        ));
     }
     if config.stage2_native_threads > 0 && matches!(kernel_backend, "python") {
-        return Err("stage2-native-threads requires stage2 kernel backend auto or native".to_string());
+        return Err(
+            "stage2-native-threads requires stage2 kernel backend auto or native".to_string(),
+        );
     }
     Ok(())
 }
 
 fn parse_backend_arg(args: &[String], ix: usize, name: &str) -> Result<String, String> {
-    let value = args.get(ix + 1).ok_or_else(|| format!("{name} requires a value"))?;
+    let value = args
+        .get(ix + 1)
+        .ok_or_else(|| format!("{name} requires a value"))?;
     let value = value.to_lowercase();
     match value.as_str() {
         "auto" => Ok("auto".to_string()),
@@ -259,13 +293,17 @@ fn parse_backend_arg(args: &[String], ix: usize, name: &str) -> Result<String, S
 }
 
 fn parse_kernel_backend_arg(args: &[String], ix: usize, name: &str) -> Result<String, String> {
-    let value = args.get(ix + 1).ok_or_else(|| format!("{name} requires a value"))?;
+    let value = args
+        .get(ix + 1)
+        .ok_or_else(|| format!("{name} requires a value"))?;
     let value = value.to_lowercase();
     match value.as_str() {
         "auto" => Ok("auto".to_string()),
         "native" => Ok("native".to_string()),
         "python" | "cpu" => Ok("python".to_string()),
-        unsupported => Err(format!("unsupported stage-2 kernel backend '{unsupported}'")),
+        unsupported => Err(format!(
+            "unsupported stage-2 kernel backend '{unsupported}'"
+        )),
     }
 }
 

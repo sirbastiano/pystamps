@@ -644,6 +644,7 @@ dependencies = [
  "pystamps-mat",
  "pystamps-parity",
  "pystamps-stages",
+ "rayon",
  "rustfft",
  "serde",
  "serde_json",

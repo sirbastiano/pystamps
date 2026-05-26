@@ -23,9 +23,24 @@ From source:
 ```bash
 git clone git@github.com:sirbastiano/pystamps.git
 cd pystamps
-uv sync
+make deps
 uv run pystamps describe-backends
 ```
+
+`make deps` installs or verifies the Rust toolchain pieces needed by native execution
+(`cargo`, `rustfmt`, and `clippy`) and syncs the Python environment with `uv`.
+On a fresh Ubuntu VM, install system build packages first:
+
+```bash
+make deps-ubuntu
+make deps-check
+```
+
+Required local tools for source/native development are:
+- Python 3.12 or newer
+- `uv`
+- Rust via `rustup`, including `rustfmt` and `clippy`
+- a C/C++ build toolchain, `curl`, `pkg-config`, and Python development headers
 
 Editable install:
 
@@ -34,7 +49,9 @@ python -m pip install -e .
 python -m pip install -e "[dev]"
 ```
 
-`cargo` is required only for editable/source installs that build the Rust extension. Wheels from PyPI may avoid local compilation.
+`cargo` is required for editable/source installs that build the Rust extension, the
+native Rust CLI, and the Rust HTML frontend. Wheels from PyPI may avoid local
+compilation.
 
 ## Run by stage
 

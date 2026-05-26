@@ -11,11 +11,51 @@ RELEASE_DIST_DIR ?= /tmp/pystamps-insar-dist
 WHEELHOUSE ?= /tmp/pystamps-insar-wheelhouse
 TWINE_USERNAME ?= __token__
 TWINE_PASSWORD ?= $(UV_PUBLISH_TOKEN)
+UV_INSTALL_URL ?= https://astral.sh/uv/install.sh
+RUSTUP_INSTALL_URL ?= https://sh.rustup.rs
+APT_NATIVE_DEPS ?= build-essential curl pkg-config python3 python3-dev
 
-.PHONY: setup test test-impl build clean-dist require-version next-patch bump release-build repair-wheel release-check publish release release-patch audit verify benchmark parity-loop web
+.PHONY: deps deps-python deps-rust deps-ubuntu deps-check setup test test-impl build clean-dist require-version next-patch bump release-build repair-wheel release-check publish release release-patch audit verify benchmark parity-loop web
 
-setup:
-	uv sync
+deps: deps-rust deps-python
+
+deps-python:
+	@if ! command -v uv >/dev/null 2>&1; then \
+		echo "Installing uv"; \
+		curl -LsSf "$(UV_INSTALL_URL)" | sh; \
+	fi
+	@UV_BIN=$$(command -v uv || printf '%s' "$$HOME/.local/bin/uv"); \
+	"$$UV_BIN" sync
+
+deps-rust:
+	@if ! command -v cargo >/dev/null 2>&1; then \
+		echo "Installing Rust with rustup"; \
+		curl --proto '=https' --tlsv1.2 -sSf "$(RUSTUP_INSTALL_URL)" | sh -s -- -y; \
+	fi
+	@. "$$HOME/.cargo/env" 2>/dev/null || true; \
+	if ! command -v cargo >/dev/null 2>&1; then \
+		echo "cargo was not found after Rust install"; \
+		exit 2; \
+	fi; \
+	if ! command -v rustup >/dev/null 2>&1; then \
+		echo "rustup is required to install rustfmt and clippy components"; \
+		exit 2; \
+	fi; \
+	RUSTUP_PERMIT_COPY_RENAME=1 rustup component add rustfmt clippy
+
+deps-ubuntu:
+	sudo apt-get update
+	sudo apt-get install -y $(APT_NATIVE_DEPS)
+	$(MAKE) deps
+
+deps-check:
+	@command -v cargo >/dev/null 2>&1 || { echo "missing cargo"; exit 2; }
+	@command -v rustfmt >/dev/null 2>&1 || { echo "missing rustfmt"; exit 2; }
+	@cargo clippy --version >/dev/null 2>&1 || { echo "missing clippy"; exit 2; }
+	@UV_BIN=$$(command -v uv || printf '%s' "$$HOME/.local/bin/uv"); \
+	"$$UV_BIN" --version >/dev/null 2>&1 || { echo "missing uv"; exit 2; }
+
+setup: deps-python
 
 test:
 	uv run pytest -q
