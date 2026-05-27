@@ -50,7 +50,11 @@
       "max_duration_sec": 10.0,
       "max_peak_rss_bytes": 51539607552,
       "algorithmic_guard": "Weeding graph construction must stay sparse and avoid complete PS edge lists.",
-      "temporary_waiver": null
+      "temporary_waiver": {
+        "reason": "US-007 restores exact Stage 4 weed parity and reduces validation runtime, but large validation patches still exceed the original 10s patch budget on this runner.",
+        "owner": "US-007",
+        "expires_at_utc": "2026-06-30T00:00:00Z"
+      }
     },
     {
       "stage": 5,

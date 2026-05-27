@@ -2,8 +2,15 @@ use crate::CoreError;
 use delaunator::{triangulate, Point};
 use num_complex::Complex64;
 use pystamps_mat::{ComplexMatrixF32, MatData, MatFile, Matrix};
+use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const HDF5_SIGNATURE: &[u8; 8] = b"\x89HDF\r\n\x1a\n";
+const HDF5_SIGNATURE_SCAN_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug)]
 struct Stage4Parms {
@@ -21,11 +28,11 @@ impl Default for Stage4Parms {
         Self {
             small_baseline_flag: "n".to_string(),
             drop_ifg_index: Vec::new(),
-            weed_standard_dev: std::f64::consts::PI,
-            weed_max_noise: std::f64::consts::PI,
+            weed_standard_dev: 1.0,
+            weed_max_noise: f64::INFINITY,
             weed_zero_elevation: "n".to_string(),
-            weed_neighbours: "y".to_string(),
-            weed_time_win: 360.0,
+            weed_neighbours: "n".to_string(),
+            weed_time_win: 730.0,
         }
     }
 }
@@ -38,22 +45,21 @@ struct EdgeStats {
 
 pub fn run_stage4_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreError> {
     let patch_dir = patch_dir.as_ref();
-    let select1 = read_mat_stage4(patch_dir, "select1.mat")?;
-    let ps1 = read_mat_stage4(patch_dir, "ps1.mat")?;
-    let ph1 = read_mat_stage4(patch_dir, "ph1.mat")?;
-    let _pm1 = read_mat_stage4(patch_dir, "pm1.mat")?;
+    let select1 = Stage4MatSource::read(patch_dir.join("select1.mat"));
+    let ps1 = Stage4MatSource::read(patch_dir.join("ps1.mat"));
+    let ph1 = Stage4MatSource::read(patch_dir.join("ph1.mat"));
     let parms = load_stage4_parms(patch_dir);
 
-    let n_ps_total = scalar_from_mat(&ps1, "n_ps", 0.0).round() as usize;
+    let n_ps_total = ps1.scalar("n_ps", 0.0).round() as usize;
     if n_ps_total == 0 {
         return stage4_err("ps1.mat missing valid n_ps");
     }
 
-    let ix = vector_i64(&select1, "ix", "select1.ix")?;
+    let ix = select1.vector_i64("ix", "select1.ix")?;
     if ix.is_empty() {
         return stage4_err("select1.mat has empty ix");
     }
-    let keep_ix = bool_vector_or_default(&select1, "keep_ix", ix.len(), true);
+    let keep_ix = select1.bool_vector_or_default("keep_ix", ix.len(), true);
     let ix2: Vec<i64> = ix
         .iter()
         .zip(keep_ix.iter())
@@ -73,16 +79,16 @@ pub fn run_stage4_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         return Ok("Stage 4 retained 0/0 selected PS".to_string());
     }
 
-    let coh_ps2_all = ps_vector_f64(&select1, "coh_ps2", ix.len(), "select1.coh_ps2")?;
-    let k_ps2_all = ps_vector_f64(&select1, "K_ps2", ix.len(), "select1.K_ps2")?;
-    let c_ps2_all = ps_vector_f64(&select1, "C_ps2", ix.len(), "select1.C_ps2")?;
+    let coh_ps2_all = select1.ps_vector_f64("coh_ps2", ix.len(), "select1.coh_ps2")?;
+    let k_ps2_all = select1.ps_vector_f64("K_ps2", ix.len(), "select1.K_ps2")?;
+    let c_ps2_all = select1.ps_vector_f64("C_ps2", ix.len(), "select1.C_ps2")?;
     let coh_ps2 = select_values_by_mask(&coh_ps2_all, &keep_ix);
     let k_ps2 = select_values_by_mask(&k_ps2_all, &keep_ix);
     let c_ps2 = select_values_by_mask(&c_ps2_all, &keep_ix);
     let ix2_rows: Vec<usize> = ix2.iter().map(|&value| (value - 1) as usize).collect();
 
-    let ij_all = ps_dim_f64(&ps1, "ij", n_ps_total, 3, "ps1.ij")?;
-    let xy_all = ps_dim_f64(&ps1, "xy", n_ps_total, 3, "ps1.xy")?;
+    let ij_all = ps1.ps_dim_f64("ij", n_ps_total, 3, "ps1.ij")?;
+    let xy_all = ps1.ps_dim_f64("xy", n_ps_total, 3, "ps1.xy")?;
     let ij2 = select_rows_matrix_f64(&ij_all, &ix2_rows);
     let xy2 = select_rows_matrix_f64(&xy_all, &ix2_rows);
     let n_ps = ix2.len();
@@ -123,8 +129,8 @@ pub fn run_stage4_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
         && parms.weed_max_noise >= std::f64::consts::PI;
 
     if !no_weed_noisy && n_pre_noise > 0 {
-        let ph1 = ps_complex_matrix(&ph1, "ph", n_ps_total, "ph1.ph")?;
-        let bperp = vector_f64(&ps1, "bperp", "ps1.bperp")?;
+        let ph1 = ph1.ps_complex_matrix("ph", n_ps_total, "ph1.ph")?;
+        let bperp = ps1.vector_f64_required("bperp", "ps1.bperp")?;
         if bperp.len() != ph1.cols {
             return stage4_err(format!(
                 "ps1.bperp has length {} but ph1.ph has {} interferograms",
@@ -149,14 +155,14 @@ pub fn run_stage4_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
             .iter()
             .map(|&pos| (xy2[pos * 3 + 1], xy2[pos * 3 + 2]))
             .collect();
-        let edges = stage4_graph_edges(&points)?;
+        let edges = stage4_graph_edges(patch_dir, &points)?;
         validate_stage4_edge_topology(&edges, n_pre_noise)?;
         ps_std = vec![f64::INFINITY; n_pre_noise];
         ps_max = vec![f64::INFINITY; n_pre_noise];
 
         if !edges.is_empty() && !ifg_cols.is_empty() {
             let small_baseline = parms.small_baseline_flag.eq_ignore_ascii_case("y");
-            let master_ix = scalar_from_mat(&ps1, "master_ix", 1.0).round() as usize;
+            let master_ix = ps1.scalar("master_ix", 1.0).round() as usize;
             if !small_baseline && (master_ix == 0 || master_ix > ph1.cols) {
                 return stage4_err(format!(
                     "ps1.master_ix must be 1-based within ph1 width {}; got {master_ix}",
@@ -167,27 +173,27 @@ pub fn run_stage4_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
             let mut ph_weed = Vec::with_capacity(n_pre_noise * ifg_cols.len());
             for &selected_pos in &kept_positions {
                 let source_row = ix2_rows[selected_pos];
-                let mut row = Vec::with_capacity(ph1.cols);
-                for col in 0..ph1.cols {
-                    let source = ph1.values[source_row * ph1.cols + col];
+                let row_offset = source_row * ph1.cols;
+                let topo_phase = k_ps2[selected_pos];
+                let master_phase = c_ps2[selected_pos];
+                for &col in &ifg_cols {
+                    if !small_baseline && col == master_ix - 1 {
+                        ph_weed.push(Complex64::from_polar(1.0, master_phase));
+                        continue;
+                    }
+                    let source = ph1.values[row_offset + col];
                     let phase = mul_exp_neg_i(
                         Complex64::new(source.0 as f64, source.1 as f64),
-                        k_ps2[selected_pos] * bperp[col],
+                        topo_phase * bperp[col],
                     );
-                    row.push(normalize_complex(phase));
-                }
-                if !small_baseline {
-                    row[master_ix - 1] = Complex64::from_polar(1.0, c_ps2[selected_pos]);
-                }
-                for &col in &ifg_cols {
-                    ph_weed.push(row[col]);
+                    ph_weed.push(normalize_complex(phase));
                 }
             }
             let b_use: Vec<f64> = ifg_cols.iter().map(|&col| bperp[col]).collect();
             let day_use = if small_baseline {
                 Vec::new()
             } else {
-                let day = vector_f64(&ps1, "day", "ps1.day")?;
+                let day = ps1.vector_f64_required("day", "ps1.day")?;
                 if day.len() != ph1.cols {
                     return stage4_err(format!(
                         "ps1.day has length {} but ph1.ph has {} interferograms",
@@ -240,31 +246,157 @@ pub fn run_stage4_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreErro
     ))
 }
 
-fn read_mat_stage4(patch_dir: &Path, filename: &str) -> Result<MatData, CoreError> {
-    MatData::read(patch_dir.join(filename))
-        .map_err(|err| stage4_err_owned(format!("unable to read {filename}: {err}")))
+#[derive(Debug)]
+struct Stage4MatSource {
+    path: PathBuf,
+    mat: Option<MatData>,
+}
+
+impl Stage4MatSource {
+    fn read(path: impl AsRef<Path>) -> Self {
+        let path = path.as_ref().to_path_buf();
+        let mat = if find_hdf5_signature_offset(&path).is_ok() {
+            None
+        } else {
+            MatData::read(&path).ok()
+        };
+        Self { path, mat }
+    }
+
+    fn scalar(&self, name: &str, default: f64) -> f64 {
+        self.vector_f64(name)
+            .and_then(|values| values.into_iter().next())
+            .unwrap_or(default)
+    }
+
+    fn text(&self, name: &str, default: &str) -> String {
+        let value = self
+            .mat
+            .as_ref()
+            .and_then(|mat| text_from_mat_opt(mat, name))
+            .or_else(|| read_hdf5_text(&self.path, name).ok());
+        match value {
+            Some(text) if !text.is_empty() => text,
+            _ => default.to_string(),
+        }
+    }
+
+    fn vector_f64(&self, name: &str) -> Option<Vec<f64>> {
+        self.mat
+            .as_ref()
+            .and_then(|mat| optional_vector_f64(mat, name))
+            .or_else(|| {
+                read_hdf5_matrix_f64(&self.path, name)
+                    .ok()
+                    .map(|matrix| matrix.values)
+            })
+    }
+
+    fn vector_f64_required(&self, name: &str, label: &str) -> Result<Vec<f64>, CoreError> {
+        self.vector_f64(name).ok_or_else(|| CoreError::NativeStage {
+            stage: 4,
+            message: format!("{label} is missing"),
+        })
+    }
+
+    fn vector_i64(&self, name: &str, label: &str) -> Result<Vec<i64>, CoreError> {
+        Ok(self
+            .vector_f64_required(name, label)?
+            .into_iter()
+            .filter(|value| value.is_finite())
+            .map(|value| value.round() as i64)
+            .collect())
+    }
+
+    fn bool_vector_or_default(
+        &self,
+        name: &str,
+        expected_len: usize,
+        default_value: bool,
+    ) -> Vec<bool> {
+        let Some(values) = self.vector_f64(name) else {
+            return vec![default_value; expected_len];
+        };
+        if values.len() != expected_len {
+            return vec![default_value; expected_len];
+        }
+        values.into_iter().map(|value| value != 0.0).collect()
+    }
+
+    fn ps_vector_f64(&self, name: &str, n_ps: usize, label: &str) -> Result<Vec<f64>, CoreError> {
+        let values = self.vector_f64_required(name, label)?;
+        if values.len() != n_ps {
+            return stage4_err(format!(
+                "{label} has incompatible length {} for n_ps={n_ps}",
+                values.len()
+            ));
+        }
+        Ok(values)
+    }
+
+    fn ps_dim_f64(
+        &self,
+        name: &str,
+        n_ps: usize,
+        n_dim: usize,
+        label: &str,
+    ) -> Result<Matrix<f64>, CoreError> {
+        if let Some(mat) = &self.mat {
+            if let Ok(matrix) = ps_dim_f64(mat, name, n_ps, n_dim, label) {
+                return Ok(matrix);
+            }
+        }
+        if let Ok(matrix) = read_hdf5_matrix_f64(&self.path, name) {
+            return orient_ps_dim_f64(matrix, n_ps, n_dim, label);
+        }
+        stage4_err(format!(
+            "{label} is missing or has incompatible shape; expected {n_ps}x{n_dim}"
+        ))
+    }
+
+    fn ps_complex_matrix(
+        &self,
+        name: &str,
+        n_ps: usize,
+        label: &str,
+    ) -> Result<ComplexMatrixF32, CoreError> {
+        if let Some(mat) = &self.mat {
+            if let Ok(matrix) = ps_complex_matrix(mat, name, n_ps, label) {
+                return Ok(matrix);
+            }
+        }
+        if let Ok(matrix) = read_hdf5_complex_matrix_f32(&self.path, name) {
+            return orient_complex_matrix_f32(matrix, n_ps, label);
+        }
+        stage4_err(format!("{label} is missing or invalid"))
+    }
 }
 
 fn load_stage4_parms(patch_dir: &Path) -> Stage4Parms {
     let Some(path) = resolve_file_optional(patch_dir, "parms.mat") else {
         return Stage4Parms::default();
     };
-    let Ok(mat) = MatData::read(path) else {
-        return Stage4Parms::default();
+    let source = Stage4MatSource::read(path);
+    let small_baseline_flag = source.text("small_baseline_flag", "n");
+    let default_standard_dev = if small_baseline_flag.eq_ignore_ascii_case("y") {
+        f64::INFINITY
+    } else {
+        1.0
     };
     Stage4Parms {
-        small_baseline_flag: text_from_mat(&mat, "small_baseline_flag", "n"),
-        drop_ifg_index: optional_vector_f64(&mat, "drop_ifg_index")
+        small_baseline_flag,
+        drop_ifg_index: source
+            .vector_f64("drop_ifg_index")
             .unwrap_or_default()
             .into_iter()
             .filter(|value| value.is_finite())
             .map(|value| value.round() as i64)
             .collect(),
-        weed_standard_dev: scalar_from_mat(&mat, "weed_standard_dev", std::f64::consts::PI),
-        weed_max_noise: scalar_from_mat(&mat, "weed_max_noise", std::f64::consts::PI),
-        weed_zero_elevation: text_from_mat(&mat, "weed_zero_elevation", "n"),
-        weed_neighbours: text_from_mat(&mat, "weed_neighbours", "y"),
-        weed_time_win: scalar_from_mat(&mat, "weed_time_win", 360.0),
+        weed_standard_dev: source.scalar("weed_standard_dev", default_standard_dev),
+        weed_max_noise: source.scalar("weed_max_noise", f64::INFINITY),
+        weed_zero_elevation: source.text("weed_zero_elevation", "n"),
+        weed_neighbours: source.text("weed_neighbours", "n"),
+        weed_time_win: source.scalar("weed_time_win", 730.0),
     }
 }
 
@@ -390,10 +522,16 @@ fn remove_duplicate_xy(xy2: &[f64], coh: &[f64], ix_weed: &mut [bool]) {
     }
 }
 
-fn stage4_graph_edges(points: &[(f64, f64)]) -> Result<Vec<(usize, usize)>, CoreError> {
+fn stage4_graph_edges(
+    patch_dir: &Path,
+    points: &[(f64, f64)],
+) -> Result<Vec<(usize, usize)>, CoreError> {
     let n = points.len();
     if n < 2 {
         return Ok(Vec::new());
+    }
+    if let Some(edges) = load_triangle_edges(patch_dir, n)? {
+        return Ok(edges);
     }
     if n == 2 {
         return Ok(vec![(0, 1)]);
@@ -410,6 +548,85 @@ fn stage4_graph_edges(points: &[(f64, f64)]) -> Result<Vec<(usize, usize)>, Core
         return Ok(nearest_neighbor_edges(points));
     }
     Ok(edges.into_iter().collect())
+}
+
+fn load_triangle_edges(
+    patch_dir: &Path,
+    n_nodes: usize,
+) -> Result<Option<Vec<(usize, usize)>>, CoreError> {
+    let edge_path = patch_dir.join("psweed.2.edge");
+    if n_nodes < 2 || !edge_path.exists() {
+        return Ok(None);
+    }
+    if let Some(node_count) = triangle_node_count(&patch_dir.join("psweed.1.node"))? {
+        if node_count != n_nodes {
+            return Ok(None);
+        }
+    }
+
+    let text = fs::read_to_string(&edge_path).map_err(|err| {
+        stage4_err_owned(format!(
+            "unable to read Stage 4 triangle edge file {}: {err}",
+            edge_path.display()
+        ))
+    })?;
+    let mut edges = Vec::new();
+    let mut seen = BTreeSet::new();
+    for line in text.lines().skip(1) {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        let cols: Vec<&str> = trimmed.split_whitespace().collect();
+        if cols.len() < 3 {
+            continue;
+        }
+        let Ok(a_1b) = cols[1].parse::<i64>() else {
+            continue;
+        };
+        let Ok(b_1b) = cols[2].parse::<i64>() else {
+            continue;
+        };
+        if a_1b < 1 || b_1b < 1 {
+            continue;
+        }
+        let a = (a_1b - 1) as usize;
+        let b = (b_1b - 1) as usize;
+        if a >= n_nodes || b >= n_nodes || a == b {
+            continue;
+        }
+        let edge = (a.min(b), a.max(b));
+        if seen.insert(edge) {
+            edges.push(edge);
+        }
+    }
+    if edges.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(edges))
+    }
+}
+
+fn triangle_node_count(path: &Path) -> Result<Option<usize>, CoreError> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let text = fs::read_to_string(path).map_err(|err| {
+        stage4_err_owned(format!(
+            "unable to read Stage 4 triangle node file {}: {err}",
+            path.display()
+        ))
+    })?;
+    let Some(first_line) = text.lines().find(|line| !line.trim().is_empty()) else {
+        return Ok(None);
+    };
+    let Some(first_col) = first_line.split_whitespace().next() else {
+        return Ok(None);
+    };
+    match first_col.parse::<usize>() {
+        Ok(value) => Ok(Some(value)),
+        Err(_) => Ok(None),
+    }
 }
 
 fn nearest_neighbor_edges(points: &[(f64, f64)]) -> Vec<(usize, usize)> {
@@ -467,40 +684,35 @@ fn stage4_edge_stats_kernel(
         return Ok(EdgeStats { ps_std, ps_max });
     }
 
-    let mut dph_space = vec![Complex64::new(0.0, 0.0); n_edge * n_ifg];
-    for (edge_ix, &(a, b)) in edges.iter().enumerate() {
-        for ifg_ix in 0..n_ifg {
-            dph_space[edge_ix * n_ifg + ifg_ix] =
-                ph[b * n_ifg + ifg_ix] * ph[a * n_ifg + ifg_ix].conj();
-        }
-    }
-
-    let (edge_std, edge_max) = if !small_baseline {
-        stage4_single_master_edge_stats(&dph_space, n_edge, n_ifg, bperp, day, time_win)
+    let edge_stats = if !small_baseline {
+        stage4_single_master_edge_stats(ph, n_ifg, edges, bperp, day, time_win)
     } else {
-        stage4_small_baseline_edge_stats(&dph_space, n_edge, n_ifg, bperp)
+        stage4_small_baseline_edge_stats(ph, n_ifg, edges, bperp)
     };
 
     for (edge_ix, &(a, b)) in edges.iter().enumerate() {
-        ps_std[a] = ps_std[a].min(edge_std[edge_ix]);
-        ps_std[b] = ps_std[b].min(edge_std[edge_ix]);
-        ps_max[a] = ps_max[a].min(edge_max[edge_ix]);
-        ps_max[b] = ps_max[b].min(edge_max[edge_ix]);
+        let (edge_std, edge_max) = edge_stats[edge_ix];
+        ps_std[a] = ps_std[a].min(edge_std);
+        ps_std[b] = ps_std[b].min(edge_std);
+        ps_max[a] = ps_max[a].min(edge_max);
+        ps_max[b] = ps_max[b].min(edge_max);
     }
     Ok(EdgeStats { ps_std, ps_max })
 }
 
 fn stage4_single_master_edge_stats(
-    dph_space: &[Complex64],
-    n_edge: usize,
+    ph: &[Complex64],
     n_ifg: usize,
+    edges: &[(usize, usize)],
     bperp: &[f64],
     day: &[f64],
     time_win: f64,
-) -> (Vec<f64>, Vec<f64>) {
+) -> Vec<(f64, f64)> {
+    let n_edge = edges.len();
     let time_win = time_win.max(1.0e-6);
     let mut time_diff_all = vec![0.0; n_ifg * n_ifg];
     let mut weight_all = vec![0.0; n_ifg * n_ifg];
+    let mut affine = Vec::with_capacity(n_ifg);
     for row in 0..n_ifg {
         let mut weight_sum = 0.0;
         for col in 0..n_ifg {
@@ -520,70 +732,66 @@ fn stage4_single_master_edge_stats(
                 weight_all[row * n_ifg + col] /= weight_sum;
             }
         }
-    }
-
-    let mut dph_smooth0 = vec![Complex64::new(0.0, 0.0); n_edge * n_ifg];
-    for edge in 0..n_edge {
-        for out_ix in 0..n_ifg {
-            let mut accum = Complex64::new(0.0, 0.0);
-            for src_ix in 0..n_ifg {
-                accum += dph_space[edge * n_ifg + src_ix] * weight_all[out_ix * n_ifg + src_ix];
-            }
-            dph_smooth0[edge * n_ifg + out_ix] = accum;
-        }
-    }
-
-    let mut dph_smooth2 = dph_smooth0.clone();
-    for edge in 0..n_edge {
-        for ifg in 0..n_ifg {
-            dph_smooth2[edge * n_ifg + ifg] -=
-                dph_space[edge * n_ifg + ifg] * weight_all[ifg * n_ifg + ifg];
-        }
-    }
-
-    let mut dph_smooth = dph_smooth0.clone();
-    for ifg in 0..n_ifg {
-        let time_diff = &time_diff_all[ifg * n_ifg..(ifg + 1) * n_ifg];
-        let weight = &weight_all[ifg * n_ifg..(ifg + 1) * n_ifg];
-        let mut dph_mean_adj = vec![0.0; n_edge * n_ifg];
-        let mut dph_mean = vec![Complex64::new(0.0, 0.0); n_edge];
-        for edge in 0..n_edge {
-            let mean = dph_smooth0[edge * n_ifg + ifg];
-            dph_mean[edge] = mean;
-            let mean_conj = mean.conj();
-            for col in 0..n_ifg {
-                dph_mean_adj[edge * n_ifg + col] =
-                    (dph_space[edge * n_ifg + col] * mean_conj).arg();
-            }
-        }
-        let (m0, m1) = weighted_affine_fit_rows(time_diff, &dph_mean_adj, n_edge, n_ifg, weight);
-        let mut dph_mean_adj2 = vec![0.0; n_edge * n_ifg];
-        for edge in 0..n_edge {
-            for col in 0..n_ifg {
-                let detrended =
-                    dph_mean_adj[edge * n_ifg + col] - (m0[edge] + m1[edge] * time_diff[col]);
-                dph_mean_adj2[edge * n_ifg + col] = wrap_phase(detrended);
-            }
-        }
-        let (m20, _) = weighted_affine_fit_rows(time_diff, &dph_mean_adj2, n_edge, n_ifg, weight);
-        for edge in 0..n_edge {
-            dph_smooth[edge * n_ifg + ifg] =
-                dph_mean[edge] * Complex64::from_polar(1.0, m0[edge] + m20[edge]);
-        }
+        let time_diff = &time_diff_all[row * n_ifg..(row + 1) * n_ifg];
+        let weight = &weight_all[row * n_ifg..(row + 1) * n_ifg];
+        affine.push(weighted_affine_coefficients(time_diff, weight));
     }
 
     let mut dph_noise = vec![0.0; n_edge * n_ifg];
-    let mut dph_noise2 = vec![0.0; n_edge * n_ifg];
-    for edge in 0..n_edge {
-        for ifg in 0..n_ifg {
-            dph_noise[edge * n_ifg + ifg] =
-                (dph_space[edge * n_ifg + ifg] * dph_smooth[edge * n_ifg + ifg].conj()).arg();
-            dph_noise2[edge * n_ifg + ifg] =
-                (dph_space[edge * n_ifg + ifg] * dph_smooth2[edge * n_ifg + ifg].conj()).arg();
-        }
-    }
+    let chunk_edges = 512usize;
+    let (noise2_sum, noise2_sumsq) = dph_noise
+        .par_chunks_mut(n_ifg * chunk_edges)
+        .zip(edges.par_chunks(chunk_edges))
+        .map(|(noise_chunk, edge_chunk)| {
+            let mut dph_re = vec![0.0; n_ifg];
+            let mut dph_im = vec![0.0; n_ifg];
+            let mut dph_phase = vec![0.0; n_ifg];
+            let mut dph_mean_adj = vec![0.0; n_ifg];
+            let mut noise2_row = vec![0.0; n_ifg];
+            let mut noise2_sum = vec![0.0; n_ifg];
+            let mut noise2_sumsq = vec![0.0; n_ifg];
+            for (local_ix, &edge) in edge_chunk.iter().enumerate() {
+                fill_edge_phase_components(
+                    ph,
+                    n_ifg,
+                    edge,
+                    &mut dph_re,
+                    &mut dph_im,
+                    &mut dph_phase,
+                );
+                let noise_row = &mut noise_chunk[local_ix * n_ifg..(local_ix + 1) * n_ifg];
+                single_master_edge_noise(
+                    &dph_re,
+                    &dph_im,
+                    &dph_phase,
+                    n_ifg,
+                    &time_diff_all,
+                    &weight_all,
+                    &affine,
+                    &mut dph_mean_adj,
+                    noise_row,
+                    &mut noise2_row,
+                );
+                for ifg in 0..n_ifg {
+                    noise2_sum[ifg] += noise2_row[ifg];
+                    noise2_sumsq[ifg] += noise2_row[ifg] * noise2_row[ifg];
+                }
+            }
+            (noise2_sum, noise2_sumsq)
+        })
+        .reduce(
+            || (vec![0.0; n_ifg], vec![0.0; n_ifg]),
+            |mut left, right| {
+                for ifg in 0..n_ifg {
+                    left.0[ifg] += right.0[ifg];
+                    left.1[ifg] += right.1[ifg];
+                }
+                left
+            },
+        );
 
-    let ifg_var = variance_cols_real(&dph_noise2, n_edge, n_ifg, usize::from(n_edge > 1));
+    let ifg_var =
+        variance_from_sum_sumsq(&noise2_sum, &noise2_sumsq, n_edge, usize::from(n_edge > 1));
     let w_ifg: Vec<f64> = ifg_var
         .iter()
         .map(|&value| {
@@ -594,22 +802,17 @@ fn stage4_single_master_edge_stats(
             }
         })
         .collect();
-    let k_edge = weighted_slope_fit_rows_real(bperp, &dph_noise, n_edge, n_ifg, &w_ifg);
-    for edge in 0..n_edge {
-        for ifg in 0..n_ifg {
-            dph_noise[edge * n_ifg + ifg] -= k_edge[edge] * bperp[ifg];
-        }
-    }
-    std_max_rows_real(&dph_noise, n_edge, n_ifg, usize::from(n_ifg > 1))
+    corrected_edge_stats_rows_real(bperp, &dph_noise, n_ifg, &w_ifg, usize::from(n_ifg > 1))
 }
 
 fn stage4_small_baseline_edge_stats(
-    dph_space: &[Complex64],
-    n_edge: usize,
+    ph: &[Complex64],
     n_ifg: usize,
+    edges: &[(usize, usize)],
     bperp: &[f64],
-) -> (Vec<f64>, Vec<f64>) {
-    let ifg_var = variance_cols_complex(dph_space, n_edge, n_ifg, usize::from(n_edge > 1));
+) -> Vec<(f64, f64)> {
+    let n_edge = edges.len();
+    let ifg_var = variance_cols_complex_edges(ph, n_ifg, edges, usize::from(n_edge > 1));
     let w_ifg: Vec<f64> = ifg_var
         .iter()
         .map(|&value| {
@@ -620,15 +823,348 @@ fn stage4_small_baseline_edge_stats(
             }
         })
         .collect();
-    let k_edge = weighted_slope_fit_rows_complex(bperp, dph_space, n_edge, n_ifg, &w_ifg);
-    let mut ang = vec![0.0; n_edge * n_ifg];
-    for edge in 0..n_edge {
-        for ifg in 0..n_ifg {
-            ang[edge * n_ifg + ifg] =
-                (dph_space[edge * n_ifg + ifg] - k_edge[edge] * bperp[ifg]).arg();
+    edges
+        .par_iter()
+        .map(|&edge| {
+            let dph = edge_phase_row(ph, n_ifg, edge);
+            let k_edge = weighted_slope_fit_complex(bperp, &dph, &w_ifg);
+            let mut ang = vec![0.0; n_ifg];
+            for ifg in 0..n_ifg {
+                ang[ifg] = (dph[ifg] - k_edge * bperp[ifg]).arg();
+            }
+            std_max_row_real(&ang, usize::from(n_ifg > 1))
+        })
+        .collect()
+}
+
+fn edge_phase_row(ph: &[Complex64], n_ifg: usize, edge: (usize, usize)) -> Vec<Complex64> {
+    let (a, b) = edge;
+    let mut dph = Vec::with_capacity(n_ifg);
+    for ifg_ix in 0..n_ifg {
+        dph.push(ph[b * n_ifg + ifg_ix] * ph[a * n_ifg + ifg_ix].conj());
+    }
+    dph
+}
+
+fn fill_edge_phase_components(
+    ph: &[Complex64],
+    n_ifg: usize,
+    edge: (usize, usize),
+    re_out: &mut [f64],
+    im_out: &mut [f64],
+    phase_out: &mut [f64],
+) {
+    let (a, b) = edge;
+    for ifg_ix in 0..n_ifg {
+        let value = ph[b * n_ifg + ifg_ix] * ph[a * n_ifg + ifg_ix].conj();
+        re_out[ifg_ix] = value.re;
+        im_out[ifg_ix] = value.im;
+        phase_out[ifg_ix] = value.arg();
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AffineCoefficients {
+    s0: f64,
+    s1: f64,
+    s2: f64,
+    det: f64,
+}
+
+fn weighted_affine_coefficients(time_diff: &[f64], weight: &[f64]) -> AffineCoefficients {
+    let s0: f64 = weight.iter().sum();
+    let s1: f64 = weight
+        .iter()
+        .zip(time_diff.iter())
+        .map(|(&wi, &ti)| wi * ti)
+        .sum();
+    let s2: f64 = weight
+        .iter()
+        .zip(time_diff.iter())
+        .map(|(&wi, &ti)| wi * ti * ti)
+        .sum();
+    AffineCoefficients {
+        s0,
+        s1,
+        s2,
+        det: s0 * s2 - s1 * s1,
+    }
+}
+
+fn weighted_affine_fit_from_sums(wy0: f64, wy1: f64, coeffs: AffineCoefficients) -> (f64, f64) {
+    if coeffs.s0 == 0.0 {
+        return (0.0, 0.0);
+    }
+    if coeffs.det == 0.0 {
+        return (wy0 / coeffs.s0, 0.0);
+    }
+    (
+        (wy0 * coeffs.s2 - wy1 * coeffs.s1) / coeffs.det,
+        (wy1 * coeffs.s0 - wy0 * coeffs.s1) / coeffs.det,
+    )
+}
+
+fn single_master_edge_noise(
+    dph_re: &[f64],
+    dph_im: &[f64],
+    dph_phase: &[f64],
+    n_ifg: usize,
+    time_diff_all: &[f64],
+    weight_all: &[f64],
+    affine: &[AffineCoefficients],
+    dph_mean_adj: &mut [f64],
+    noise_row: &mut [f64],
+    noise2_row: &mut [f64],
+) {
+    for ifg in 0..n_ifg {
+        let weight = &weight_all[ifg * n_ifg..(ifg + 1) * n_ifg];
+        let time_diff = &time_diff_all[ifg * n_ifg..(ifg + 1) * n_ifg];
+        let mut mean_re = 0.0;
+        let mut mean_im = 0.0;
+        for col in 0..n_ifg {
+            mean_re += dph_re[col] * weight[col];
+            mean_im += dph_im[col] * weight[col];
+        }
+        let mean_angle = if mean_re * mean_re + mean_im * mean_im == 0.0 {
+            None
+        } else {
+            Some(mean_im.atan2(mean_re))
+        };
+        let mut fit_wy0 = 0.0;
+        let mut fit_wy1 = 0.0;
+        if let Some(angle) = mean_angle {
+            for col in 0..n_ifg {
+                let adjusted = wrap_phase_bounded(dph_phase[col] - angle);
+                dph_mean_adj[col] = adjusted;
+                fit_wy0 += adjusted * weight[col];
+                fit_wy1 += adjusted * weight[col] * time_diff[col];
+            }
+        } else {
+            dph_mean_adj.fill(0.0);
+        }
+        let (m0, m1) = weighted_affine_fit_from_sums(fit_wy0, fit_wy1, affine[ifg]);
+        let mut wy0 = 0.0;
+        let mut wy1 = 0.0;
+        for col in 0..n_ifg {
+            let detrended = wrap_phase_if_needed(dph_mean_adj[col] - (m0 + m1 * time_diff[col]));
+            wy0 += detrended * weight[col];
+            wy1 += detrended * weight[col] * time_diff[col];
+        }
+        let m20 = if affine[ifg].det == 0.0 {
+            if affine[ifg].s0 == 0.0 {
+                0.0
+            } else {
+                wy0 / affine[ifg].s0
+            }
+        } else {
+            (wy0 * affine[ifg].s2 - wy1 * affine[ifg].s1) / affine[ifg].det
+        };
+        let smooth2_re = mean_re - dph_re[ifg] * weight[ifg];
+        let smooth2_im = mean_im - dph_im[ifg] * weight[ifg];
+        noise_row[ifg] = mean_angle
+            .map(|angle| wrap_phase_if_needed(dph_phase[ifg] - (angle + m0 + m20)))
+            .unwrap_or(0.0);
+        noise2_row[ifg] = if smooth2_re * smooth2_re + smooth2_im * smooth2_im == 0.0 {
+            0.0
+        } else {
+            wrap_phase_if_needed(dph_phase[ifg] - smooth2_im.atan2(smooth2_re))
+        };
+    }
+}
+
+fn variance_cols_complex_edges(
+    ph: &[Complex64],
+    n_ifg: usize,
+    edges: &[(usize, usize)],
+    ddof: usize,
+) -> Vec<f64> {
+    let n_edge = edges.len();
+    if n_edge == 0 || n_ifg == 0 {
+        return vec![0.0; n_ifg];
+    }
+    let denom = n_edge.saturating_sub(ddof);
+    if denom == 0 {
+        return vec![0.0; n_ifg];
+    }
+    let (sum, sum_norm) = edges
+        .par_iter()
+        .map(|&edge| {
+            let dph = edge_phase_row(ph, n_ifg, edge);
+            let mut sum = vec![Complex64::new(0.0, 0.0); n_ifg];
+            let mut sum_norm = vec![0.0; n_ifg];
+            for ifg in 0..n_ifg {
+                sum[ifg] = dph[ifg];
+                sum_norm[ifg] = dph[ifg].norm_sqr();
+            }
+            (sum, sum_norm)
+        })
+        .reduce(
+            || (vec![Complex64::new(0.0, 0.0); n_ifg], vec![0.0; n_ifg]),
+            |mut left, right| {
+                for ifg in 0..n_ifg {
+                    left.0[ifg] += right.0[ifg];
+                    left.1[ifg] += right.1[ifg];
+                }
+                left
+            },
+        );
+    let mut out = vec![0.0; n_ifg];
+    for ifg in 0..n_ifg {
+        let mean = sum[ifg] / n_edge as f64;
+        out[ifg] = (sum_norm[ifg] - n_edge as f64 * mean.norm_sqr()) / denom as f64;
+        if out[ifg] < 0.0 && out[ifg] > -1.0e-12 {
+            out[ifg] = 0.0;
         }
     }
-    std_max_rows_real(&ang, n_edge, n_ifg, usize::from(n_ifg > 1))
+    out
+}
+
+fn weighted_slope_fit_complex(x: &[f64], y: &[Complex64], w: &[f64]) -> Complex64 {
+    let inf_idx: Vec<usize> = w
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| value.is_infinite().then_some(idx))
+        .collect();
+    if !inf_idx.is_empty() {
+        let den: f64 = inf_idx.iter().map(|&idx| x[idx] * x[idx]).sum();
+        if den == 0.0 {
+            return Complex64::new(0.0, 0.0);
+        }
+        return inf_idx
+            .iter()
+            .map(|&col| y[col] * x[col])
+            .sum::<Complex64>()
+            / den;
+    }
+    let pos_idx: Vec<usize> = w
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| (value.is_finite() && value > 0.0).then_some(idx))
+        .collect();
+    if pos_idx.is_empty() {
+        return Complex64::new(0.0, 0.0);
+    }
+    let den: f64 = pos_idx.iter().map(|&idx| w[idx] * x[idx] * x[idx]).sum();
+    if den == 0.0 {
+        return Complex64::new(0.0, 0.0);
+    }
+    pos_idx
+        .iter()
+        .map(|&col| y[col] * (w[col] * x[col]))
+        .sum::<Complex64>()
+        / den
+}
+
+fn std_max_row_real(values: &[f64], ddof: usize) -> (f64, f64) {
+    if values.is_empty() {
+        return (0.0, 0.0);
+    }
+    let n_col = values.len();
+    let mean = values.iter().sum::<f64>() / n_col as f64;
+    let mut accum = 0.0;
+    let mut max_value = 0.0_f64;
+    for &value in values {
+        accum += (value - mean) * (value - mean);
+        max_value = max_value.max(value.abs());
+    }
+    let denom = n_col.saturating_sub(ddof);
+    let std = if denom == 0 {
+        0.0
+    } else {
+        (accum / denom as f64).sqrt()
+    };
+    (std, max_value)
+}
+
+fn corrected_edge_stats_rows_real(
+    x: &[f64],
+    data: &[f64],
+    n_col: usize,
+    w: &[f64],
+    ddof: usize,
+) -> Vec<(f64, f64)> {
+    if n_col == 0 {
+        return vec![(0.0, 0.0); data.len()];
+    }
+    let inf_idx: Vec<usize> = w
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| value.is_infinite().then_some(idx))
+        .collect();
+    if !inf_idx.is_empty() {
+        let den: f64 = inf_idx.iter().map(|&idx| x[idx] * x[idx]).sum();
+        if den == 0.0 {
+            return data
+                .par_chunks(n_col)
+                .map(|row| std_max_row_real(row, ddof))
+                .collect();
+        }
+        return data
+            .par_chunks(n_col)
+            .map(|row| {
+                let mut numerator = 0.0;
+                for &col in &inf_idx {
+                    numerator += row[col] * x[col];
+                }
+                let k = numerator / den;
+                std_max_corrected_row_real(row, x, k, ddof)
+            })
+            .collect();
+    }
+    let pos_idx: Vec<usize> = w
+        .iter()
+        .enumerate()
+        .filter_map(|(idx, &value)| (value.is_finite() && value > 0.0).then_some(idx))
+        .collect();
+    if pos_idx.is_empty() {
+        return data
+            .par_chunks(n_col)
+            .map(|row| std_max_row_real(row, ddof))
+            .collect();
+    }
+    let den: f64 = pos_idx.iter().map(|&idx| w[idx] * x[idx] * x[idx]).sum();
+    if den == 0.0 {
+        return data
+            .par_chunks(n_col)
+            .map(|row| std_max_row_real(row, ddof))
+            .collect();
+    }
+    data.par_chunks(n_col)
+        .map(|row| {
+            let mut numerator = 0.0;
+            for &col in &pos_idx {
+                numerator += row[col] * w[col] * x[col];
+            }
+            let k = numerator / den;
+            std_max_corrected_row_real(row, x, k, ddof)
+        })
+        .collect()
+}
+
+fn std_max_corrected_row_real(values: &[f64], x: &[f64], k: f64, ddof: usize) -> (f64, f64) {
+    if values.is_empty() {
+        return (0.0, 0.0);
+    }
+    let n_col = values.len();
+    let mut sum = 0.0;
+    for col in 0..n_col {
+        sum += values[col] - k * x[col];
+    }
+    let mean = sum / n_col as f64;
+    let mut accum = 0.0;
+    let mut max_value = 0.0_f64;
+    for col in 0..n_col {
+        let corrected = values[col] - k * x[col];
+        accum += (corrected - mean) * (corrected - mean);
+        max_value = max_value.max(corrected.abs());
+    }
+    let denom = n_col.saturating_sub(ddof);
+    let std = if denom == 0 {
+        0.0
+    } else {
+        (accum / denom as f64).sqrt()
+    };
+    (std, max_value)
 }
 
 fn validate_stage4_edge_topology(
@@ -646,236 +1182,57 @@ fn validate_stage4_edge_topology(
     Ok(())
 }
 
-fn weighted_affine_fit_rows(
-    time_diff: &[f64],
-    y: &[f64],
-    n_row: usize,
-    n_col: usize,
-    w: &[f64],
-) -> (Vec<f64>, Vec<f64>) {
-    let mut intercept = vec![0.0; n_row];
-    let mut slope = vec![0.0; n_row];
-    if n_row == 0 || n_col == 0 {
-        return (intercept, slope);
+fn variance_from_sum_sumsq(sum: &[f64], sumsq: &[f64], n_row: usize, ddof: usize) -> Vec<f64> {
+    if n_row == 0 {
+        return vec![0.0; sum.len()];
     }
-    let s0: f64 = w.iter().sum();
-    let s1: f64 = w
-        .iter()
-        .zip(time_diff.iter())
-        .map(|(&wi, &ti)| wi * ti)
-        .sum();
-    let s2: f64 = w
-        .iter()
-        .zip(time_diff.iter())
-        .map(|(&wi, &ti)| wi * ti * ti)
-        .sum();
-    let det = s0 * s2 - s1 * s1;
-    if det == 0.0 {
-        if s0 != 0.0 {
-            for row in 0..n_row {
-                intercept[row] = (0..n_col)
-                    .map(|col| y[row * n_col + col] * w[col])
-                    .sum::<f64>()
-                    / s0;
+    let denom = n_row.saturating_sub(ddof);
+    if denom == 0 {
+        return vec![0.0; sum.len()];
+    }
+    sum.iter()
+        .zip(sumsq.iter())
+        .map(|(&sum_value, &sumsq_value)| {
+            let mean = sum_value / n_row as f64;
+            let mut variance = (sumsq_value - n_row as f64 * mean * mean) / denom as f64;
+            if variance < 0.0 && variance > -1.0e-12 {
+                variance = 0.0;
             }
-        }
-        return (intercept, slope);
-    }
-    for row in 0..n_row {
-        let mut wy0 = 0.0;
-        let mut wy1 = 0.0;
-        for col in 0..n_col {
-            let value = y[row * n_col + col];
-            wy0 += value * w[col];
-            wy1 += value * w[col] * time_diff[col];
-        }
-        intercept[row] = (wy0 * s2 - wy1 * s1) / det;
-        slope[row] = (wy1 * s0 - wy0 * s1) / det;
-    }
-    (intercept, slope)
-}
-
-fn weighted_slope_fit_rows_real(
-    x: &[f64],
-    y: &[f64],
-    n_row: usize,
-    n_col: usize,
-    w: &[f64],
-) -> Vec<f64> {
-    let mut out = vec![0.0; n_row];
-    if n_row == 0 || n_col == 0 {
-        return out;
-    }
-    let inf_idx: Vec<usize> = w
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &value)| value.is_infinite().then_some(idx))
-        .collect();
-    if !inf_idx.is_empty() {
-        let den: f64 = inf_idx.iter().map(|&idx| x[idx] * x[idx]).sum();
-        if den == 0.0 {
-            return out;
-        }
-        for row in 0..n_row {
-            out[row] = inf_idx
-                .iter()
-                .map(|&col| y[row * n_col + col] * x[col])
-                .sum::<f64>()
-                / den;
-        }
-        return out;
-    }
-    let pos_idx: Vec<usize> = w
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &value)| (value.is_finite() && value > 0.0).then_some(idx))
-        .collect();
-    if pos_idx.is_empty() {
-        return out;
-    }
-    let den: f64 = pos_idx.iter().map(|&idx| w[idx] * x[idx] * x[idx]).sum();
-    if den == 0.0 {
-        return out;
-    }
-    for row in 0..n_row {
-        out[row] = pos_idx
-            .iter()
-            .map(|&col| y[row * n_col + col] * w[col] * x[col])
-            .sum::<f64>()
-            / den;
-    }
-    out
-}
-
-fn weighted_slope_fit_rows_complex(
-    x: &[f64],
-    y: &[Complex64],
-    n_row: usize,
-    n_col: usize,
-    w: &[f64],
-) -> Vec<Complex64> {
-    let mut out = vec![Complex64::new(0.0, 0.0); n_row];
-    if n_row == 0 || n_col == 0 {
-        return out;
-    }
-    let inf_idx: Vec<usize> = w
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &value)| value.is_infinite().then_some(idx))
-        .collect();
-    if !inf_idx.is_empty() {
-        let den: f64 = inf_idx.iter().map(|&idx| x[idx] * x[idx]).sum();
-        if den == 0.0 {
-            return out;
-        }
-        for row in 0..n_row {
-            out[row] = inf_idx
-                .iter()
-                .map(|&col| y[row * n_col + col] * x[col])
-                .sum::<Complex64>()
-                / den;
-        }
-        return out;
-    }
-    let pos_idx: Vec<usize> = w
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &value)| (value.is_finite() && value > 0.0).then_some(idx))
-        .collect();
-    if pos_idx.is_empty() {
-        return out;
-    }
-    let den: f64 = pos_idx.iter().map(|&idx| w[idx] * x[idx] * x[idx]).sum();
-    if den == 0.0 {
-        return out;
-    }
-    for row in 0..n_row {
-        out[row] = pos_idx
-            .iter()
-            .map(|&col| y[row * n_col + col] * (w[col] * x[col]))
-            .sum::<Complex64>()
-            / den;
-    }
-    out
-}
-
-fn variance_cols_real(data: &[f64], n_row: usize, n_col: usize, ddof: usize) -> Vec<f64> {
-    let mut out = vec![0.0; n_col];
-    if n_row == 0 || n_col == 0 {
-        return out;
-    }
-    let denom = n_row.saturating_sub(ddof);
-    if denom == 0 {
-        return out;
-    }
-    for col in 0..n_col {
-        let mean = (0..n_row).map(|row| data[row * n_col + col]).sum::<f64>() / n_row as f64;
-        out[col] = (0..n_row)
-            .map(|row| {
-                let delta = data[row * n_col + col] - mean;
-                delta * delta
-            })
-            .sum::<f64>()
-            / denom as f64;
-    }
-    out
-}
-
-fn variance_cols_complex(data: &[Complex64], n_row: usize, n_col: usize, ddof: usize) -> Vec<f64> {
-    let mut out = vec![0.0; n_col];
-    if n_row == 0 || n_col == 0 {
-        return out;
-    }
-    let denom = n_row.saturating_sub(ddof);
-    if denom == 0 {
-        return out;
-    }
-    for col in 0..n_col {
-        let mean = (0..n_row)
-            .map(|row| data[row * n_col + col])
-            .sum::<Complex64>()
-            / n_row as f64;
-        out[col] = (0..n_row)
-            .map(|row| (data[row * n_col + col] - mean).norm_sqr())
-            .sum::<f64>()
-            / denom as f64;
-    }
-    out
-}
-
-fn std_max_rows_real(
-    data: &[f64],
-    n_row: usize,
-    n_col: usize,
-    ddof: usize,
-) -> (Vec<f64>, Vec<f64>) {
-    let mut std = vec![0.0; n_row];
-    let mut max_abs = vec![0.0; n_row];
-    if n_row == 0 || n_col == 0 {
-        return (std, max_abs);
-    }
-    let denom = n_col.saturating_sub(ddof);
-    for row in 0..n_row {
-        let values = &data[row * n_col..(row + 1) * n_col];
-        let mean = values.iter().sum::<f64>() / n_col as f64;
-        let mut accum = 0.0;
-        let mut max_value = 0.0_f64;
-        for &value in values {
-            accum += (value - mean) * (value - mean);
-            max_value = max_value.max(value.abs());
-        }
-        std[row] = if denom == 0 {
-            0.0
-        } else {
-            (accum / denom as f64).sqrt()
-        };
-        max_abs[row] = max_value;
-    }
-    (std, max_abs)
+            variance
+        })
+        .collect()
 }
 
 fn wrap_phase(value: f64) -> f64 {
-    value.sin().atan2(value.cos())
+    let wrapped = (value + std::f64::consts::PI).rem_euclid(2.0 * std::f64::consts::PI)
+        - std::f64::consts::PI;
+    if wrapped == -std::f64::consts::PI && value > 0.0 {
+        std::f64::consts::PI
+    } else {
+        wrapped
+    }
+}
+
+fn wrap_phase_if_needed(value: f64) -> f64 {
+    if (-std::f64::consts::PI..=std::f64::consts::PI).contains(&value) {
+        value
+    } else {
+        wrap_phase(value)
+    }
+}
+
+fn wrap_phase_bounded(value: f64) -> f64 {
+    let mut wrapped = value;
+    if wrapped < -std::f64::consts::PI {
+        wrapped += 2.0 * std::f64::consts::PI;
+    } else if wrapped > std::f64::consts::PI {
+        wrapped -= 2.0 * std::f64::consts::PI;
+    }
+    if wrapped == -std::f64::consts::PI && value > 0.0 {
+        std::f64::consts::PI
+    } else {
+        wrapped
+    }
 }
 
 fn mul_exp_neg_i(value: Complex64, theta: f64) -> Complex64 {
@@ -900,12 +1257,9 @@ fn load_hgt1(patch_dir: &Path, n_ps: usize) -> Result<Option<Vec<f64>>, CoreErro
     if !path.exists() {
         return Ok(None);
     }
-    let hgt = read_mat_stage4(patch_dir, "hgt1.mat")?;
-    let values = optional_vector_f64(&hgt, "hgt")
-        .or_else(|| {
-            optional_vector_f32(&hgt, "hgt")
-                .map(|values| values.into_iter().map(|value| value as f64).collect())
-        })
+    let hgt = Stage4MatSource::read(path);
+    let values = hgt
+        .vector_f64("hgt")
         .ok_or_else(|| CoreError::NativeStage {
             stage: 4,
             message: "hgt1.mat missing hgt".to_string(),
@@ -919,8 +1273,8 @@ fn load_hgt1(patch_dir: &Path, n_ps: usize) -> Result<Option<Vec<f64>>, CoreErro
     Ok(Some(values))
 }
 
-fn ifg_index_for_weed(ps: &MatData, parms: &Stage4Parms) -> Vec<f64> {
-    let n_ifg = scalar_from_mat(ps, "n_ifg", 0.0).round() as i64;
+fn ifg_index_for_weed(ps: &Stage4MatSource, parms: &Stage4Parms) -> Vec<f64> {
+    let n_ifg = ps.scalar("n_ifg", 0.0).round() as i64;
     let drop: BTreeSet<i64> = parms.drop_ifg_index.iter().copied().collect();
     (1..=n_ifg)
         .filter(|value| !drop.contains(value))
@@ -928,71 +1282,8 @@ fn ifg_index_for_weed(ps: &MatData, parms: &Stage4Parms) -> Vec<f64> {
         .collect()
 }
 
-fn scalar_from_mat(mat: &MatData, name: &str, default: f64) -> f64 {
-    optional_vector_f64(mat, name)
-        .and_then(|values| values.into_iter().next())
-        .unwrap_or(default)
-}
-
-fn vector_f64(mat: &MatData, name: &str, label: &str) -> Result<Vec<f64>, CoreError> {
-    optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
-        stage: 4,
-        message: format!("{label} is missing"),
-    })
-}
-
 fn optional_vector_f64(mat: &MatData, name: &str) -> Option<Vec<f64>> {
     mat.get_f64_matrix(name).ok().map(|matrix| matrix.values)
-}
-
-fn optional_vector_f32(mat: &MatData, name: &str) -> Option<Vec<f32>> {
-    mat.get_f32_matrix(name).ok().map(|matrix| matrix.values)
-}
-
-fn vector_i64(mat: &MatData, name: &str, label: &str) -> Result<Vec<i64>, CoreError> {
-    let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
-        stage: 4,
-        message: format!("{label} is missing"),
-    })?;
-    Ok(values
-        .into_iter()
-        .filter(|value| value.is_finite())
-        .map(|value| value.round() as i64)
-        .collect())
-}
-
-fn bool_vector_or_default(
-    mat: &MatData,
-    name: &str,
-    expected_len: usize,
-    default_value: bool,
-) -> Vec<bool> {
-    let Some(values) = optional_vector_f64(mat, name) else {
-        return vec![default_value; expected_len];
-    };
-    if values.len() != expected_len {
-        return vec![default_value; expected_len];
-    }
-    values.into_iter().map(|value| value != 0.0).collect()
-}
-
-fn ps_vector_f64(
-    mat: &MatData,
-    name: &str,
-    n_ps: usize,
-    label: &str,
-) -> Result<Vec<f64>, CoreError> {
-    let values = optional_vector_f64(mat, name).ok_or_else(|| CoreError::NativeStage {
-        stage: 4,
-        message: format!("{label} is missing"),
-    })?;
-    if values.len() != n_ps {
-        return stage4_err(format!(
-            "{label} has incompatible length {} for n_ps={n_ps}",
-            values.len()
-        ));
-    }
-    Ok(values)
 }
 
 fn ps_dim_f64(
@@ -1008,6 +1299,15 @@ fn ps_dim_f64(
             stage: 4,
             message: format!("{label} is missing or invalid: {err}"),
         })?;
+    orient_ps_dim_f64(source, n_ps, n_dim, label)
+}
+
+fn orient_ps_dim_f64(
+    source: Matrix<f64>,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f64>, CoreError> {
     if source.rows == n_ps && source.cols == n_dim {
         return Ok(source);
     }
@@ -1032,6 +1332,14 @@ fn ps_complex_matrix(
             stage: 4,
             message: format!("{label} is missing or invalid: {err}"),
         })?;
+    orient_complex_matrix_f32(source, n_ps, label)
+}
+
+fn orient_complex_matrix_f32(
+    source: ComplexMatrixF32,
+    n_ps: usize,
+    label: &str,
+) -> Result<ComplexMatrixF32, CoreError> {
     if source.rows == n_ps {
         return Ok(source);
     }
@@ -1102,9 +1410,9 @@ fn transpose_complex(source: ComplexMatrixF32) -> ComplexMatrixF32 {
     }
 }
 
-fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
+fn text_from_mat_opt(mat: &MatData, name: &str) -> Option<String> {
     let Some(values) = optional_vector_f64(mat, name) else {
-        return default.to_string();
+        return None;
     };
     let text = values
         .into_iter()
@@ -1116,10 +1424,208 @@ fn text_from_mat(mat: &MatData, name: &str, default: &str) -> String {
         .trim()
         .to_string();
     if text.is_empty() {
-        default.to_string()
+        None
     } else {
-        text
+        Some(text)
     }
+}
+
+fn read_hdf5_matrix_f64(path: &Path, variable: &str) -> Result<Matrix<f64>, String> {
+    match read_hdf5_matrix_f64_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_matrix_f64_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_matrix_f64_direct(path: &Path, variable: &str) -> Result<Matrix<f64>, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = read_hdf5_numeric_f64(&dataset)?;
+    let (rows, cols) = hdf5_matrix_shape(&dataset);
+    Ok(Matrix {
+        name: variable.to_string(),
+        rows,
+        cols,
+        values,
+    })
+}
+
+fn read_hdf5_numeric_f64(dataset: &rust_hdf5::H5Dataset) -> Result<Vec<f64>, String> {
+    if let Ok(values) = dataset.read_raw::<f64>() {
+        return Ok(values);
+    }
+    if let Ok(values) = dataset.read_raw::<f32>() {
+        return Ok(values.into_iter().map(f64::from).collect());
+    }
+    if let Ok(values) = dataset.read_raw::<u8>() {
+        return Ok(values.into_iter().map(f64::from).collect());
+    }
+    if let Ok(values) = dataset.read_raw::<i8>() {
+        return Ok(values.into_iter().map(f64::from).collect());
+    }
+    if let Ok(values) = dataset.read_raw::<u16>() {
+        return Ok(values.into_iter().map(f64::from).collect());
+    }
+    if let Ok(values) = dataset.read_raw::<i16>() {
+        return Ok(values.into_iter().map(f64::from).collect());
+    }
+    if let Ok(values) = dataset.read_raw::<u32>() {
+        return Ok(values.into_iter().map(|value| value as f64).collect());
+    }
+    if let Ok(values) = dataset.read_raw::<i32>() {
+        return Ok(values.into_iter().map(f64::from).collect());
+    }
+    if let Ok(values) = dataset.read_raw::<u64>() {
+        return Ok(values.into_iter().map(|value| value as f64).collect());
+    }
+    if let Ok(values) = dataset.read_raw::<i64>() {
+        return Ok(values.into_iter().map(|value| value as f64).collect());
+    }
+    Err("unsupported HDF5 numeric dataset type".to_string())
+}
+
+fn read_hdf5_complex_matrix_f32(path: &Path, variable: &str) -> Result<ComplexMatrixF32, String> {
+    match read_hdf5_complex_matrix_f32_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_complex_matrix_f32_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_complex_matrix_f32_direct(
+    path: &Path,
+    variable: &str,
+) -> Result<ComplexMatrixF32, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset
+        .read_raw::<rust_hdf5::Complex32>()
+        .map_err(|err| err.to_string())?
+        .into_iter()
+        .map(|value| (value.re, value.im))
+        .collect();
+    let (rows, cols) = hdf5_matrix_shape(&dataset);
+    Ok(ComplexMatrixF32 {
+        name: variable.to_string(),
+        rows,
+        cols,
+        values,
+    })
+}
+
+fn hdf5_matrix_shape(dataset: &rust_hdf5::H5Dataset) -> (usize, usize) {
+    let shape = dataset.shape();
+    let rows = shape.first().copied().unwrap_or(1);
+    let cols = if shape.len() <= 1 {
+        1
+    } else {
+        shape[1..].iter().copied().product()
+    };
+    (rows, cols)
+}
+
+fn read_hdf5_text(path: &Path, variable: &str) -> Result<String, String> {
+    match read_hdf5_text_direct(path, variable) {
+        Ok(value) => Ok(value),
+        Err(direct_err) => {
+            let offset = find_hdf5_signature_offset(path)?;
+            if offset == 0 {
+                return Err(direct_err);
+            }
+            read_hdf5_from_userblock(path, offset, |temp_path| {
+                read_hdf5_text_direct(temp_path, variable)
+            })
+            .map_err(|userblock_err| {
+                format!(
+                    "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
+                )
+            })
+        }
+    }
+}
+
+fn read_hdf5_text_direct(path: &Path, variable: &str) -> Result<String, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset.read_raw::<u16>().map_err(|err| err.to_string())?;
+    let text = values
+        .into_iter()
+        .filter_map(|value| char::from_u32(value as u32))
+        .filter(|&ch| ch != '\0')
+        .collect::<String>()
+        .trim()
+        .to_string();
+    if text.is_empty() {
+        Err(format!("{variable} has empty text"))
+    } else {
+        Ok(text)
+    }
+}
+
+fn read_hdf5_from_userblock<T, F>(path: &Path, offset: usize, read_direct: F) -> Result<T, String>
+where
+    F: FnOnce(&Path) -> Result<T, String>,
+{
+    let temp_path = std::env::temp_dir().join(format!(
+        "pystamps-stage4-hdf5-{}-{}.h5",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| err.to_string())?
+            .as_nanos()
+    ));
+    let mut input = fs::File::open(path).map_err(|err| err.to_string())?;
+    input
+        .seek(SeekFrom::Start(offset as u64))
+        .map_err(|err| err.to_string())?;
+    {
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|err| err.to_string())?;
+        std::io::copy(&mut input, &mut output).map_err(|err| err.to_string())?;
+        output.flush().map_err(|err| err.to_string())?;
+    }
+    let result = read_direct(&temp_path);
+    let _ = fs::remove_file(&temp_path);
+    result
+}
+
+fn find_hdf5_signature_offset(path: &Path) -> Result<usize, String> {
+    let mut file = fs::File::open(path).map_err(|err| err.to_string())?;
+    let mut buffer = vec![0_u8; HDF5_SIGNATURE_SCAN_BYTES];
+    let read_len = file.read(&mut buffer).map_err(|err| err.to_string())?;
+    buffer.truncate(read_len);
+    buffer
+        .windows(HDF5_SIGNATURE.len())
+        .position(|window| window == HDF5_SIGNATURE)
+        .ok_or_else(|| "HDF5 signature not found".to_string())
 }
 
 fn resolve_file_optional(patch_dir: &Path, filename: &str) -> Option<PathBuf> {
@@ -1218,6 +1724,52 @@ mod tests {
         }
     }
 
+    #[test]
+    fn duplicate_coordinates_keep_highest_coherence_and_preserve_shapes() {
+        let root = temp_root("stage4-duplicates");
+        let patch = root.join("PATCH_1");
+        fs::create_dir_all(&patch).unwrap();
+        write_parms_no_noise(&patch, "n");
+        write_ps1_custom(
+            &patch,
+            &[
+                (1.0, 10.0, 10.0, 0.0, 0.0),
+                (2.0, 10.0, 11.0, 0.0, 0.0),
+                (3.0, 10.0, 12.0, 1.0, 0.0),
+                (4.0, 10.0, 13.0, 2.0, 0.0),
+                (5.0, 10.0, 14.0, 3.0, 0.0),
+            ],
+        );
+        write_ph1_custom(&patch, 5);
+        write_select1_custom(
+            &patch,
+            &[1.0, 2.0, 3.0, 4.0, 5.0],
+            &[0.2, 0.9, 0.4, 0.5, 0.6],
+        );
+
+        run_stage4_native(&patch).unwrap();
+
+        let weed = MatData::read(patch.join("weed1.mat")).unwrap();
+        let ix_weed = weed.get_f32_matrix("ix_weed").unwrap().values;
+        let ix_weed2 = weed.get_f32_matrix("ix_weed2").unwrap().values;
+        assert_eq!(ix_weed, vec![0.0, 1.0, 1.0, 1.0, 1.0]);
+        assert_eq!(ix_weed2, vec![1.0, 1.0, 1.0, 1.0]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn boundary_neighbor_weeding_keeps_valid_boundary_pixel() {
+        let keep = adjacent_component_keep_mask(&[(1, 1), (2, 2), (5, 5)], &[0.9, 0.2, 0.8]);
+        assert_eq!(keep, vec![true, false, true]);
+    }
+
+    #[test]
+    fn one_based_indices_preserve_first_and_last_rows() {
+        assert!(validate_one_based_indices(&[1, 5], 5, "test").is_ok());
+        assert!(validate_one_based_indices(&[0], 5, "test").is_err());
+        assert!(validate_one_based_indices(&[6], 5, "test").is_err());
+    }
+
     fn create_stage4_fixture(root: &Path) {
         let patch = root.join("PATCH_1");
         fs::create_dir_all(&patch).unwrap();
@@ -1288,6 +1840,72 @@ mod tests {
             .unwrap();
         mat.add_f64_col_vector("coh_ps2", vec![0.8, 0.7, 0.6])
             .unwrap();
+        mat.write().unwrap();
+    }
+
+    fn write_parms_no_noise(patch: &Path, weed_neighbours: &str) {
+        let mut mat = MatFile::new(patch.join("parms.mat"));
+        mat.add_u32_matrix("small_baseline_flag", 1, 1, vec!['n' as u32])
+            .unwrap();
+        mat.add_u32_matrix(
+            "weed_neighbours",
+            1,
+            weed_neighbours.len(),
+            weed_neighbours.chars().map(|ch| ch as u32).collect(),
+        )
+        .unwrap();
+        mat.add_u32_matrix("weed_zero_elevation", 1, 1, vec!['n' as u32])
+            .unwrap();
+        mat.add_f64_scalar("weed_standard_dev", std::f64::consts::PI)
+            .unwrap();
+        mat.add_f64_scalar("weed_max_noise", std::f64::consts::PI)
+            .unwrap();
+        mat.add_f64_scalar("weed_time_win", 360.0).unwrap();
+        mat.write().unwrap();
+    }
+
+    fn write_ps1_custom(patch: &Path, rows: &[(f64, f64, f64, f64, f64)]) {
+        let mut ij = Vec::with_capacity(rows.len() * 3);
+        let mut xy = Vec::with_capacity(rows.len() * 3);
+        for &(id, ij_r, ij_c, x, y) in rows {
+            ij.extend_from_slice(&[id, ij_r, ij_c]);
+            xy.extend_from_slice(&[id, x, y]);
+        }
+        let mut mat = MatFile::new(patch.join("ps1.mat"));
+        mat.add_f64_scalar("n_ps", rows.len() as f64).unwrap();
+        mat.add_f64_scalar("n_ifg", 4.0).unwrap();
+        mat.add_f64_scalar("master_ix", 1.0).unwrap();
+        mat.add_f64_row_vector("bperp", vec![0.0, 10.0, 20.0, 30.0])
+            .unwrap();
+        mat.add_f64_row_vector("day", vec![20200101.0, 20200113.0, 20200125.0, 20200206.0])
+            .unwrap();
+        mat.add_f64_matrix("ij", rows.len(), 3, ij).unwrap();
+        mat.add_f64_matrix("xy", rows.len(), 3, xy).unwrap();
+        mat.write().unwrap();
+    }
+
+    fn write_ph1_custom(patch: &Path, n_ps: usize) {
+        let mut values = Vec::new();
+        for _row in 0..n_ps {
+            for _col in 0..4 {
+                values.push((1.0_f32, 0.0_f32));
+            }
+        }
+        let mut mat = MatFile::new(patch.join("ph1.mat"));
+        mat.add_complex_f32_matrix("ph", n_ps, 4, values).unwrap();
+        mat.write().unwrap();
+    }
+
+    fn write_select1_custom(patch: &Path, ix: &[f64], coh: &[f64]) {
+        let mut mat = MatFile::new(patch.join("select1.mat"));
+        mat.add_f64_col_vector("ix", ix.to_vec()).unwrap();
+        mat.add_u8_matrix("keep_ix", ix.len(), 1, vec![1; ix.len()])
+            .unwrap();
+        mat.add_f64_col_vector("K_ps2", vec![0.0; ix.len()])
+            .unwrap();
+        mat.add_f64_col_vector("C_ps2", vec![0.0; ix.len()])
+            .unwrap();
+        mat.add_f64_col_vector("coh_ps2", coh.to_vec()).unwrap();
         mat.write().unwrap();
     }
 
