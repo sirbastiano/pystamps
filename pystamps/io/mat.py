@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from scipy import sparse
 from scipy.io import loadmat, savemat
 
 
@@ -36,6 +37,14 @@ def _decode_h5_dataset(obj: Any, h5file: Any) -> Any:
         return arr
 
     if isinstance(obj, h5py.Group):
+        keys = set(obj.keys())
+        if {"data", "ir", "jc", "shape"}.issubset(keys):
+            data = np.asarray(obj["data"][()])
+            ir = np.asarray(obj["ir"][()], dtype=np.int32).reshape(-1)
+            jc = np.asarray(obj["jc"][()], dtype=np.int32).reshape(-1)
+            shape_arr = np.asarray(obj["shape"][()], dtype=np.int64).reshape(-1)
+            if shape_arr.size >= 2:
+                return sparse.csc_matrix((data, ir, jc), shape=(int(shape_arr[0]), int(shape_arr[1])))
         data: dict[str, Any] = {}
         for key in obj.keys():
             data[key] = _decode_h5_dataset(obj[key], h5file)

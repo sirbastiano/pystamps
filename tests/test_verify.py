@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 from scipy import sparse
 
 from pystamps.io.mat import write_mat
@@ -189,11 +190,17 @@ def test_verify_reports_tolerance_rule_id_for_manifest_numeric_failure(tmp_path)
     assert "merged_ph2.ph.phase_modulo_f32" in failure.message
 
 
-def _write_uw_space_time(path, *, include_ifreq: bool = True, spread_shape: tuple[int, int] = (1, 1)) -> None:
+def _write_uw_space_time(
+    path,
+    *,
+    include_ifreq: bool = True,
+    matrix_shape: tuple[int, int] = (1, 1),
+    spread_shape: tuple[int, int] = (1, 1),
+) -> None:
     payload = {
-        "G": np.zeros((1, 1), dtype=np.float64),
-        "dph_noise": np.zeros((1, 1), dtype=np.float32),
-        "dph_space_uw": np.zeros((1, 1), dtype=np.float32),
+        "G": np.zeros(matrix_shape, dtype=np.float64),
+        "dph_noise": np.zeros(matrix_shape, dtype=np.float32),
+        "dph_space_uw": np.zeros(matrix_shape, dtype=np.float32),
         "jfreq_ij": np.empty((0, 0), dtype=np.float64),
         "predef_ix": np.empty((0, 0), dtype=np.float64),
         "shaky_ix": np.empty((0, 0), dtype=np.float64),
@@ -202,6 +209,34 @@ def _write_uw_space_time(path, *, include_ifreq: bool = True, spread_shape: tupl
     if include_ifreq:
         payload["ifreq_ij"] = np.empty((0, 0), dtype=np.float64)
     write_mat(path, payload)
+
+
+def _write_hdf5_uw_space_time(
+    path,
+    *,
+    matrix_shape: tuple[int, int] = (1, 1),
+    spread_shape: tuple[int, int] = (1, 1),
+) -> None:
+    h5py = pytest.importorskip("h5py")
+
+    with h5py.File(path, "w") as file:
+        for key, values in {
+            "G": np.zeros(matrix_shape, dtype=np.float64),
+            "dph_noise": np.zeros(matrix_shape, dtype=np.float32),
+            "dph_space_uw": np.zeros(matrix_shape, dtype=np.float32),
+            "ifreq_ij": np.empty((0, 0), dtype=np.float64),
+            "jfreq_ij": np.empty((0, 0), dtype=np.float64),
+            "predef_ix": np.empty((0, 0), dtype=np.float64),
+            "shaky_ix": np.empty((0, 0), dtype=np.float64),
+        }.items():
+            dataset = file.create_dataset(key, data=values)
+            dataset.attrs["PY_STAMPS_row_major"] = np.uint8(1)
+
+        spread = file.create_group("spread")
+        spread.create_dataset("data", data=np.array([], dtype=np.float64))
+        spread.create_dataset("ir", data=np.array([], dtype=np.int32))
+        spread.create_dataset("jc", data=np.zeros(spread_shape[1] + 1, dtype=np.int32))
+        spread.create_dataset("shape", data=np.array(spread_shape, dtype=np.uint64))
 
 
 def test_verify_manifest_missing_uw_space_time_key_fails_even_when_numeric_values_match(tmp_path) -> None:
@@ -246,3 +281,53 @@ def test_verify_manifest_enforces_sparse_structural_parity(tmp_path) -> None:
     assert failure.failure_kind == "shape_mismatch"
     assert failure.failing_key == "spread"
     assert failure.tolerance_rule_id == "merged_uw_space_time.spread.sparse_exact"
+
+
+def test_verify_manifest_rejects_dense_placeholder_for_sparse_spread(tmp_path) -> None:
+    golden = tmp_path / "golden"
+    run = tmp_path / "run"
+    golden.mkdir()
+    run.mkdir()
+    _write_uw_space_time(golden / "uw_space_time.mat", spread_shape=(2, 3))
+    payload = {
+        "G": np.zeros((1, 1), dtype=np.float64),
+        "dph_noise": np.zeros((1, 1), dtype=np.float32),
+        "dph_space_uw": np.zeros((1, 1), dtype=np.float32),
+        "ifreq_ij": np.empty((0, 0), dtype=np.float64),
+        "jfreq_ij": np.empty((0, 0), dtype=np.float64),
+        "predef_ix": np.empty((0, 0), dtype=np.float64),
+        "shaky_ix": np.empty((0, 0), dtype=np.float64),
+        "spread": np.zeros((2, 3), dtype=np.float64),
+    }
+    write_mat(run / "uw_space_time.mat", payload)
+
+    report = verify_run_against_golden(
+        run,
+        golden,
+        SimpleNamespace(rtol=1e-12, atol=1e-12, wrap_equivalence=False),
+        patterns=("uw_space_time.mat",),
+    )
+
+    assert not report.ok
+    failure = report.failures[0]
+    assert failure.failure_kind == "sparse_structure_mismatch"
+    assert failure.failing_key == "spread"
+    assert failure.tolerance_rule_id == "merged_uw_space_time.spread.sparse_exact"
+
+
+def test_verify_manifest_accepts_hdf5_sparse_spread_and_empty_keys(tmp_path) -> None:
+    golden = tmp_path / "golden"
+    run = tmp_path / "run"
+    golden.mkdir()
+    run.mkdir()
+    _write_uw_space_time(golden / "uw_space_time.mat", matrix_shape=(2, 3), spread_shape=(2, 3))
+    _write_hdf5_uw_space_time(run / "uw_space_time.mat", matrix_shape=(2, 3), spread_shape=(2, 3))
+
+    report = verify_run_against_golden(
+        run,
+        golden,
+        SimpleNamespace(rtol=1e-12, atol=1e-12, wrap_equivalence=False),
+        patterns=("uw_space_time.mat",),
+    )
+
+    assert report.ok

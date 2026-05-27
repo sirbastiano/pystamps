@@ -96,12 +96,14 @@ pub struct MatFile {
 enum MatVar {
     F64(Matrix<f64>),
     F32(Matrix<f32>),
+    F32ColumnMajor(Matrix<f32>),
     I32(Matrix<i32>),
     U32(Matrix<u32>),
     U8(Matrix<u8>),
     ComplexF64(ComplexMatrixF64),
     ComplexF32(ComplexMatrixF32),
     ComplexF32Array(ComplexArrayF32),
+    SparseCscF64(SparseCscMatrixF64),
 }
 
 #[derive(Clone, Debug)]
@@ -133,6 +135,16 @@ struct ComplexArrayF32 {
     name: String,
     dims: Vec<usize>,
     values: Vec<(f32, f32)>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SparseCscMatrixF64 {
+    pub name: String,
+    pub rows: usize,
+    pub cols: usize,
+    pub data: Vec<f64>,
+    pub ir: Vec<i32>,
+    pub jc: Vec<i32>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -273,6 +285,18 @@ impl MatFile {
         Ok(())
     }
 
+    pub fn add_f32_column_major_matrix(
+        &mut self,
+        name: impl Into<String>,
+        rows: usize,
+        cols: usize,
+        values: Vec<f32>,
+    ) -> Result<(), MatError> {
+        let matrix = matrix_with_values(name.into(), rows, cols, values)?;
+        self.variables.push(MatVar::F32ColumnMajor(matrix));
+        Ok(())
+    }
+
     pub fn add_f32_scalar(&mut self, name: impl Into<String>, value: f32) -> Result<(), MatError> {
         self.add_f32_matrix(name, 1, 1, vec![value])
     }
@@ -390,6 +414,29 @@ impl MatFile {
         Ok(())
     }
 
+    pub fn add_sparse_csc_f64_matrix(
+        &mut self,
+        name: impl Into<String>,
+        rows: usize,
+        cols: usize,
+        data: Vec<f64>,
+        ir: Vec<i32>,
+        jc: Vec<i32>,
+    ) -> Result<(), MatError> {
+        let matrix = sparse_csc_f64_with_values(name.into(), rows, cols, data, ir, jc)?;
+        self.variables.push(MatVar::SparseCscF64(matrix));
+        Ok(())
+    }
+
+    pub fn add_empty_sparse_csc_f64_matrix(
+        &mut self,
+        name: impl Into<String>,
+        rows: usize,
+        cols: usize,
+    ) -> Result<(), MatError> {
+        self.add_sparse_csc_f64_matrix(name, rows, cols, Vec::new(), Vec::new(), vec![0; cols + 1])
+    }
+
     pub fn write(&self) -> Result<(), MatError> {
         let mut file = File::create(&self.path).map_err(|source| MatError::Write {
             path: self.path.clone(),
@@ -437,12 +484,7 @@ impl MatData {
             path: path.to_path_buf(),
             source,
         })?;
-        let mut data = parse_mat_file(path, &bytes)?;
-        if let Some(variables) = variables {
-            data.variables
-                .retain(|name, _| variables.contains(&name.as_str()));
-        }
-        Ok(data)
+        parse_mat_file(path, &bytes, variables)
     }
 
     pub fn variables(&self) -> impl Iterator<Item = (&str, &MatArray)> {
@@ -470,6 +512,58 @@ impl MatData {
     pub fn get_complex_f32_matrix(&self, name: &str) -> Result<ComplexMatrixF32, MatError> {
         self.get(name)?.to_complex_f32_matrix()
     }
+}
+
+pub fn read_hdf5_f32_dataset_raw(
+    path: impl AsRef<Path>,
+    name: &str,
+) -> Result<Matrix<f32>, MatError> {
+    read_hdf5_f32_datasets_raw(path, &[name]).and_then(|mut values| {
+        values
+            .remove(name)
+            .ok_or_else(|| MatError::MissingVariable {
+                name: name.to_string(),
+            })
+    })
+}
+
+pub fn read_hdf5_f32_datasets_raw(
+    path: impl AsRef<Path>,
+    names: &[&str],
+) -> Result<BTreeMap<String, Matrix<f32>>, MatError> {
+    let path = path.as_ref();
+    let file = rust_hdf5::H5File::open(path).map_err(|err| MatError::MalformedFile {
+        path: path.to_path_buf(),
+        message: format!("unable to open HDF5 MAT payload: {err}"),
+    })?;
+    let mut out = BTreeMap::new();
+    for &name in names {
+        let dataset = file.dataset(name).map_err(|_| MatError::MissingVariable {
+            name: name.to_string(),
+        })?;
+        let values = dataset
+            .read_raw::<f32>()
+            .map_err(|err| MatError::UnsupportedDataType {
+                name: format!("HDF5 dataset {name} in {} ({err})", path.display()),
+                data_type: 0,
+            })?;
+        let shape = dataset.shape();
+        let (rows, cols) = match shape.as_slice() {
+            [] => (1, 1),
+            [_] => (values.len(), 1),
+            [rows, cols] => (*rows, *cols),
+            _ => {
+                let rows = *shape.first().unwrap_or(&1);
+                let cols = values.len() / rows.max(1);
+                (rows, cols)
+            }
+        };
+        out.insert(
+            name.to_string(),
+            matrix_with_values(name.to_string(), rows, cols, values)?,
+        );
+    }
+    Ok(out)
 }
 
 impl MatArray {
@@ -820,6 +914,66 @@ fn complex_f64_with_values(
     })
 }
 
+fn sparse_csc_f64_with_values(
+    name: String,
+    rows: usize,
+    cols: usize,
+    data: Vec<f64>,
+    ir: Vec<i32>,
+    jc: Vec<i32>,
+) -> Result<SparseCscMatrixF64, MatError> {
+    if data.len() != ir.len() {
+        return Err(MatError::Shape {
+            name,
+            rows,
+            cols,
+            actual: data.len().max(ir.len()),
+        });
+    }
+    if jc.len() != cols + 1 {
+        return Err(MatError::MalformedVariable {
+            name,
+            message: format!(
+                "sparse jc length {} does not match cols + 1 ({})",
+                jc.len(),
+                cols + 1
+            ),
+        });
+    }
+    if jc.first().copied().unwrap_or_default() != 0 {
+        return Err(MatError::MalformedVariable {
+            name,
+            message: "sparse jc must start at 0".to_string(),
+        });
+    }
+    if jc.last().copied().unwrap_or_default() != data.len() as i32 {
+        return Err(MatError::MalformedVariable {
+            name,
+            message: "sparse jc final pointer must equal data length".to_string(),
+        });
+    }
+    if jc.windows(2).any(|window| window[0] > window[1]) {
+        return Err(MatError::MalformedVariable {
+            name,
+            message: "sparse jc must be monotonically nondecreasing".to_string(),
+        });
+    }
+    if ir.iter().any(|&row| row < 0 || row as usize >= rows) {
+        return Err(MatError::MalformedVariable {
+            name,
+            message: "sparse ir contains an out-of-range row index".to_string(),
+        });
+    }
+    Ok(SparseCscMatrixF64 {
+        name,
+        rows,
+        cols,
+        data,
+        ir,
+        jc,
+    })
+}
+
 fn write_header(file: &mut File) -> io::Result<()> {
     let mut text = [b' '; 116];
     let description = b"MATLAB 5.0 MAT-file, Platform: pySTAMPS Rust native";
@@ -836,6 +990,7 @@ fn write_variable(file: &mut File, variable: &MatVar) -> io::Result<()> {
     match variable {
         MatVar::F64(matrix) => write_real_f64_matrix(&mut body, matrix)?,
         MatVar::F32(matrix) => write_real_f32_matrix(&mut body, matrix)?,
+        MatVar::F32ColumnMajor(matrix) => write_real_f32_column_major_matrix(&mut body, matrix)?,
         MatVar::I32(matrix) => write_real_i32_matrix(&mut body, matrix)?,
         MatVar::U32(matrix) => write_real_u32_matrix(&mut body, matrix)?,
         MatVar::U8(matrix) => write_real_u8_matrix(&mut body, matrix)?,
@@ -857,6 +1012,14 @@ fn write_variable(file: &mut File, variable: &MatVar) -> io::Result<()> {
             write_name(&mut body, &matrix.name)?;
             write_complex_f64(matrix, &mut body)?;
         }
+        MatVar::SparseCscF64(matrix) => {
+            write_sparse_array_flags(&mut body, matrix.data.len())?;
+            write_dimensions(&mut body, matrix.rows, matrix.cols)?;
+            write_name(&mut body, &matrix.name)?;
+            write_sparse_i32_data(&mut body, &matrix.ir)?;
+            write_sparse_i32_data(&mut body, &matrix.jc)?;
+            write_sparse_f64_data(&mut body, &matrix.data)?;
+        }
     }
     write_tag(file, MI_MATRIX, body.len())?;
     file.write_all(&body)?;
@@ -877,6 +1040,11 @@ fn write_real_f64_matrix(out: &mut Vec<u8>, matrix: &Matrix<f64>) -> io::Result<
 fn write_real_f32_matrix(out: &mut Vec<u8>, matrix: &Matrix<f32>) -> io::Result<()> {
     write_real_header(out, MX_SINGLE_CLASS, matrix)?;
     write_numeric_data_f32(out, MI_SINGLE, matrix.rows, matrix.cols, &matrix.values)
+}
+
+fn write_real_f32_column_major_matrix(out: &mut Vec<u8>, matrix: &Matrix<f32>) -> io::Result<()> {
+    write_real_header(out, MX_SINGLE_CLASS, matrix)?;
+    write_numeric_data_f32_column_major(out, MI_SINGLE, &matrix.values)
 }
 
 fn write_real_i32_matrix(out: &mut Vec<u8>, matrix: &Matrix<i32>) -> io::Result<()> {
@@ -903,6 +1071,12 @@ fn write_array_flags(out: &mut Vec<u8>, class: u32, complex: bool) -> io::Result
     };
     out.write_all(&flags.to_le_bytes())?;
     out.write_all(&0u32.to_le_bytes())
+}
+
+fn write_sparse_array_flags(out: &mut Vec<u8>, nnz: usize) -> io::Result<()> {
+    write_tag(out, MI_UINT32, 8)?;
+    out.write_all(&MX_SPARSE_CLASS.to_le_bytes())?;
+    out.write_all(&(nnz as u32).to_le_bytes())
 }
 
 fn write_dimensions(out: &mut Vec<u8>, rows: usize, cols: usize) -> io::Result<()> {
@@ -988,6 +1162,34 @@ fn write_numeric_data_f32(
     pad_to_8(out, byte_len)
 }
 
+fn write_numeric_data_f32_column_major(
+    out: &mut Vec<u8>,
+    data_type: u32,
+    values: &[f32],
+) -> io::Result<()> {
+    let byte_len = std::mem::size_of_val(values);
+    write_tag(out, data_type, byte_len)?;
+    let start = out.len();
+    out.resize(start + byte_len, 0);
+    let payload = &mut out[start..start + byte_len];
+    if values.len() >= PARALLEL_MAT_WRITE_VALUES {
+        payload
+            .par_chunks_mut(std::mem::size_of::<f32>())
+            .zip(values.par_iter())
+            .for_each(|(chunk, value)| {
+                chunk.copy_from_slice(&value.to_le_bytes());
+            });
+    } else {
+        for (chunk, value) in payload
+            .chunks_mut(std::mem::size_of::<f32>())
+            .zip(values.iter())
+        {
+            chunk.copy_from_slice(&value.to_le_bytes());
+        }
+    }
+    pad_to_8(out, byte_len)
+}
+
 fn write_numeric_data_i32(
     out: &mut Vec<u8>,
     data_type: u32,
@@ -1064,6 +1266,24 @@ fn write_numeric_data_u8(
         for row in 0..rows {
             out.push(values[row * cols + col]);
         }
+    }
+    pad_to_8(out, byte_len)
+}
+
+fn write_sparse_i32_data(out: &mut Vec<u8>, values: &[i32]) -> io::Result<()> {
+    let byte_len = std::mem::size_of_val(values);
+    write_tag(out, MI_INT32, byte_len)?;
+    for value in values {
+        out.write_all(&value.to_le_bytes())?;
+    }
+    pad_to_8(out, byte_len)
+}
+
+fn write_sparse_f64_data(out: &mut Vec<u8>, values: &[f64]) -> io::Result<()> {
+    let byte_len = std::mem::size_of_val(values);
+    write_tag(out, MI_DOUBLE, byte_len)?;
+    for value in values {
+        out.write_all(&value.to_le_bytes())?;
     }
     pad_to_8(out, byte_len)
 }
@@ -1209,7 +1429,11 @@ fn pad_to_8<W: Write>(out: &mut W, len: usize) -> io::Result<()> {
     Ok(())
 }
 
-fn parse_mat_file(path: &Path, bytes: &[u8]) -> Result<MatData, MatError> {
+fn parse_mat_file(
+    path: &Path,
+    bytes: &[u8],
+    selected_variables: Option<&[&str]>,
+) -> Result<MatData, MatError> {
     if bytes.len() < 128 {
         return Err(MatError::InvalidHeader {
             path: path.to_path_buf(),
@@ -1228,7 +1452,13 @@ fn parse_mat_file(path: &Path, bytes: &[u8]) -> Result<MatData, MatError> {
         }
     };
     let mut variables = BTreeMap::new();
-    parse_top_level_elements(path, &bytes[128..], endian, &mut variables)?;
+    parse_top_level_elements(
+        path,
+        &bytes[128..],
+        endian,
+        selected_variables,
+        &mut variables,
+    )?;
     Ok(MatData { variables })
 }
 
@@ -1236,6 +1466,7 @@ fn parse_top_level_elements(
     path: &Path,
     bytes: &[u8],
     endian: Endian,
+    selected_variables: Option<&[&str]>,
     variables: &mut BTreeMap<String, MatArray>,
 ) -> Result<(), MatError> {
     let mut offset = 0;
@@ -1251,12 +1482,20 @@ fn parse_top_level_elements(
         }
         match element.data_type {
             MI_MATRIX => {
-                let array = parse_matrix_element(element.data, endian)?;
-                variables.insert(array.name.clone(), array);
+                if let Some(array) = parse_matrix_element(element.data, endian, selected_variables)?
+                {
+                    variables.insert(array.name.clone(), array);
+                }
             }
             MI_COMPRESSED => {
                 let decompressed = decompress_mat_element(path, element.data)?;
-                parse_top_level_elements(path, &decompressed, endian, variables)?;
+                parse_top_level_elements(
+                    path,
+                    &decompressed,
+                    endian,
+                    selected_variables,
+                    variables,
+                )?;
             }
             other => {
                 return Err(MatError::UnsupportedDataType {
@@ -1293,8 +1532,8 @@ fn read_hdf5_mat_file(
     offset: usize,
     variables: Option<&[&str]>,
 ) -> Result<MatData, MatError> {
-    if offset == 0 {
-        return read_hdf5_mat_payload(path, path, variables);
+    if let Ok(data) = read_hdf5_mat_payload(path, path, variables) {
+        return Ok(data);
     }
 
     let temp_path = hdf5_temp_dir().join(format!(
@@ -1718,7 +1957,11 @@ fn orient_hdf5_values<T: Copy>(shape: &[usize], values: Vec<T>) -> (usize, usize
     }
 }
 
-fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatError> {
+fn parse_matrix_element(
+    bytes: &[u8],
+    endian: Endian,
+    selected_variables: Option<&[&str]>,
+) -> Result<Option<MatArray>, MatError> {
     let mut offset = 0;
     let flags = read_element(bytes, &mut offset, endian).map_err(|message| {
         MatError::MalformedVariable {
@@ -1766,6 +2009,9 @@ fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatErr
     } else {
         "<unknown>".to_string()
     };
+    if selected_variables.is_some_and(|selected| !selected.contains(&name.as_str())) {
+        return Ok(None);
+    }
 
     if dims.len() < 2 || dims.iter().any(|&dim| dim < 0) {
         return Err(MatError::MalformedDimensions { name, dims });
@@ -1833,14 +2079,14 @@ fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatErr
         None
     };
 
-    Ok(MatArray {
+    Ok(Some(MatArray {
         name,
         rows,
         cols,
         numeric_type,
         real,
         imag,
-    })
+    }))
 }
 
 fn decode_numeric_data(
@@ -2340,6 +2586,36 @@ mod tests {
         assert!(
             status.success(),
             "scipy.io.loadmat failed for Rust-written ph matrix"
+        );
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn writes_sparse_csc_f64_readable_by_scipy() {
+        let path = temp_path("pystamps-mat-scipy-sparse");
+        let mut mat = MatFile::new(&path);
+        mat.add_f64_scalar("dense", 7.0).unwrap();
+        mat.add_empty_sparse_csc_f64_matrix("spread", 3, 4).unwrap();
+        mat.write().unwrap();
+
+        let selected = MatData::read_selected(&path, &["dense"]).unwrap();
+        assert_eq!(selected.get_f64_matrix("dense").unwrap().values, vec![7.0]);
+        assert!(matches!(
+            selected.get("spread").unwrap_err(),
+            MatError::MissingVariable { .. }
+        ));
+
+        let script = format!(
+            "import numpy as np; from scipy import sparse; from scipy.io import loadmat; spread=loadmat({path:?})['spread']; csc=spread.tocsc(); assert sparse.issparse(spread); assert csc.shape == (3, 4); assert csc.nnz == 0; np.testing.assert_array_equal(csc.indptr, np.zeros(5, dtype=csc.indptr.dtype))",
+            path = path.to_string_lossy()
+        );
+        let status = Command::new("uv")
+            .args(["run", "python", "-c", &script])
+            .status()
+            .expect("uv run python should be available for pySTAMPS tests");
+        assert!(
+            status.success(),
+            "scipy.io.loadmat failed for Rust-written sparse matrix"
         );
         std::fs::remove_file(path).unwrap();
     }

@@ -29,3 +29,6 @@ rayon = "1.10"
 codegen-units = 1
 lto = "thin"
 opt-level = 3
+
+[patch.crates-io]
+rust-hdf5 = { path = "crates/rust-hdf5" }

@@ -382,16 +382,29 @@ fn compare_artifact(
         return Ok(());
     }
 
-    let python_mat =
-        pystamps_mat::MatData::read(&python_path).map_err(|source| ParityError::ReadMat {
-            path: python_path.clone(),
-            source,
-        })?;
-    let rust_mat =
-        pystamps_mat::MatData::read(&rust_path).map_err(|source| ParityError::ReadMat {
-            path: rust_path.clone(),
-            source,
-        })?;
+    let selected_variables = spec
+        .variables
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    let python_mat = if selected_variables.is_empty() {
+        pystamps_mat::MatData::read(&python_path)
+    } else {
+        pystamps_mat::MatData::read_selected(&python_path, &selected_variables)
+    }
+    .map_err(|source| ParityError::ReadMat {
+        path: python_path.clone(),
+        source,
+    })?;
+    let rust_mat = if selected_variables.is_empty() {
+        pystamps_mat::MatData::read(&rust_path)
+    } else {
+        pystamps_mat::MatData::read_selected(&rust_path, &selected_variables)
+    }
+    .map_err(|source| ParityError::ReadMat {
+        path: rust_path.clone(),
+        source,
+    })?;
 
     let variables = if spec.variables.is_empty() {
         python_mat

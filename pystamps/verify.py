@@ -190,6 +190,17 @@ def _shape_of(value: Any) -> tuple[int, ...]:
     return tuple(int(v) for v in _to_array(value).shape)
 
 
+def _is_empty_value(value: Any) -> bool:
+    if value is None:
+        return True
+    if sparse.issparse(value):
+        return value.nnz == 0 and 0 in value.shape
+    try:
+        return np.asarray(value).size == 0
+    except (TypeError, ValueError):
+        return False
+
+
 def _missing_required_keys(payload: dict[str, Any], spec: ArtifactToleranceSpec) -> list[str]:
     return [key for key in spec.required_keys if key not in payload]
 
@@ -221,6 +232,8 @@ def _shape_mismatch(
     lhs: Any,
     rhs: Any,
 ) -> tuple[bool, str, dict[str, Any]] | None:
+    if rule.dtype == "empty" and _is_empty_value(lhs) and _is_empty_value(rhs):
+        return None
     lhs_shape = _shape_of(lhs)
     rhs_shape = _shape_of(rhs)
     if lhs_shape == rhs_shape:
@@ -291,6 +304,8 @@ def _sparse_exact_equal(lhs: Any, rhs: Any) -> bool:
 
 
 def _compare_exact(rule: ToleranceRule, lhs: Any, rhs: Any) -> tuple[bool, str, dict[str, Any]] | None:
+    if rule.dtype == "empty" and _is_empty_value(lhs) and _is_empty_value(rhs):
+        return None
     if _exact_equal(lhs, rhs):
         return None
     return (

@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-27 13:10:39 | run=20260526-142844-454144 | iter=10 | mode=build | story=US-010 | duration=17248s | status=success
 - 2026-05-27 08:22:49 | run=20260526-142844-454144 | iter=9 | mode=build | story=US-009 | duration=9776s | status=success
 - 2026-05-27 05:39:41 | run=20260526-142844-454144 | iter=8 | mode=build | story=US-008 | duration=12805s | status=success
 - 2026-05-27 02:06:03 | run=20260526-142844-454144 | iter=7 | mode=build | story=US-007 | duration=9248s | status=success
@@ -274,3 +275,18 @@
 [2026-05-27 12:56:02] US-010: verification completed with Stage 7 budget pass; full-chain gate still fails existing Stage 5/6/8 budgets
 [2026-05-27 13:06:47] US-010: focused Stage 7 Rust tests and diff checks passed after cleanup
 [2026-05-27 13:08:59] US-010: updated progress log with commit and verification outcome
+[2026-05-27 13:10:22] ITERATION 10 end (duration=17248s)
+[2026-05-27 13:10:48] ITERATION 11 start (mode=build story=US-011)
+[2026-05-27 13:15:35] US-011: started Stage 8 output parity work after guardrail review
+[2026-05-27 13:24:07] US-011: implemented sparse Stage 8 spread output and parallelized native Stage 8 hot loops
+[2026-05-27 13:54:29] US-011: focused Stage 8 sparse verify passed structure write but failed 25s budget at 49.616s
+[2026-05-27 14:26:22] US-011: removed HDF5 user-block temp-copy path from selected MAT reads
+[2026-05-27 15:03:23] US-011: patched local rust-hdf5 reader for MATLAB HDF5 user-block offsets
+[2026-05-27 18:33:59] US-011: verification run complete; focused Stage 8 budget passes but dph_noise parity remains failing
+[2026-05-27 18:46:39] ITERATION 1 start (mode=build story=US-011)
+[2026-05-27 18:49:50] Start US-011 Stage 8 output parity run 20260527-184635-826673 iteration 1
+[2026-05-27 19:27:56] US-011: ported Stage 8 active single-master time smoothing and LA-error noise path in Rust
+[2026-05-27 20:48:44] US-011: focused Stage 8 verifier passed with sparse HDF5 spread and dph_noise parity
+[2026-05-27 22:26:49] US-011: focused Stage 8 verifier passed after overlapping mean velocity reads, space-time computation, and output writes
+[2026-05-27 22:55:44] US-011 verification: cargo test workspace PASS, release build PASS, accelerated pytest PASS, verify unit tests PASS, focused Stage 8 gate PASS, exact full-chain gate rerun failed only out-of-scope release/Stage 5 budget with Stage 8 under budget
+[2026-05-27 22:56:37] US-011: recorded repeated full-chain Stage 5/release budget blocker in Ralph errors and guardrails
