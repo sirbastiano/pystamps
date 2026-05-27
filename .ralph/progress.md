@@ -931,3 +931,48 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: Stage 8 runtime is I/O-sensitive because it reads large `phuw2.mat`/`scla2.mat` HDF5 datasets and writes a large `uw_space_time.mat`; running verifier reads concurrently can push the stage over budget.
   - Useful context: timing probes showed the space-time math is not the bottleneck; HDF5 reads/writes dominate, so overlapping independent reads/computation/writes provides the necessary budget margin without changing output semantics.
 ---
+## [2026-05-27 23:58:07 UTC] - US-012: Enforce native-only execution coverage
+Thread:
+Run: 20260527-184635-826673 (iteration 2)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260527-184635-826673-iter-2.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260527-184635-826673-iter-2.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: a8941cd feat(native-coverage): enforce native-only coverage
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_only --lib` -> PASS
+  - Command: `cargo test -p pystamps-core --test native_cli native_only` -> PASS
+  - Command: `uv run pytest -q tests/test_native_full_chain_gate.py` -> PASS
+  - Command: `cargo test -p pystamps-core coverage --lib` -> PASS
+  - Command: `target/release/pystamps-native coverage --start-step 1 --end-step 8` -> PASS (9 required scopes reported native/parity-certified and enabled)
+  - Command: `target/release/pystamps-native run --dataset "$tmp" --native-only --backend auto --stage2-kernel-backend native --dry-run` -> PASS (expected native-only rejection, exit code 2)
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `make native-full-chain-verify` -> FAIL (native coverage precheck passed; exact full-chain failed before verifier comparison on existing Stage 5 merged budget, 33.604s then 36.733s > 30s)
+  - Command: `git diff --check` -> PASS
+  - Command: `cargo fmt --check` -> FAIL (pre-existing formatting diff in `crates/pystamps-core/src/native_stage2.rs`; file was not changed for US-012)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - README.md
+  - crates/pystamps-core/src/bin/pystamps-native.rs
+  - crates/pystamps-core/src/lib.rs
+  - crates/pystamps-core/tests/native_cli.rs
+  - docs/architecture.md
+  - scripts/native_full_chain_gate.py
+  - tests/test_native_full_chain_gate.py
+- What was implemented
+  - Extended native coverage rows with explicit parity certification, disabled-state metadata, non-native reasons, and unsupported native-only modes for Python, MATLAB, Octave, and bridge execution.
+  - Added `--native-only` to `pystamps-native run` and required `--backend native` plus `--stage2-kernel-backend native` in that mode.
+  - Rejected `execute_pipeline_cli_bridge` when native-only mode is requested so bridge execution cannot satisfy the native-only contract.
+  - Added a full-chain coverage precheck that persists `_native_gate_reports/native-coverage-report.json` and fails the gate before stage execution if any requested scope is disabled, uncertified, or missing unsupported-mode reasons.
+  - Documented the coverage schema and native-only flag in README/architecture notes.
+- **Learnings for future iterations:**
+  - Patterns discovered: `pystamps-native coverage --start-step 1 --end-step 8` now returns nine required scopes: stages 1-5 patch, Stage 5 merged, and stages 6-8 merged.
+  - Gotchas encountered: exact full-chain verification still fails before parity comparison when Stage 5 merged drifts over its 30s budget; that is separate from US-012 coverage/native-only enforcement.
+  - Useful context: the native full-chain gate now proves coverage first, then runs `pystamps-native run --native-only`, so a future Python/MATLAB/Octave bridge regression fails before being treated as a native execution path.
+---
