@@ -887,3 +887,47 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the checked-in `scla_smooth2.mat` is stale at 14,837 rows, so it cannot be added to strict artifact parity until a regenerated full-size golden exists.
   - Useful context: Stage 7 performance now satisfies the story budget, but the selected story is not fully complete because `scla2.C_ps_uw` still differs from the default golden; manual checks showed Rust and Python deramping agree with each other while both differ from that golden output.
 ---
+## [2026-05-27 23:00:33 UTC] - US-011: Complete Stage 8 output parity
+Thread:
+Run: 20260527-184635-826673 (iteration 1)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260527-184635-826673-iter-1.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260527-184635-826673-iter-1.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 91c4906 feat(native-stage8): complete output parity
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage8 -- --nocapture` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `uv run pytest -q tests/test_verify.py` -> PASS
+  - Command: `PYSTAMPS_STAGE8_TIMINGS=1 make native-full-chain-run START_STEP=8 END_STEP=8 RUN=inputs_and_outputs/validation_runs/us011_stage8_timing_probe3` -> PASS (Stage 8 completed in 24.819s and passed the 25s/RSS budget)
+  - Command: `make native-full-chain-verify START_STEP=8 END_STEP=8 RUN=inputs_and_outputs/validation_runs/us011_stage8_final_verify6` -> PASS (Stage 8 completed in 24.773s; parity `ok`, checked=47, failed=0)
+  - Command: `make native-full-chain-verify` -> FAIL (exact full-chain rerun completed Stage 8 in 15.468s, but failed out-of-scope release runtime 669.038s > 600s and Stage 5 merged 52.681s > 30s before verifier comparison)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - Cargo.lock
+  - Cargo.toml
+  - crates/pystamps-core/src/native_stage8.rs
+  - crates/pystamps-mat/src/lib.rs
+  - crates/pystamps-parity/src/lib.rs
+  - crates/rust-hdf5/
+  - pystamps/io/mat.py
+  - pystamps/verify.py
+  - tests/test_verify.py
+- What was implemented
+  - Replaced the Stage 8 placeholder edge-noise path with the STAMPS active single-master space-time model, including look-angle error fitting, Gaussian time smoothing, close-master unwrapping, high-noise masking, and bperp correction.
+  - Produced `mean_v.mat` and `uw_space_time.mat` with the expected Stage 8 keys; `uw_space_time.mat/spread` is now canonical sparse HDF5 with `data`, `ir`, `jc`, and `shape` rather than dense zero placeholders.
+  - Added Rust/Python MAT support for row-major HDF5 Stage 8 outputs and canonical sparse HDF5 groups, plus verifier handling for MATLAB-empty `None` versus zero-size arrays.
+  - Added verifier coverage for rejecting dense sparse placeholders and accepting the canonical HDF5 sparse `spread` representation with empty structural keys.
+  - Kept Stage 8 under the 25s focused budget by overlapping independent mean-velocity reads, space-time computation, and output writes; exact full-chain remains blocked upstream by Stage 5/full-run performance outside US-011.
+- **Learnings for future iterations:**
+  - Patterns discovered: focused downstream parity should be validated with `START_STEP`/`END_STEP` when full-chain upstream stages still drift; Stage 8-focused runs can pass all 47 manifest checks while exact full-chain remains blocked before verifier comparison.
+  - Gotchas encountered: Stage 8 runtime is I/O-sensitive because it reads large `phuw2.mat`/`scla2.mat` HDF5 datasets and writes a large `uw_space_time.mat`; running verifier reads concurrently can push the stage over budget.
+  - Useful context: timing probes showed the space-time math is not the bottleneck; HDF5 reads/writes dominate, so overlapping independent reads/computation/writes provides the necessary budget margin without changing output semantics.
+---
