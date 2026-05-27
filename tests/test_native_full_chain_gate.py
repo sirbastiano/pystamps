@@ -4,6 +4,7 @@ import importlib.util
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -201,3 +202,118 @@ def test_stage_duration_rows_preserve_native_telemetry_fields() -> None:
             "n_edges": 5,
         }
     ]
+
+
+def test_native_command_requires_native_only_policy(tmp_path: Path) -> None:
+    module = _load_gate_module()
+    native_bin = tmp_path / "pystamps-native"
+    native_bin.write_text("#!/bin/sh\n", encoding="utf-8")
+    args = SimpleNamespace(native_bin=str(native_bin), start_step=1, end_step=8, threads=0)
+
+    command = module._native_command(args, tmp_path / "run")
+
+    assert "--native-only" in command
+    module.validate_native_only_command(command)
+
+
+def test_native_only_command_rejects_bridge_and_python_backends() -> None:
+    module = _load_gate_module()
+
+    with pytest.raises(module.GateError, match="forbids bridge/external execution"):
+        module.validate_native_only_command(["uv", "run", "python", "-m", "pystamps.cli"])
+
+    with pytest.raises(module.GateError, match="requires --backend native"):
+        module.validate_native_only_command(
+            [
+                "target/release/pystamps-native",
+                "run",
+                "--native-only",
+                "--dataset",
+                "run",
+                "--backend",
+                "python",
+                "--stage2-kernel-backend",
+                "native",
+            ]
+        )
+
+    with pytest.raises(module.GateError, match="requires --stage2-kernel-backend native"):
+        module.validate_native_only_command(
+            [
+                "target/release/pystamps-native",
+                "run",
+                "--native-only",
+                "--dataset",
+                "run",
+                "--backend",
+                "native",
+                "--stage2-kernel-backend",
+                "python",
+            ]
+        )
+
+    with pytest.raises(module.GateError, match="forbids shelling out"):
+        module.validate_native_only_command(
+            [
+                "target/release/pystamps-native",
+                "run",
+                "--native-only",
+                "--dataset",
+                "run",
+                "--backend",
+                "native",
+                "--stage2-kernel-backend",
+                "native",
+                "matlab",
+            ]
+        )
+
+
+def test_native_coverage_evaluation_requires_native_certified_metadata() -> None:
+    module = _load_gate_module()
+
+    report = module.evaluate_native_coverage(
+        [
+            {
+                "stage": 3,
+                "scope": "patch",
+                "target": "PATCH_*",
+                "native_stage": False,
+                "parity_certified": False,
+                "not_parity_certified_reason": "story gate has not passed",
+                "unsupported_modes": [{"mode": "python", "reason": "not native"}],
+            }
+        ]
+    )
+
+    assert report["ok"] is False
+    assert {violation["kind"] for violation in report["violations"]} >= {
+        "not_native_stage",
+        "not_parity_certified",
+        "missing_unsupported_modes",
+    }
+
+
+def test_native_coverage_evaluation_accepts_full_native_metadata() -> None:
+    module = _load_gate_module()
+
+    report = module.evaluate_native_coverage(
+        [
+            {
+                "stage": 8,
+                "scope": "merged",
+                "target": "dataset root",
+                "native_stage": True,
+                "parity_certified": True,
+                "disabled": False,
+                "unsupported_modes": [
+                    {"mode": "python", "reason": "not native"},
+                    {"mode": "matlab", "reason": "not native"},
+                    {"mode": "octave", "reason": "not native"},
+                    {"mode": "bridge", "reason": "not native"},
+                ],
+            }
+        ]
+    )
+
+    assert report == {"ok": True, "checked_scope_count": 1, "violations": []}

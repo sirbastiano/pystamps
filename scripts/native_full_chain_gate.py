@@ -16,6 +16,8 @@ from typing import Any
 PATCH_PREFIX = "PATCH_"
 REPORT_DIR_NAME = "_native_gate_reports"
 DEFAULT_BUDGET_MANIFEST = Path(__file__).resolve().parents[1] / "pystamps" / "data" / "native_performance_budgets.json"
+FORBIDDEN_NATIVE_ONLY_PROGRAMS = {"uv", "matlab", "octave"}
+REQUIRED_COVERAGE_UNSUPPORTED_MODES = {"python", "matlab", "octave", "bridge"}
 
 STAGE_CLEAN_PATTERNS: dict[int, tuple[str, ...]] = {
     1: (
@@ -217,13 +219,19 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def _native_command(args: argparse.Namespace, run_root: Path) -> list[str]:
+def _native_bin(args: argparse.Namespace) -> Path:
     native_bin = Path(args.native_bin).expanduser()
     if not native_bin.is_file():
         raise GateError(f"native binary does not exist: {native_bin}")
+    return native_bin
+
+
+def _native_command(args: argparse.Namespace, run_root: Path) -> list[str]:
+    native_bin = _native_bin(args)
     command = [
         str(native_bin),
         "run",
+        "--native-only",
         "--dataset",
         str(run_root),
         "--start-step",
@@ -240,6 +248,200 @@ def _native_command(args: argparse.Namespace, run_root: Path) -> list[str]:
         str(args.threads),
     ]
     return command
+
+
+def _coverage_command(args: argparse.Namespace) -> list[str]:
+    native_bin = _native_bin(args)
+    return [
+        str(native_bin),
+        "coverage",
+        "--start-step",
+        str(args.start_step),
+        "--end-step",
+        str(args.end_step),
+    ]
+
+
+def validate_native_only_command(command: list[str]) -> None:
+    if not command:
+        raise GateError("native-only command is empty")
+    validate_native_only_executable(command[0])
+    if "--native-only" not in command:
+        raise GateError("native command is missing --native-only")
+    _require_flag_value(command, "--backend", "native")
+    _require_flag_value(command, "--stage2-kernel-backend", "native")
+    for token in command[1:]:
+        name = Path(token).name.lower()
+        if _is_forbidden_native_only_program(name):
+            raise GateError(f"native-only mode forbids shelling out through {token}")
+
+
+def validate_native_only_executable(program_path: str) -> None:
+    program = Path(program_path).name.lower()
+    if _is_forbidden_native_only_program(program, executable=True):
+        raise GateError(f"native-only mode forbids bridge/external execution via {program_path}")
+
+
+def _is_forbidden_native_only_program(name: str, *, executable: bool = False) -> bool:
+    if name in FORBIDDEN_NATIVE_ONLY_PROGRAMS or name in {"python", "python3"}:
+        return True
+    if name.startswith("python3."):
+        return True
+    return executable and name.startswith("python")
+
+
+def _require_flag_value(command: list[str], flag: str, expected: str) -> None:
+    try:
+        ix = command.index(flag)
+    except ValueError as exc:
+        raise GateError(f"native-only mode requires {flag} {expected}") from exc
+    try:
+        value = command[ix + 1]
+    except IndexError as exc:
+        raise GateError(f"native-only mode requires a value after {flag}") from exc
+    if str(value).lower() != expected:
+        raise GateError(f"native-only mode requires {flag} {expected}; got {value}")
+
+
+def evaluate_native_coverage(rows: Any) -> dict[str, Any]:
+    violations: list[dict[str, Any]] = []
+    if not isinstance(rows, list):
+        return {
+            "ok": False,
+            "checked_scope_count": 0,
+            "violations": [{"kind": "invalid_coverage_payload", "message": "coverage payload is not a list"}],
+        }
+
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            violations.append(
+                {
+                    "kind": "invalid_coverage_row",
+                    "index": index,
+                    "message": "coverage row is not an object",
+                }
+            )
+            continue
+        stage = row.get("stage")
+        scope = row.get("scope")
+        target = row.get("target")
+        row_id = f"stage {stage} {scope} {target}"
+        if row.get("disabled") is True:
+            violations.append(
+                {
+                    "kind": "disabled_stage",
+                    "stage": stage,
+                    "scope": scope,
+                    "target": target,
+                    "message": f"{row_id} is disabled: {row.get('disabled_reason') or 'no reason'}",
+                }
+            )
+        if row.get("parity_certified") is not True:
+            violations.append(
+                {
+                    "kind": "not_parity_certified",
+                    "stage": stage,
+                    "scope": scope,
+                    "target": target,
+                    "message": (
+                        f"{row_id} is not parity-certified: "
+                        f"{row.get('not_parity_certified_reason') or 'no reason'}"
+                    ),
+                }
+            )
+        if row.get("native_stage") is not True:
+            violations.append(
+                {
+                    "kind": "not_native_stage",
+                    "stage": stage,
+                    "scope": scope,
+                    "target": target,
+                    "message": f"{row_id} is not native-certified: {row.get('not_native_reason') or 'no reason'}",
+                }
+            )
+        unsupported_modes = row.get("unsupported_modes")
+        if not isinstance(unsupported_modes, list):
+            violations.append(
+                {
+                    "kind": "missing_unsupported_modes",
+                    "stage": stage,
+                    "scope": scope,
+                    "target": target,
+                    "message": f"{row_id} does not include unsupported native-only modes",
+                }
+            )
+            continue
+        mode_names = {
+            str(item.get("mode", "")).lower()
+            for item in unsupported_modes
+            if isinstance(item, dict)
+        }
+        missing_modes = sorted(REQUIRED_COVERAGE_UNSUPPORTED_MODES - mode_names)
+        if missing_modes:
+            violations.append(
+                {
+                    "kind": "missing_unsupported_modes",
+                    "stage": stage,
+                    "scope": scope,
+                    "target": target,
+                    "missing_modes": missing_modes,
+                    "message": f"{row_id} missing unsupported modes: {', '.join(missing_modes)}",
+                }
+            )
+        for item in unsupported_modes:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("mode", "")).lower() in REQUIRED_COVERAGE_UNSUPPORTED_MODES and not str(
+                item.get("reason", "")
+            ).strip():
+                violations.append(
+                    {
+                        "kind": "missing_unsupported_mode_reason",
+                        "stage": stage,
+                        "scope": scope,
+                        "target": target,
+                        "mode": item.get("mode"),
+                        "message": f"{row_id} unsupported mode {item.get('mode')} has no reason",
+                    }
+                )
+
+    return {
+        "ok": not violations,
+        "checked_scope_count": len(rows),
+        "violations": violations,
+    }
+
+
+def run_native_coverage_gate(args: argparse.Namespace, report_dir: Path) -> dict[str, Any]:
+    command = _coverage_command(args)
+    validate_native_only_executable(command[0])
+    completed = subprocess.run(command, text=True, capture_output=True, check=False)
+    try:
+        coverage = json.loads(completed.stdout) if completed.stdout.strip() else []
+    except json.JSONDecodeError:
+        coverage = []
+    evaluation = evaluate_native_coverage(coverage)
+    ok = completed.returncode == 0 and bool(evaluation["ok"])
+    report = {
+        "generated_at_utc": _now_utc(),
+        "ok": ok,
+        "status": "passed" if ok else "failed",
+        "command": command,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+        "coverage": coverage,
+        "evaluation": evaluation,
+    }
+    report_path = report_dir / "native-coverage-report.json"
+    _write_json(report_path, report)
+    print(f"Native coverage status: {'ok' if ok else 'failed'}")
+    for violation in evaluation.get("violations", []):
+        print(f"  coverage violation: {violation.get('message')}")
+    print(f"Native coverage report: {report_path}")
+    if completed.stderr.strip():
+        print(completed.stderr.strip(), file=sys.stderr)
+    return report
 
 
 def _stage_status(result: dict[str, Any]) -> str:
@@ -475,7 +677,41 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     setup = prepare_run_copy(dataset, run_root, args.start_step, args.end_step)
     run_root = Path(setup["run_root"])
     report_dir = run_root / REPORT_DIR_NAME
+    coverage_report = run_native_coverage_gate(args, report_dir)
     command = _native_command(args, run_root)
+    validate_native_only_command(command)
+
+    if not coverage_report.get("ok"):
+        elapsed = time.monotonic() - start
+        run_report = {
+            "generated_at_utc": _now_utc(),
+            "ok": False,
+            "status": "failed",
+            "elapsed_sec": elapsed,
+            "setup": setup,
+            "coverage": coverage_report,
+            "command": command,
+            "returncode": None,
+            "stdout": "",
+            "stderr": "native coverage gate failed",
+            "results": [],
+            "performance_budget": {
+                "ok": False,
+                "violations": [
+                    {
+                        "kind": "native_coverage",
+                        "message": "native coverage gate failed before stage execution",
+                    }
+                ],
+                "waivers": [],
+                "checked_stage_count": 0,
+            },
+        }
+        run_report_path = report_dir / "native-run-report.json"
+        _write_json(run_report_path, run_report)
+        print("Native run status: failed")
+        print(f"Native run report: {run_report_path}")
+        return 1, run_report
 
     completed = subprocess.run(command, text=True, capture_output=True, check=False)
     elapsed = time.monotonic() - start
@@ -502,6 +738,7 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         "returncode": completed.returncode,
         "stdout": completed.stdout,
         "stderr": completed.stderr,
+        "coverage": coverage_report,
         "results": results,
         "performance_budget": budget_report,
     }

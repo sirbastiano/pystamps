@@ -41,3 +41,9 @@
 - **Instruction**: Record the exact full-chain failure, but do not treat upstream Stage 5/full-run budget drift as evidence against the focused downstream implementation. Use a stage-scoped run with `START_STEP`/`END_STEP` and a dedicated `RUN` path for the story acceptance signal.
 - **Added after**: Iteration 1 - US-011 focused Stage 8 verification passed parity and the 25s budget, while exact full-chain verification still failed out-of-scope release runtime and Stage 5 merged budgets.
 - **Example**: For Stage 8, use `make native-full-chain-verify START_STEP=8 END_STEP=8 RUN=inputs_and_outputs/validation_runs/us011_stage8_final_verify6` and compare its Stage 8 timing/parity report against the full-chain timing report.
+
+### Sign: Keep Coverage Stories Out Of Stage Performance Repairs
+- **Trigger**: When a coverage/native-only enforcement story passes its coverage gate but exact full-chain verification fails on a stage-local performance budget.
+- **Instruction**: Record the stage budget failure and coverage result separately; do not widen the coverage story into Stage 5/6/7/8 performance work unless that stage is explicitly selected.
+- **Added after**: Iteration 2 - US-012 native coverage precheck passed twice, but exact full-chain verification failed before parity comparison on existing Stage 5 merged budget drift.
+- **Example**: For US-012, cite `_native_gate_reports/native-coverage-report.json` as the coverage signal and record the separate Stage 5 merged duration budget failure from `_native_gate_reports/native-run-timings.json`.

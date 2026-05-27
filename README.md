@@ -159,6 +159,10 @@ curl http://127.0.0.1:8787/api/native-coverage
 Both paths return `StageCoverage[]` objects with:
 - `rust_driver`: the chain can be planned/launched from Rust for that scope
 - `native_stage`: Python execution is not needed for that scope
+- `parity_certified`: the native implementation has passed its story gate
+- `disabled` / `disabled_reason`: whether native coverage was explicitly disabled for that scope
+- `not_native_reason` / `not_parity_certified_reason`: why a scope is not currently native-certified
+- `unsupported_modes`: non-native execution modes rejected by the native-only gate
 - `native_kernels`: accelerated kernel labels used inside the Rust stage
 
 You can also exercise direct stage entry points (for debugging/validation):
@@ -174,10 +178,12 @@ Both wrappers fail fast when a requested mode is not supported:
 
 - Rust wrapper backend values are limited to `auto`, `threads`, `processes`, `gpu`, or `native`.
 - Rust `--stage2-kernel-backend` accepts only `auto`, `python`, or `native`.
+- Rust `--native-only` requires `--backend native` and `--stage2-kernel-backend native`.
 - Python config normalizer also rejects `runtime.stage2_kernel_backend: cuda` because stage-2 native execution does not expose CUDA.
 
 ```bash
 cargo run -p pystamps-core --bin pystamps-native -- run --dataset "$DATASET_COPY" --backend bogus
+cargo run -p pystamps-core --bin pystamps-native -- run --dataset "$DATASET_COPY" --native-only --backend auto
 ```
 
 returns exit code 2 with:

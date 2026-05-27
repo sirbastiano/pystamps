@@ -22,6 +22,7 @@ struct RunTimeConfig {
     io_workers: u16,
     cpu_workers: u16,
     stage2_native_threads: u16,
+    native_only: bool,
 }
 
 impl Default for RunTimeConfig {
@@ -32,6 +33,7 @@ impl Default for RunTimeConfig {
             io_workers: 8,
             cpu_workers: 0,
             stage2_native_threads: 0,
+            native_only: false,
         }
     }
 }
@@ -229,6 +231,10 @@ fn parse_run_args(args: &[String]) -> Result<(RunRequest, RunTimeConfig), String
                 request.dry_run = true;
                 ix += 1;
             }
+            "--native-only" => {
+                runtime.native_only = true;
+                ix += 1;
+            }
             "--backend" => {
                 runtime.backend = parse_backend_arg(args, ix, "--backend")?;
                 ix += 2;
@@ -278,6 +284,18 @@ fn validate_runtime_config(config: &RunTimeConfig) -> Result<(), String> {
         return Err(
             "stage2-native-threads requires stage2 kernel backend auto or native".to_string(),
         );
+    }
+    if config.native_only {
+        if backend != "native" {
+            return Err(format!(
+                "native-only mode requires --backend native; got '{backend}'"
+            ));
+        }
+        if kernel_backend != "native" {
+            return Err(format!(
+                "native-only mode requires --stage2-kernel-backend native; got '{kernel_backend}'"
+            ));
+        }
     }
     Ok(())
 }
@@ -398,7 +416,7 @@ fn parse_dataset_arg(args: &[String]) -> Result<PathBuf, String> {
 fn usage() {
     eprintln!(
         "Usage:
-  pystamps-native run --dataset PATH [--start-step N] [--end-step N] [--dry-run]
+  pystamps-native run --dataset PATH [--start-step N] [--end-step N] [--dry-run] [--native-only]
     [--backend auto|threads|processes|gpu|native]
     [--stage2-kernel-backend auto|python|native]
     [--io-workers N] [--cpu-workers N] [--stage2-native-threads N]

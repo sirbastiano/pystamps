@@ -96,3 +96,61 @@ fn run_rejects_unsupported_runtime_backend() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("unsupported runtime backend"));
 }
+
+#[test]
+fn run_native_only_rejects_non_native_runtime_backend() {
+    let root = std::env::temp_dir().join(format!(
+        "pystamps-core-native-only-backend-error-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("PATCH_1")).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_pystamps-native"))
+        .arg("run")
+        .arg("--dataset")
+        .arg(&root)
+        .arg("--native-only")
+        .arg("--backend")
+        .arg("auto")
+        .arg("--stage2-kernel-backend")
+        .arg("native")
+        .arg("--dry-run")
+        .output()
+        .unwrap();
+
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("native-only mode requires --backend native"));
+}
+
+#[test]
+fn run_native_only_rejects_python_stage2_kernel_backend() {
+    let root = std::env::temp_dir().join(format!(
+        "pystamps-core-native-only-stage2-error-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("PATCH_1")).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_pystamps-native"))
+        .arg("run")
+        .arg("--dataset")
+        .arg(&root)
+        .arg("--native-only")
+        .arg("--backend")
+        .arg("native")
+        .arg("--stage2-kernel-backend")
+        .arg("python")
+        .arg("--dry-run")
+        .output()
+        .unwrap();
+
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("native-only mode requires --stage2-kernel-backend native"));
+}

@@ -32,6 +32,8 @@ pub enum CoreError {
     InvalidStageRange { start_step: u8, end_step: u8 },
     #[error("full native Rust processing chain is incomplete: {0}")]
     IncompleteNativeChain(String),
+    #[error("native-only execution violation: {0}")]
+    NativeOnlyViolation(String),
     #[error("unable to write runtime config {path}: {source}")]
     WriteRuntimeConfig {
         path: PathBuf,
@@ -84,6 +86,7 @@ impl Default for RuntimeOptions {
 pub struct CliBridgeOptions {
     pub command: Vec<String>,
     pub runtime: RuntimeOptions,
+    pub native_only: bool,
 }
 
 impl Default for CliBridgeOptions {
@@ -91,6 +94,7 @@ impl Default for CliBridgeOptions {
         Self {
             command: vec!["uv".to_string(), "run".to_string(), "pystamps".to_string()],
             runtime: RuntimeOptions::default(),
+            native_only: false,
         }
     }
 }
@@ -164,8 +168,23 @@ pub struct StageCoverage {
     pub target: String,
     pub rust_driver: bool,
     pub native_stage: bool,
+    pub parity_certified: bool,
+    pub disabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub disabled_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_parity_certified_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub not_native_reason: Option<String>,
+    pub unsupported_modes: Vec<UnsupportedExecutionMode>,
     pub native_kernels: &'static [&'static str],
     pub details: &'static str,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct UnsupportedExecutionMode {
+    pub mode: &'static str,
+    pub reason: &'static str,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Deserialize, Serialize)]
@@ -395,6 +414,12 @@ pub fn execute_pipeline_cli_bridge(
     options: &CliBridgeOptions,
 ) -> Result<PipelineExecution, CoreError> {
     validate_stage_range(request.start_step, request.end_step)?;
+    if options.native_only {
+        return Err(CoreError::NativeOnlyViolation(
+            "native-only mode forbids CLI bridge execution; call pystamps-native run directly"
+                .to_string(),
+        ));
+    }
     let _dataset = discover_dataset(&request.dataset_root)?;
 
     let config_path = temp_runtime_config_path();
@@ -538,17 +563,60 @@ fn stage_coverage(
     disabled_stages: &[(u8, StageScope)],
 ) -> StageCoverage {
     let scope_name = scope.to_string();
-    let native_stage = !disabled_stages.contains(&(stage_id, scope))
-        && pystamps_stages::native_stage_is_parity_certified(stage_id, &scope_name);
+    let disabled = disabled_stages.contains(&(stage_id, scope));
+    let parity_certified = pystamps_stages::native_stage_is_parity_certified(stage_id, &scope_name);
+    let disabled_reason = if disabled {
+        Some("disabled by PYSTAMPS_DISABLE_NATIVE_STAGES".to_string())
+    } else {
+        None
+    };
+    let not_parity_certified_reason = if parity_certified {
+        None
+    } else {
+        Some(stage_coverage_details(stage_id, scope).to_string())
+    };
+    let not_native_reason = if let Some(reason) = &disabled_reason {
+        Some(reason.clone())
+    } else {
+        not_parity_certified_reason.clone()
+    };
+    let native_stage = !disabled && parity_certified;
     StageCoverage {
         stage: stage_id,
         scope,
         target: target.to_string(),
         rust_driver: true,
         native_stage,
+        parity_certified,
+        disabled,
+        disabled_reason,
+        not_parity_certified_reason,
+        not_native_reason,
+        unsupported_modes: unsupported_native_only_modes(),
         native_kernels: native_kernel_acceleration(stage_id, scope),
         details: stage_coverage_details(stage_id, scope),
     }
+}
+
+fn unsupported_native_only_modes() -> Vec<UnsupportedExecutionMode> {
+    vec![
+        UnsupportedExecutionMode {
+            mode: "python",
+            reason: "native-only mode accepts only Rust-owned stage execution; Python is limited to verifier and reference tooling",
+        },
+        UnsupportedExecutionMode {
+            mode: "matlab",
+            reason: "native-only mode forbids MATLAB shell-outs during stage execution",
+        },
+        UnsupportedExecutionMode {
+            mode: "octave",
+            reason: "native-only mode forbids Octave shell-outs during stage execution",
+        },
+        UnsupportedExecutionMode {
+            mode: "bridge",
+            reason: "native-only mode must call pystamps-native directly instead of the Python CLI bridge",
+        },
+    ]
 }
 
 fn stage_coverage_details(stage_id: u8, scope: StageScope) -> &'static str {
@@ -1042,6 +1110,24 @@ mod tests {
             coverage.iter().all(|row| row.native_stage),
             "Expected all required scopes to be fully native-stage covered."
         );
+        assert!(
+            coverage.iter().all(|row| row.parity_certified),
+            "Expected all required scopes to be parity certified."
+        );
+        assert!(
+            coverage.iter().all(|row| !row.disabled),
+            "Expected no required scopes to be disabled."
+        );
+        assert!(coverage.iter().all(|row| {
+            let modes = row
+                .unsupported_modes
+                .iter()
+                .map(|mode| mode.mode)
+                .collect::<Vec<_>>();
+            ["python", "matlab", "octave", "bridge"]
+                .iter()
+                .all(|expected| modes.contains(expected))
+        }));
     }
 
     #[test]
@@ -1058,6 +1144,34 @@ mod tests {
             message.contains("stage 3 patch"),
             "expected disabled scope to be reported as blocking verification, got: {message}"
         );
+    }
+
+    #[test]
+    fn coverage_metadata_reports_disabled_scope_and_native_only_reasons() {
+        let disabled = [(3, StageScope::Patch)];
+        let coverage = processing_chain_coverage_with_disabled(3, 3, &disabled).unwrap();
+        assert_eq!(coverage.len(), 1);
+        let row = &coverage[0];
+
+        assert!(!row.native_stage);
+        assert!(row.parity_certified);
+        assert!(row.disabled);
+        assert_eq!(
+            row.disabled_reason.as_deref(),
+            Some("disabled by PYSTAMPS_DISABLE_NATIVE_STAGES")
+        );
+        assert_eq!(
+            row.not_native_reason.as_deref(),
+            Some("disabled by PYSTAMPS_DISABLE_NATIVE_STAGES")
+        );
+        assert!(row.not_parity_certified_reason.is_none());
+        assert!(row.unsupported_modes.iter().any(|mode| {
+            mode.mode == "python" && mode.reason.contains("Rust-owned stage execution")
+        }));
+        assert!(row
+            .unsupported_modes
+            .iter()
+            .any(|mode| mode.mode == "bridge" && mode.reason.contains("Python CLI bridge")));
     }
 
     #[test]
@@ -1090,6 +1204,7 @@ mod tests {
                     "printf '[{\"stage\":1,\"scope\":\"patch\",\"target\":\"PATCH_1\",\"status\":\"completed\",\"details\":\"ok\",\"duration_sec\":0.1}]'".to_string(),
                 ],
                 runtime: RuntimeOptions::default(),
+                native_only: false,
             },
         )
         .unwrap();
@@ -1098,6 +1213,29 @@ mod tests {
         assert_eq!(execution.results.len(), 1);
         assert_eq!(execution.results[0].status, StageStatus::Completed);
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn cli_bridge_is_rejected_when_native_only_is_requested() {
+        let err = execute_pipeline_cli_bridge(
+            &RunRequest {
+                dataset_root: PathBuf::from("/unused"),
+                start_step: 1,
+                end_step: 1,
+                dry_run: false,
+            },
+            &CliBridgeOptions {
+                native_only: true,
+                ..CliBridgeOptions::default()
+            },
+        )
+        .unwrap_err();
+
+        let message = err.to_string();
+        assert!(
+            message.contains("native-only mode forbids CLI bridge execution"),
+            "expected native-only bridge rejection, got: {message}"
+        );
     }
 
     #[test]

@@ -119,6 +119,8 @@ cargo run -p pystamps-core --bin pystamps-native -- stage5-merge --dataset DATAS
 
 That path writes MATLAB v5 artifacts directly from Rust for all Rust-owned stage scopes. As of this release,
 coverage for stages 1 through 8 and the Stage-5 merged scope reports `native_stage=true` when enabled.
+Coverage rows also include `parity_certified`, disabled-state metadata, unsupported native-only
+execution modes, and a reason when a scope is not native-certified.
 
 The full native verification gate is enforced in core via
 `verify_full_native_processing_chain(start_step, end_step)`, which returns an error if any required
@@ -140,6 +142,14 @@ Example payload object shape:
   "target": "PATCH_1",
   "rust_driver": true,
   "native_stage": true,
+  "parity_certified": true,
+  "disabled": false,
+  "unsupported_modes": [
+    {
+      "mode": "python",
+      "reason": "native-only mode accepts only Rust-owned stage execution; Python is limited to verifier and reference tooling"
+    }
+  ],
   "native_kernels": [
     "stage2_grid_accumulate",
     "stage2_histogram",

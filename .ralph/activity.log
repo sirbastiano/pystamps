@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-27 23:04:17 | run=20260527-184635-826673 | iter=1 | mode=build | story=US-011 | duration=15439s | status=success
 - 2026-05-27 13:10:39 | run=20260526-142844-454144 | iter=10 | mode=build | story=US-010 | duration=17248s | status=success
 - 2026-05-27 08:22:49 | run=20260526-142844-454144 | iter=9 | mode=build | story=US-009 | duration=9776s | status=success
 - 2026-05-27 05:39:41 | run=20260526-142844-454144 | iter=8 | mode=build | story=US-008 | duration=12805s | status=success
@@ -291,3 +292,10 @@
 [2026-05-27 22:55:44] US-011 verification: cargo test workspace PASS, release build PASS, accelerated pytest PASS, verify unit tests PASS, focused Stage 8 gate PASS, exact full-chain gate rerun failed only out-of-scope release/Stage 5 budget with Stage 8 under budget
 [2026-05-27 22:56:37] US-011: recorded repeated full-chain Stage 5/release budget blocker in Ralph errors and guardrails
 [2026-05-27 23:02:20] US-011: updated progress log with commit and verification details
+[2026-05-27 23:03:56] ITERATION 1 end (duration=15439s)
+[2026-05-27 23:04:26] ITERATION 2 start (mode=build story=US-012)
+[2026-05-27 23:08:10] Start US-012 native-only coverage work for run 20260527-184635-826673 iteration 2
+[2026-05-27 23:11:14] US-012 audit complete: coverage metadata and native-only runner guard gaps identified
+[2026-05-27 23:29:56] US-012 implemented coverage metadata, native-only CLI guard, and native full-chain coverage gate
+[2026-05-27 23:56:04] US-012 verification: native coverage gate passed, exact full-chain verify repeated out-of-scope Stage 5 merged budget failure
+[2026-05-27 23:57:24] US-012 tests: cargo workspace PASS, release build PASS, accelerated pytest PASS, native full-chain verify FAIL on existing Stage 5 merged budget, git diff check PASS
