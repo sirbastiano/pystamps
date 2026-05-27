@@ -1,7 +1,10 @@
+use flate2::read::ZlibDecoder;
+use rayon::prelude::*;
 use std::collections::BTreeMap;
-use std::fs::File;
-use std::io::{self, Write};
+use std::fs::{self, File};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 const MI_INT8: u32 = 1;
@@ -19,6 +22,10 @@ const MI_COMPRESSED: u32 = 15;
 const MI_UTF8: u32 = 16;
 const MI_UTF16: u32 = 17;
 const MI_UTF32: u32 = 18;
+const HDF5_SIGNATURE: &[u8; 8] = b"\x89HDF\r\n\x1a\n";
+const HDF5_SIGNATURE_SCAN_BYTES: usize = 1024 * 1024;
+const HDF5_TEMP_COPY_BUFFER_BYTES: usize = 8 * 1024 * 1024;
+const PARALLEL_MAT_WRITE_VALUES: usize = 100_000;
 
 const MX_CHAR_CLASS: u32 = 4;
 const MX_SPARSE_CLASS: u32 = 5;
@@ -404,12 +411,38 @@ impl MatFile {
 
 impl MatData {
     pub fn read(path: impl AsRef<Path>) -> Result<Self, MatError> {
-        let path = path.as_ref();
+        Self::read_with_vars(path.as_ref(), None)
+    }
+
+    pub fn read_selected(path: impl AsRef<Path>, variables: &[&str]) -> Result<Self, MatError> {
+        Self::read_with_vars(path.as_ref(), Some(variables))
+    }
+
+    fn read_with_vars(path: &Path, variables: Option<&[&str]>) -> Result<Self, MatError> {
+        let mut probe = File::open(path).map_err(|source| MatError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        let mut bytes = vec![0_u8; HDF5_SIGNATURE_SCAN_BYTES];
+        let bytes_read = probe.read(&mut bytes).map_err(|source| MatError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        bytes.truncate(bytes_read);
+        if let Some(offset) = find_hdf5_signature_offset(&bytes) {
+            return read_hdf5_mat_file(path, offset, variables);
+        }
+
         let bytes = std::fs::read(path).map_err(|source| MatError::Read {
             path: path.to_path_buf(),
             source,
         })?;
-        parse_mat_file(path, &bytes)
+        let mut data = parse_mat_file(path, &bytes)?;
+        if let Some(variables) = variables {
+            data.variables
+                .retain(|name, _| variables.contains(&name.as_str()));
+        }
+        Ok(data)
     }
 
     pub fn variables(&self) -> impl Iterator<Item = (&str, &MatArray)> {
@@ -801,33 +834,11 @@ fn write_header(file: &mut File) -> io::Result<()> {
 fn write_variable(file: &mut File, variable: &MatVar) -> io::Result<()> {
     let mut body = Vec::new();
     match variable {
-        MatVar::F64(matrix) => write_real_matrix(
-            &mut body,
-            MX_DOUBLE_CLASS,
-            MI_DOUBLE,
-            matrix,
-            write_f64_value,
-        )?,
-        MatVar::F32(matrix) => write_real_matrix(
-            &mut body,
-            MX_SINGLE_CLASS,
-            MI_SINGLE,
-            matrix,
-            write_f32_value,
-        )?,
-        MatVar::I32(matrix) => {
-            write_real_matrix(&mut body, MX_INT32_CLASS, MI_INT32, matrix, write_i32_value)?
-        }
-        MatVar::U32(matrix) => write_real_matrix(
-            &mut body,
-            MX_UINT32_CLASS,
-            MI_UINT32,
-            matrix,
-            write_u32_value,
-        )?,
-        MatVar::U8(matrix) => {
-            write_real_matrix(&mut body, MX_UINT8_CLASS, MI_UINT8, matrix, write_u8_value)?
-        }
+        MatVar::F64(matrix) => write_real_f64_matrix(&mut body, matrix)?,
+        MatVar::F32(matrix) => write_real_f32_matrix(&mut body, matrix)?,
+        MatVar::I32(matrix) => write_real_i32_matrix(&mut body, matrix)?,
+        MatVar::U32(matrix) => write_real_u32_matrix(&mut body, matrix)?,
+        MatVar::U8(matrix) => write_real_u8_matrix(&mut body, matrix)?,
         MatVar::ComplexF32(matrix) => {
             write_array_flags(&mut body, MX_SINGLE_CLASS, true)?;
             write_dimensions(&mut body, matrix.rows, matrix.cols)?;
@@ -852,24 +863,35 @@ fn write_variable(file: &mut File, variable: &MatVar) -> io::Result<()> {
     pad_to_8(file, body.len())
 }
 
-fn write_real_matrix<T>(
-    out: &mut Vec<u8>,
-    class: u32,
-    data_type: u32,
-    matrix: &Matrix<T>,
-    write_value: fn(&mut Vec<u8>, &T) -> io::Result<()>,
-) -> io::Result<()> {
+fn write_real_header<T>(out: &mut Vec<u8>, class: u32, matrix: &Matrix<T>) -> io::Result<()> {
     write_array_flags(out, class, false)?;
     write_dimensions(out, matrix.rows, matrix.cols)?;
-    write_name(out, &matrix.name)?;
-    write_numeric_data(
-        out,
-        data_type,
-        matrix.rows,
-        matrix.cols,
-        &matrix.values,
-        write_value,
-    )
+    write_name(out, &matrix.name)
+}
+
+fn write_real_f64_matrix(out: &mut Vec<u8>, matrix: &Matrix<f64>) -> io::Result<()> {
+    write_real_header(out, MX_DOUBLE_CLASS, matrix)?;
+    write_numeric_data_f64(out, MI_DOUBLE, matrix.rows, matrix.cols, &matrix.values)
+}
+
+fn write_real_f32_matrix(out: &mut Vec<u8>, matrix: &Matrix<f32>) -> io::Result<()> {
+    write_real_header(out, MX_SINGLE_CLASS, matrix)?;
+    write_numeric_data_f32(out, MI_SINGLE, matrix.rows, matrix.cols, &matrix.values)
+}
+
+fn write_real_i32_matrix(out: &mut Vec<u8>, matrix: &Matrix<i32>) -> io::Result<()> {
+    write_real_header(out, MX_INT32_CLASS, matrix)?;
+    write_numeric_data_i32(out, MI_INT32, matrix.rows, matrix.cols, &matrix.values)
+}
+
+fn write_real_u32_matrix(out: &mut Vec<u8>, matrix: &Matrix<u32>) -> io::Result<()> {
+    write_real_header(out, MX_UINT32_CLASS, matrix)?;
+    write_numeric_data_u32(out, MI_UINT32, matrix.rows, matrix.cols, &matrix.values)
+}
+
+fn write_real_u8_matrix(out: &mut Vec<u8>, matrix: &Matrix<u8>) -> io::Result<()> {
+    write_real_header(out, MX_UINT8_CLASS, matrix)?;
+    write_numeric_data_u8(out, MI_UINT8, matrix.rows, matrix.cols, &matrix.values)
 }
 
 fn write_array_flags(out: &mut Vec<u8>, class: u32, complex: bool) -> io::Result<()> {
@@ -904,43 +926,186 @@ fn write_name(out: &mut Vec<u8>, name: &str) -> io::Result<()> {
     pad_to_8(out, name.len())
 }
 
-fn write_numeric_data<T>(
+fn write_numeric_data_f64(
     out: &mut Vec<u8>,
     data_type: u32,
     rows: usize,
     cols: usize,
-    values: &[T],
-    write_value: fn(&mut Vec<u8>, &T) -> io::Result<()>,
+    values: &[f64],
 ) -> io::Result<()> {
     let byte_len = std::mem::size_of_val(values);
     write_tag(out, data_type, byte_len)?;
+    let start = out.len();
+    out.resize(start + byte_len, 0);
+    let payload = &mut out[start..start + byte_len];
+    if values.len() >= PARALLEL_MAT_WRITE_VALUES {
+        payload
+            .par_chunks_mut(std::mem::size_of::<f64>())
+            .enumerate()
+            .for_each(|(dst, chunk)| {
+                let col = dst / rows;
+                let row = dst % rows;
+                chunk.copy_from_slice(&values[row * cols + col].to_le_bytes());
+            });
+    } else {
+        for (dst, chunk) in payload.chunks_mut(std::mem::size_of::<f64>()).enumerate() {
+            let col = dst / rows;
+            let row = dst % rows;
+            chunk.copy_from_slice(&values[row * cols + col].to_le_bytes());
+        }
+    }
+    pad_to_8(out, byte_len)
+}
+
+fn write_numeric_data_f32(
+    out: &mut Vec<u8>,
+    data_type: u32,
+    rows: usize,
+    cols: usize,
+    values: &[f32],
+) -> io::Result<()> {
+    let byte_len = std::mem::size_of_val(values);
+    write_tag(out, data_type, byte_len)?;
+    let start = out.len();
+    out.resize(start + byte_len, 0);
+    let payload = &mut out[start..start + byte_len];
+    if values.len() >= PARALLEL_MAT_WRITE_VALUES {
+        payload
+            .par_chunks_mut(std::mem::size_of::<f32>())
+            .enumerate()
+            .for_each(|(dst, chunk)| {
+                let col = dst / rows;
+                let row = dst % rows;
+                chunk.copy_from_slice(&values[row * cols + col].to_le_bytes());
+            });
+    } else {
+        for (dst, chunk) in payload.chunks_mut(std::mem::size_of::<f32>()).enumerate() {
+            let col = dst / rows;
+            let row = dst % rows;
+            chunk.copy_from_slice(&values[row * cols + col].to_le_bytes());
+        }
+    }
+    pad_to_8(out, byte_len)
+}
+
+fn write_numeric_data_i32(
+    out: &mut Vec<u8>,
+    data_type: u32,
+    rows: usize,
+    cols: usize,
+    values: &[i32],
+) -> io::Result<()> {
+    let byte_len = std::mem::size_of_val(values);
+    write_tag(out, data_type, byte_len)?;
+    let start = out.len();
+    out.resize(start + byte_len, 0);
+    let payload = &mut out[start..start + byte_len];
+    if values.len() >= PARALLEL_MAT_WRITE_VALUES {
+        payload
+            .par_chunks_mut(std::mem::size_of::<i32>())
+            .enumerate()
+            .for_each(|(dst, chunk)| {
+                let col = dst / rows;
+                let row = dst % rows;
+                chunk.copy_from_slice(&values[row * cols + col].to_le_bytes());
+            });
+    } else {
+        for (dst, chunk) in payload.chunks_mut(std::mem::size_of::<i32>()).enumerate() {
+            let col = dst / rows;
+            let row = dst % rows;
+            chunk.copy_from_slice(&values[row * cols + col].to_le_bytes());
+        }
+    }
+    pad_to_8(out, byte_len)
+}
+
+fn write_numeric_data_u32(
+    out: &mut Vec<u8>,
+    data_type: u32,
+    rows: usize,
+    cols: usize,
+    values: &[u32],
+) -> io::Result<()> {
+    let byte_len = std::mem::size_of_val(values);
+    write_tag(out, data_type, byte_len)?;
+    let start = out.len();
+    out.resize(start + byte_len, 0);
+    let payload = &mut out[start..start + byte_len];
+    if values.len() >= PARALLEL_MAT_WRITE_VALUES {
+        payload
+            .par_chunks_mut(std::mem::size_of::<u32>())
+            .enumerate()
+            .for_each(|(dst, chunk)| {
+                let col = dst / rows;
+                let row = dst % rows;
+                chunk.copy_from_slice(&values[row * cols + col].to_le_bytes());
+            });
+    } else {
+        for (dst, chunk) in payload.chunks_mut(std::mem::size_of::<u32>()).enumerate() {
+            let col = dst / rows;
+            let row = dst % rows;
+            chunk.copy_from_slice(&values[row * cols + col].to_le_bytes());
+        }
+    }
+    pad_to_8(out, byte_len)
+}
+
+fn write_numeric_data_u8(
+    out: &mut Vec<u8>,
+    data_type: u32,
+    rows: usize,
+    cols: usize,
+    values: &[u8],
+) -> io::Result<()> {
+    let byte_len = values.len();
+    write_tag(out, data_type, byte_len)?;
+    out.reserve(byte_len + 8);
     for col in 0..cols {
         for row in 0..rows {
-            write_value(out, &values[row * cols + col])?;
+            out.push(values[row * cols + col]);
         }
     }
     pad_to_8(out, byte_len)
 }
 
 fn write_complex_f32(matrix: &ComplexMatrixF32, out: &mut Vec<u8>) -> io::Result<()> {
-    let real: Vec<f32> = matrix.values.iter().map(|value| value.0).collect();
-    let imag: Vec<f32> = matrix.values.iter().map(|value| value.1).collect();
-    write_numeric_data(
-        out,
-        MI_SINGLE,
-        matrix.rows,
-        matrix.cols,
-        &real,
-        write_f32_value,
-    )?;
-    write_numeric_data(
-        out,
-        MI_SINGLE,
-        matrix.rows,
-        matrix.cols,
-        &imag,
-        write_f32_value,
-    )
+    write_complex_f32_component(out, matrix.rows, matrix.cols, &matrix.values, true)?;
+    write_complex_f32_component(out, matrix.rows, matrix.cols, &matrix.values, false)
+}
+
+fn write_complex_f32_component(
+    out: &mut Vec<u8>,
+    rows: usize,
+    cols: usize,
+    values: &[(f32, f32)],
+    real: bool,
+) -> io::Result<()> {
+    let byte_len = values.len() * std::mem::size_of::<f32>();
+    write_tag(out, MI_SINGLE, byte_len)?;
+    let start = out.len();
+    out.resize(start + byte_len, 0);
+    let payload = &mut out[start..start + byte_len];
+    if values.len() >= PARALLEL_MAT_WRITE_VALUES {
+        payload
+            .par_chunks_mut(std::mem::size_of::<f32>())
+            .enumerate()
+            .for_each(|(dst, chunk)| {
+                let col = dst / rows;
+                let row = dst % rows;
+                let value = values[row * cols + col];
+                let component = if real { value.0 } else { value.1 };
+                chunk.copy_from_slice(&component.to_le_bytes());
+            });
+    } else {
+        for (dst, chunk) in payload.chunks_mut(std::mem::size_of::<f32>()).enumerate() {
+            let col = dst / rows;
+            let row = dst % rows;
+            let value = values[row * cols + col];
+            let component = if real { value.0 } else { value.1 };
+            chunk.copy_from_slice(&component.to_le_bytes());
+        }
+    }
+    pad_to_8(out, byte_len)
 }
 
 fn write_complex_f32_array(array: &ComplexArrayF32, out: &mut Vec<u8>) -> io::Result<()> {
@@ -951,24 +1116,43 @@ fn write_complex_f32_array(array: &ComplexArrayF32, out: &mut Vec<u8>) -> io::Re
 }
 
 fn write_complex_f64(matrix: &ComplexMatrixF64, out: &mut Vec<u8>) -> io::Result<()> {
-    let real: Vec<f64> = matrix.values.iter().map(|value| value.0).collect();
-    let imag: Vec<f64> = matrix.values.iter().map(|value| value.1).collect();
-    write_numeric_data(
-        out,
-        MI_DOUBLE,
-        matrix.rows,
-        matrix.cols,
-        &real,
-        write_f64_value,
-    )?;
-    write_numeric_data(
-        out,
-        MI_DOUBLE,
-        matrix.rows,
-        matrix.cols,
-        &imag,
-        write_f64_value,
-    )
+    write_complex_f64_component(out, matrix.rows, matrix.cols, &matrix.values, true)?;
+    write_complex_f64_component(out, matrix.rows, matrix.cols, &matrix.values, false)
+}
+
+fn write_complex_f64_component(
+    out: &mut Vec<u8>,
+    rows: usize,
+    cols: usize,
+    values: &[(f64, f64)],
+    real: bool,
+) -> io::Result<()> {
+    let byte_len = values.len() * std::mem::size_of::<f64>();
+    write_tag(out, MI_DOUBLE, byte_len)?;
+    let start = out.len();
+    out.resize(start + byte_len, 0);
+    let payload = &mut out[start..start + byte_len];
+    if values.len() >= PARALLEL_MAT_WRITE_VALUES {
+        payload
+            .par_chunks_mut(std::mem::size_of::<f64>())
+            .enumerate()
+            .for_each(|(dst, chunk)| {
+                let col = dst / rows;
+                let row = dst % rows;
+                let value = values[row * cols + col];
+                let component = if real { value.0 } else { value.1 };
+                chunk.copy_from_slice(&component.to_le_bytes());
+            });
+    } else {
+        for (dst, chunk) in payload.chunks_mut(std::mem::size_of::<f64>()).enumerate() {
+            let col = dst / rows;
+            let row = dst % rows;
+            let value = values[row * cols + col];
+            let component = if real { value.0 } else { value.1 };
+            chunk.copy_from_slice(&component.to_le_bytes());
+        }
+    }
+    pad_to_8(out, byte_len)
 }
 
 fn write_numeric_data_nd<T>(
@@ -1007,24 +1191,9 @@ fn increment_col_major_index(indices: &mut [usize], dims: &[usize]) {
     }
 }
 
-fn write_f64_value(out: &mut Vec<u8>, value: &f64) -> io::Result<()> {
-    out.write_all(&value.to_le_bytes())
-}
-
 fn write_f32_value(out: &mut Vec<u8>, value: &f32) -> io::Result<()> {
-    out.write_all(&value.to_le_bytes())
-}
-
-fn write_i32_value(out: &mut Vec<u8>, value: &i32) -> io::Result<()> {
-    out.write_all(&value.to_le_bytes())
-}
-
-fn write_u32_value(out: &mut Vec<u8>, value: &u32) -> io::Result<()> {
-    out.write_all(&value.to_le_bytes())
-}
-
-fn write_u8_value(out: &mut Vec<u8>, value: &u8) -> io::Result<()> {
-    out.write_all(&[*value])
+    out.extend_from_slice(&value.to_le_bytes());
+    Ok(())
 }
 
 fn write_tag<W: Write>(out: &mut W, data_type: u32, bytes: usize) -> io::Result<()> {
@@ -1058,8 +1227,18 @@ fn parse_mat_file(path: &Path, bytes: &[u8]) -> Result<MatData, MatError> {
             })
         }
     };
-    let mut offset = 128;
     let mut variables = BTreeMap::new();
+    parse_top_level_elements(path, &bytes[128..], endian, &mut variables)?;
+    Ok(MatData { variables })
+}
+
+fn parse_top_level_elements(
+    path: &Path,
+    bytes: &[u8],
+    endian: Endian,
+    variables: &mut BTreeMap<String, MatArray>,
+) -> Result<(), MatError> {
+    let mut offset = 0;
     while offset < bytes.len() {
         let element = read_element(bytes, &mut offset, endian).map_err(|message| {
             MatError::MalformedFile {
@@ -1076,10 +1255,8 @@ fn parse_mat_file(path: &Path, bytes: &[u8]) -> Result<MatData, MatError> {
                 variables.insert(array.name.clone(), array);
             }
             MI_COMPRESSED => {
-                return Err(MatError::UnsupportedDataType {
-                    name: "<compressed>".to_string(),
-                    data_type: MI_COMPRESSED,
-                });
+                let decompressed = decompress_mat_element(path, element.data)?;
+                parse_top_level_elements(path, &decompressed, endian, variables)?;
             }
             other => {
                 return Err(MatError::UnsupportedDataType {
@@ -1089,7 +1266,421 @@ fn parse_mat_file(path: &Path, bytes: &[u8]) -> Result<MatData, MatError> {
             }
         }
     }
+    Ok(())
+}
+
+fn decompress_mat_element(path: &Path, bytes: &[u8]) -> Result<Vec<u8>, MatError> {
+    let mut decoder = ZlibDecoder::new(bytes);
+    let mut decompressed = Vec::new();
+    decoder
+        .read_to_end(&mut decompressed)
+        .map_err(|source| MatError::MalformedFile {
+            path: path.to_path_buf(),
+            message: format!("unable to decompress miCOMPRESSED element: {source}"),
+        })?;
+    Ok(decompressed)
+}
+
+fn find_hdf5_signature_offset(bytes: &[u8]) -> Option<usize> {
+    let scan_len = bytes.len().min(HDF5_SIGNATURE_SCAN_BYTES);
+    bytes[..scan_len]
+        .windows(HDF5_SIGNATURE.len())
+        .position(|window| window == HDF5_SIGNATURE)
+}
+
+fn read_hdf5_mat_file(
+    path: &Path,
+    offset: usize,
+    variables: Option<&[&str]>,
+) -> Result<MatData, MatError> {
+    if offset == 0 {
+        return read_hdf5_mat_payload(path, path, variables);
+    }
+
+    let temp_path = hdf5_temp_dir().join(format!(
+        "pystamps-mat-hdf5-{}-{}.h5",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| MatError::MalformedFile {
+                path: path.to_path_buf(),
+                message: err.to_string(),
+            })?
+            .as_nanos()
+    ));
+    {
+        let mut input = File::open(path).map_err(|source| MatError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        input
+            .seek(SeekFrom::Start(offset as u64))
+            .map_err(|source| MatError::Read {
+                path: path.to_path_buf(),
+                source,
+            })?;
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|source| MatError::Write {
+                path: temp_path.clone(),
+                source,
+            })?;
+        let mut buffer = vec![0_u8; HDF5_TEMP_COPY_BUFFER_BYTES];
+        loop {
+            let read = input.read(&mut buffer).map_err(|source| MatError::Read {
+                path: path.to_path_buf(),
+                source,
+            })?;
+            if read == 0 {
+                break;
+            }
+            output
+                .write_all(&buffer[..read])
+                .map_err(|source| MatError::Write {
+                    path: temp_path.clone(),
+                    source,
+                })?;
+        }
+        output.flush().map_err(|source| MatError::Write {
+            path: temp_path.clone(),
+            source,
+        })?;
+    }
+    let result = read_hdf5_mat_payload(path, &temp_path, variables);
+    let _ = fs::remove_file(&temp_path);
+    result
+}
+
+fn hdf5_temp_dir() -> PathBuf {
+    if let Some(path) = std::env::var_os("PYSTAMPS_HDF5_TMPDIR") {
+        return PathBuf::from(path);
+    }
+    let shm = Path::new("/dev/shm");
+    if shm.is_dir() {
+        return shm.to_path_buf();
+    }
+    std::env::temp_dir()
+}
+
+fn read_hdf5_mat_payload(
+    source_path: &Path,
+    hdf5_path: &Path,
+    variables: Option<&[&str]>,
+) -> Result<MatData, MatError> {
+    let file = rust_hdf5::H5File::open(hdf5_path).map_err(|err| MatError::MalformedFile {
+        path: source_path.to_path_buf(),
+        message: format!("unable to open HDF5 MAT payload: {err}"),
+    })?;
+    let names = variables
+        .map(|names| names.iter().map(|name| (*name).to_string()).collect())
+        .unwrap_or_else(|| file.dataset_names());
+    let mut variables = BTreeMap::new();
+    for name in names {
+        let Ok(dataset) = file.dataset(&name) else {
+            continue;
+        };
+        let array = read_hdf5_dataset(source_path, &dataset, &name)?;
+        variables.insert(name, array);
+    }
     Ok(MatData { variables })
+}
+
+fn read_hdf5_dataset(
+    source_path: &Path,
+    dataset: &rust_hdf5::H5Dataset,
+    name: &str,
+) -> Result<MatArray, MatError> {
+    if let Some(matlab_class) = hdf5_matlab_class(dataset) {
+        match (matlab_class.as_str(), dataset.element_size()) {
+            ("single", 8) => return read_hdf5_complex_f32_dataset(dataset, name),
+            ("double", 16) => return read_hdf5_complex_f64_dataset(dataset, name),
+            ("single", 4) => {
+                if let Ok(values) = dataset.read_raw::<f32>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::F32(values)));
+                }
+            }
+            ("double", 8) => {
+                if let Ok(values) = dataset.read_raw::<f64>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::F64(values)));
+                }
+            }
+            ("uint8", 1) => {
+                if let Ok(values) = dataset.read_raw::<u8>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::U8(values)));
+                }
+            }
+            ("int8", 1) => {
+                if let Ok(values) = dataset.read_raw::<i8>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::I8(values)));
+                }
+            }
+            ("uint16", 2) => {
+                if let Ok(values) = dataset.read_raw::<u16>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::U16(values)));
+                }
+            }
+            ("int16", 2) => {
+                if let Ok(values) = dataset.read_raw::<i16>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::I16(values)));
+                }
+            }
+            ("uint32", 4) => {
+                if let Ok(values) = dataset.read_raw::<u32>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::U32(values)));
+                }
+            }
+            ("int32", 4) => {
+                if let Ok(values) = dataset.read_raw::<i32>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::I32(values)));
+                }
+            }
+            ("uint64", 8) => {
+                if let Ok(values) = dataset.read_raw::<u64>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::U64(values)));
+                }
+            }
+            ("int64", 8) => {
+                if let Ok(values) = dataset.read_raw::<i64>() {
+                    return Ok(real_hdf5_array(name, dataset, NumericData::I64(values)));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    if let Ok(values) = dataset.read_raw::<f64>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::F64(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<f32>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::F32(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<u8>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::U8(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<i8>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::I8(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<u16>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::U16(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<i16>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::I16(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<u32>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::U32(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<i32>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::I32(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<u64>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::U64(values)));
+    }
+    if let Ok(values) = dataset.read_raw::<i64>() {
+        return Ok(real_hdf5_array(name, dataset, NumericData::I64(values)));
+    }
+    if let Ok(array) = read_hdf5_complex_f64_dataset(dataset, name) {
+        return Ok(array);
+    }
+    if let Ok(array) = read_hdf5_complex_f32_dataset(dataset, name) {
+        return Ok(array);
+    }
+    Err(MatError::UnsupportedDataType {
+        name: format!("HDF5 dataset {name} in {}", source_path.display()),
+        data_type: 0,
+    })
+}
+
+fn hdf5_matlab_class(dataset: &rust_hdf5::H5Dataset) -> Option<String> {
+    let attr = dataset.attr("MATLAB_class").ok()?;
+    attr.read_string()
+        .ok()
+        .map(|class| class.trim_matches(char::from(0)).trim().to_string())
+}
+
+fn read_hdf5_complex_f32_dataset(
+    dataset: &rust_hdf5::H5Dataset,
+    name: &str,
+) -> Result<MatArray, MatError> {
+    let values =
+        dataset
+            .read_raw::<rust_hdf5::Complex32>()
+            .map_err(|_| MatError::UnsupportedDataType {
+                name: name.to_string(),
+                data_type: 0,
+            })?;
+    let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+    let (real, imag): (Vec<f32>, Vec<f32>) =
+        values.into_iter().map(|value| (value.re, value.im)).unzip();
+    Ok(MatArray {
+        name: name.to_string(),
+        rows,
+        cols,
+        numeric_type: NumericType::F32,
+        real: NumericData::F32(real),
+        imag: Some(NumericData::F32(imag)),
+    })
+}
+
+fn read_hdf5_complex_f64_dataset(
+    dataset: &rust_hdf5::H5Dataset,
+    name: &str,
+) -> Result<MatArray, MatError> {
+    let values =
+        dataset
+            .read_raw::<rust_hdf5::Complex64>()
+            .map_err(|_| MatError::UnsupportedDataType {
+                name: name.to_string(),
+                data_type: 0,
+            })?;
+    let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+    let (real, imag): (Vec<f64>, Vec<f64>) =
+        values.into_iter().map(|value| (value.re, value.im)).unzip();
+    Ok(MatArray {
+        name: name.to_string(),
+        rows,
+        cols,
+        numeric_type: NumericType::F64,
+        real: NumericData::F64(real),
+        imag: Some(NumericData::F64(imag)),
+    })
+}
+
+fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData) -> MatArray {
+    match data {
+        NumericData::F64(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::F64,
+                real: NumericData::F64(values),
+                imag: None,
+            }
+        }
+        NumericData::F32(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::F32,
+                real: NumericData::F32(values),
+                imag: None,
+            }
+        }
+        NumericData::I8(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::I8,
+                real: NumericData::I8(values),
+                imag: None,
+            }
+        }
+        NumericData::U8(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::U8,
+                real: NumericData::U8(values),
+                imag: None,
+            }
+        }
+        NumericData::I16(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::I16,
+                real: NumericData::I16(values),
+                imag: None,
+            }
+        }
+        NumericData::U16(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::U16,
+                real: NumericData::U16(values),
+                imag: None,
+            }
+        }
+        NumericData::I32(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::I32,
+                real: NumericData::I32(values),
+                imag: None,
+            }
+        }
+        NumericData::U32(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::U32,
+                real: NumericData::U32(values),
+                imag: None,
+            }
+        }
+        NumericData::I64(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::I64,
+                real: NumericData::I64(values),
+                imag: None,
+            }
+        }
+        NumericData::U64(values) => {
+            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            MatArray {
+                name: name.to_string(),
+                rows,
+                cols,
+                numeric_type: NumericType::U64,
+                real: NumericData::U64(values),
+                imag: None,
+            }
+        }
+    }
+}
+
+fn orient_hdf5_values<T: Copy>(shape: &[usize], values: Vec<T>) -> (usize, usize, Vec<T>) {
+    match shape {
+        [] => (1, 1, values),
+        [_] => (values.len(), 1, values),
+        [raw_rows, raw_cols] => {
+            let mut out = Vec::with_capacity(values.len());
+            for row in 0..*raw_cols {
+                for col in 0..*raw_rows {
+                    out.push(values[col * *raw_cols + row]);
+                }
+            }
+            (*raw_cols, *raw_rows, out)
+        }
+        _ => {
+            let rows = *shape.last().unwrap_or(&1);
+            let cols = values.len() / rows.max(1);
+            (rows, cols, values)
+        }
+    }
 }
 
 fn parse_matrix_element(bytes: &[u8], endian: Endian) -> Result<MatArray, MatError> {
@@ -1533,6 +2124,8 @@ fn read_element<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::write::ZlibEncoder;
+    use flate2::Compression;
     use std::process::Command;
 
     #[test]
@@ -1571,6 +2164,117 @@ mod tests {
         let matrix = data.get_f64_matrix("matrix").unwrap();
         assert_eq!((matrix.rows, matrix.cols), (2, 3));
         assert_eq!(matrix.values, vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn reads_compressed_mat_v5_elements() {
+        let path = temp_path("pystamps-mat-compressed");
+        let mut mat = MatFile::new(&path);
+        mat.add_f64_col_vector("n_ps", vec![3.0]).unwrap();
+        mat.add_f64_matrix(
+            "ij",
+            3,
+            3,
+            vec![1.0, 10.0, 20.0, 2.0, 11.0, 21.0, 3.0, 12.0, 22.0],
+        )
+        .unwrap();
+        mat.write().unwrap();
+
+        let original = std::fs::read(&path).unwrap();
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&original[128..]).unwrap();
+        let compressed = encoder.finish().unwrap();
+        let mut bytes = original[..128].to_vec();
+        write_tag(&mut bytes, MI_COMPRESSED, compressed.len()).unwrap();
+        bytes.extend_from_slice(&compressed);
+        pad_to_8(&mut bytes, compressed.len()).unwrap();
+        std::fs::write(&path, bytes).unwrap();
+
+        let data = MatData::read(&path).unwrap();
+        let n_ps = data.get_f64_matrix("n_ps").unwrap();
+        assert_eq!(n_ps.values, vec![3.0]);
+        let ij = data.get_f64_matrix("ij").unwrap();
+        assert_eq!((ij.rows, ij.cols), (3, 3));
+        assert_eq!(ij.values[8], 22.0);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn reads_matlab_hdf5_userblock_numeric_dataset() {
+        let path = temp_path("pystamps-mat-hdf5-userblock");
+        let raw_path = path.with_extension("h5");
+        let h5 = rust_hdf5::H5File::create(&raw_path).unwrap();
+        let ds = h5
+            .new_dataset::<f64>()
+            .shape(&[3usize, 2usize])
+            .create("ij")
+            .unwrap();
+        ds.write_raw(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        h5.close().unwrap();
+
+        let mut matlab_hdf5 = File::create(&path).unwrap();
+        matlab_hdf5.write_all(&vec![b' '; 512]).unwrap();
+        matlab_hdf5
+            .write_all(&std::fs::read(&raw_path).unwrap())
+            .unwrap();
+        std::fs::remove_file(&raw_path).unwrap();
+
+        let data = MatData::read(&path).unwrap();
+        let ij = data.get_f64_matrix("ij").unwrap();
+        assert_eq!((ij.rows, ij.cols), (2, 3));
+        assert_eq!(ij.values, vec![1.0, 3.0, 5.0, 2.0, 4.0, 6.0]);
+        std::fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn reads_matlab_hdf5_userblock_complex_single_dataset() {
+        let path = temp_path("pystamps-mat-hdf5-complex-userblock");
+        let raw_path = path.with_extension("h5");
+        let h5 = rust_hdf5::H5File::create(&raw_path).unwrap();
+        let ds = h5
+            .new_dataset::<rust_hdf5::Complex32>()
+            .shape(&[2usize, 3usize])
+            .create("ph_patch")
+            .unwrap();
+        ds.write_raw(&[
+            rust_hdf5::Complex32 { re: 1.0, im: -1.0 },
+            rust_hdf5::Complex32 { re: 2.0, im: -2.0 },
+            rust_hdf5::Complex32 { re: 3.0, im: -3.0 },
+            rust_hdf5::Complex32 { re: 4.0, im: -4.0 },
+            rust_hdf5::Complex32 { re: 5.0, im: -5.0 },
+            rust_hdf5::Complex32 { re: 6.0, im: -6.0 },
+        ])
+        .unwrap();
+        ds.new_attr::<rust_hdf5::VarLenUnicode>()
+            .shape(())
+            .create("MATLAB_class")
+            .unwrap()
+            .write_string("single")
+            .unwrap();
+        h5.close().unwrap();
+
+        let mut matlab_hdf5 = File::create(&path).unwrap();
+        matlab_hdf5.write_all(&vec![b' '; 512]).unwrap();
+        matlab_hdf5
+            .write_all(&std::fs::read(&raw_path).unwrap())
+            .unwrap();
+        std::fs::remove_file(&raw_path).unwrap();
+
+        let data = MatData::read(&path).unwrap();
+        let ph_patch = data.get_complex_f32_matrix("ph_patch").unwrap();
+        assert_eq!((ph_patch.rows, ph_patch.cols), (3, 2));
+        assert_eq!(
+            ph_patch.values,
+            vec![
+                (1.0, -1.0),
+                (4.0, -4.0),
+                (2.0, -2.0),
+                (5.0, -5.0),
+                (3.0, -3.0),
+                (6.0, -6.0),
+            ]
+        );
         std::fs::remove_file(path).unwrap();
     }
 

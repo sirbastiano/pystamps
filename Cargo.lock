@@ -691,6 +691,9 @@ dependencies = [
 name = "pystamps-mat"
 version = "0.1.0"
 dependencies = [
+ "flate2",
+ "rayon",
+ "rust-hdf5",
  "thiserror",
 ]
 

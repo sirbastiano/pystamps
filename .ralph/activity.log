@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-27 02:06:03 | run=20260526-142844-454144 | iter=7 | mode=build | story=US-007 | duration=9248s | status=success
 - 2026-05-26 23:31:51 | run=20260526-142844-454144 | iter=6 | mode=build | story=US-006 | duration=6079s | status=success
 - 2026-05-26 21:50:28 | run=20260526-142844-454144 | iter=5 | mode=build | story=US-005 | duration=11605s | status=success
 - 2026-05-26 18:36:52 | run=20260526-142844-454144 | iter=4 | mode=build | story=US-004 | duration=4740s | status=success
@@ -216,3 +217,33 @@
 [2026-05-27 01:54:52] US-007 verification: release build, accelerated kernel pytest, and diff check passed
 [2026-05-27 02:01:28] US-007 verification: make native-full-chain-verify failed on downstream stage 5-8 performance budgets; Stage 4 patches were under budget
 [2026-05-27 02:04:54] US-007: updated progress log with commit and verification outcome
+[2026-05-27 02:06:02] ITERATION 7 end (duration=9248s)
+[2026-05-27 02:06:06] ITERATION 8 start (mode=build story=US-008)
+[2026-05-27 02:07:26] Start work on US-008 Stage 5 promotion and merge parity
+[2026-05-27 02:09:47] US-008: auditing current Stage 5 parity and merge behavior before edits
+[2026-05-27 02:11:53] US-008: running native Stage 5 merge against existing promoted patch artifacts
+[2026-05-27 02:16:08] US-008: added Stage 5 manifest validation and HDF5 optional vector promotion tests
+[2026-05-27 02:17:58] US-008: fixed Stage 5 patch directory fallback after focused compile failure
+[2026-05-27 02:18:56] US-008 verification: focused native_stage5 Rust tests passed
+[2026-05-27 02:20:01] US-008 verification: release pystamps-native build passed
+[2026-05-27 02:20:09] US-008 verification: direct Stage 5 merge rejects subset patch.list when patch.list_old has four patches
+[2026-05-27 02:23:03] US-008: added compressed MAT v5 reader support for Stage 5 inputs
+[2026-05-27 02:24:11] US-008 verification: compressed MAT and native Stage 5 tests passed after MAT reader update
+[2026-05-27 02:30:53] US-008: extended MAT helper to read MATLAB v7.3 HDF5 user-block datasets
+[2026-05-27 02:40:05] US-008: focused native_stage5 test suite passed after MAT v7.3 reader changes
+[2026-05-27 02:42:32] US-008: release native binary built after Stage 5 MAT reader changes
+[2026-05-27 03:00:12] US-008: MAT HDF5 and native_stage5 focused test suites passed after complex/user-block fixes
+[2026-05-27 03:20:22] US-008: selective Stage 5 MAT reads passed focused MAT and native_stage5 tests
+[2026-05-27 03:42:47] US-008: Stage 5 clone-reduction and MAT writer loop changes passed focused tests
+[2026-05-27 03:59:36] US-008: parallel Stage 5 row selection and IFG accumulation passed focused tests
+[2026-05-27 04:13:43] US-008: parallel MAT writer payload fill passed MAT and native_stage5 tests
+[2026-05-27 04:53:40] US-008: Stage 5 focused gate reaches golden PS count and clears budget on stage4_debug source; golden-source check differs because source manifests regenerate a different patch population
+[2026-05-27 04:53:52] US-008: negative patch.list/patch.list_old mismatch case fails with structured Stage 5 error
+[2026-05-27 05:00:53] US-008: cargo test --workspace passed
+[2026-05-27 05:04:29] US-008: release build and accelerated kernel pytest gate passed
+[2026-05-27 05:16:06] US-008: full native chain gate completed native stages but failed performance budgets in merged stages 5-8 and total runtime
+[2026-05-27 05:19:12] US-008: rerunning final required verification gates after final Stage 5 edits
+[2026-05-27 05:28:53] US-008: cargo test --workspace passed after final Stage 5 edits
+[2026-05-27 05:31:14] US-008: release pystamps-native build passed
+[2026-05-27 05:33:52] US-008: accelerated kernel pytest gate passed
+[2026-05-27 05:35:38] US-008: pre-commit review completed; cargo fmt difference is outside Stage 5 scope, required diff check passed

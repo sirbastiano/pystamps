@@ -1,5 +1,6 @@
 use crate::CoreError;
 use pystamps_mat::{ComplexMatrixF32, MatData, MatFile, Matrix};
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -8,6 +9,22 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const HDF5_SIGNATURE: &[u8; 8] = b"\x89HDF\r\n\x1a\n";
 const HDF5_SIGNATURE_SCAN_BYTES: usize = 1024 * 1024;
+const STAGE5_PS1_VARS: &[&str] = &[
+    "n_ps",
+    "ij",
+    "lonlat",
+    "xy",
+    "master_ix",
+    "bperp",
+    "day",
+    "ll0",
+    "master_day",
+    "n_ifg",
+    "n_image",
+    "mean_incidence",
+    "mean_range",
+];
+const STAGE5_SELECT1_VARS: &[&str] = &["ix", "keep_ix", "K_ps2", "C_ps2", "coh_ps2", "ph_res2"];
 
 #[derive(Clone, Debug)]
 struct Stage5Parms {
@@ -45,11 +62,11 @@ struct Stage5PatchBundle {
 
 pub fn run_stage5_patch_native(patch_dir: impl AsRef<Path>) -> Result<String, CoreError> {
     let patch_dir = patch_dir.as_ref();
-    let ps1 = read_mat_stage5(patch_dir, "ps1.mat")?;
-    let pm1 = read_mat_stage5(patch_dir, "pm1.mat")?;
-    let select1 = read_mat_stage5(patch_dir, "select1.mat")?;
-    let weed1 = read_mat_stage5(patch_dir, "weed1.mat")?;
-    let ph1 = read_mat_stage5(patch_dir, "ph1.mat")?;
+    let ps1 = read_mat_stage5_vars(patch_dir, "ps1.mat", STAGE5_PS1_VARS)?;
+    let pm1 = read_mat_stage5_vars(patch_dir, "pm1.mat", &["ph_patch"])?;
+    let select1 = read_mat_stage5_vars(patch_dir, "select1.mat", STAGE5_SELECT1_VARS)?;
+    let weed1 = read_mat_stage5_vars(patch_dir, "weed1.mat", &["ix_weed"])?;
+    let ph1 = read_mat_stage5_vars(patch_dir, "ph1.mat", &["ph"])?;
     let parms = load_stage5_parms(patch_dir);
 
     let n_ps1 = scalar_from_mat(&ps1, "n_ps", 0.0).round() as usize;
@@ -143,10 +160,6 @@ pub fn run_stage5_patch_native(patch_dir: impl AsRef<Path>) -> Result<String, Co
     ps2.write()?;
 
     let ph2 = select_rows_complex(&ph1, &final_ix0);
-    let mut ph2_mat = MatFile::new(patch_dir.join("ph2.mat"));
-    ph2_mat.add_complex_f32_matrix("ph", final_ix0.len(), ph1.cols, ph2.clone())?;
-    ph2_mat.write()?;
-
     let k_ps2 = ps_vector_f64(&select1, "K_ps2", ix.len(), "select1.K_ps2")?;
     let c_ps2 = ps_vector_f64(&select1, "C_ps2", ix.len(), "select1.C_ps2")?;
     let coh_ps2 = ps_vector_f64(&select1, "coh_ps2", ix.len(), "select1.coh_ps2")?;
@@ -160,27 +173,12 @@ pub fn run_stage5_patch_native(patch_dir: impl AsRef<Path>) -> Result<String, Co
     let ph_patch2_rows: Vec<usize> = ix2.iter().map(|&value| (value - 1) as usize).collect();
     let ph_patch2 = select_rows_complex_matrix(&ph_patch_all, &ph_patch2_rows);
     let ph_patch = select_rows_complex_matrix(&ph_patch2, &kept_ix2_positions);
-
-    let mut pm2 = MatFile::new(patch_dir.join("pm2.mat"));
-    pm2.add_f64_col_vector("K_ps", k_ps.clone())?;
-    pm2.add_f64_col_vector("C_ps", c_ps.clone())?;
-    pm2.add_f64_col_vector("coh_ps", coh_ps)?;
-    pm2.add_complex_f32_matrix(
-        "ph_patch",
-        final_ix0.len(),
-        ph_patch_all.cols,
-        ph_patch.values.clone(),
-    )?;
-    pm2.add_f32_matrix("ph_res", final_ix0.len(), ph_res2.cols, ph_res)?;
-    pm2.write()?;
-
-    write_psver(patch_dir)?;
     promote_optional_vector_f32(patch_dir, "hgt1.mat", "hgt2.mat", "hgt", n_ps1, &final_ix0)?;
     promote_optional_vector_f64(patch_dir, "la1.mat", "la2.mat", "la", n_ps1, &final_ix0)?;
     promote_optional_vector_f64(patch_dir, "da1.mat", "da2.mat", "D_A", n_ps1, &final_ix0)?;
 
     let bperp_mat2 = if patch_dir.join("bp1.mat").exists() {
-        let bp1 = read_mat_stage5(patch_dir, "bp1.mat")?;
+        let bp1 = read_mat_stage5_vars(patch_dir, "bp1.mat", &["bperp_mat"])?;
         let bperp_mat = ps_matrix_f32(&bp1, "bperp_mat", n_ps1, "bp1.bperp_mat")?;
         let selected = select_rows_f32(&bperp_mat, &final_ix0);
         let mut bp2 = MatFile::new(patch_dir.join("bp2.mat"));
@@ -218,6 +216,25 @@ pub fn run_stage5_patch_native(patch_dir: impl AsRef<Path>) -> Result<String, Co
         &ph_patch.values,
         master_ix.round() as usize,
     )?;
+
+    let mut ph2_mat = MatFile::new(patch_dir.join("ph2.mat"));
+    ph2_mat.add_complex_f32_matrix("ph", final_ix0.len(), ph1.cols, ph2)?;
+    ph2_mat.write()?;
+
+    let mut pm2 = MatFile::new(patch_dir.join("pm2.mat"));
+    pm2.add_f64_col_vector("K_ps", k_ps)?;
+    pm2.add_f64_col_vector("C_ps", c_ps)?;
+    pm2.add_f64_col_vector("coh_ps", coh_ps)?;
+    pm2.add_complex_f32_matrix(
+        "ph_patch",
+        final_ix0.len(),
+        ph_patch_all.cols,
+        ph_patch.values,
+    )?;
+    pm2.add_f32_matrix("ph_res", final_ix0.len(), ph_res2.cols, ph_res)?;
+    pm2.write()?;
+
+    write_psver(patch_dir)?;
 
     Ok(format!(
         "Stage 5 promoted {} PS to version 2",
@@ -423,45 +440,6 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
         ij[row * 3] = (row + 1) as f64;
     }
     let xy = merged_xy(&xy_sorted);
-
-    write_merged_ps2(dataset_root, &base_ps, &ij, &lonlat, &xy, &ll0_xy)?;
-    write_merged_ph2(dataset_root, n_ps, ph_cols, &ph2)?;
-    write_merged_pm2(
-        dataset_root,
-        n_ps,
-        ph_patch_cols,
-        ph_res_cols,
-        &k_ps,
-        &c_ps,
-        &coh_ps,
-        &ph_patch,
-        &ph_res,
-    )?;
-    write_psver(dataset_root)?;
-
-    if !has_bp {
-        return stage5_err("bp2.mat is required to write merged Stage 5 outputs");
-    }
-    let mut bp2 = MatFile::new(dataset_root.join("bp2.mat"));
-    bp2.add_f32_matrix("bperp_mat", n_ps, bp_cols, bp.clone())?;
-    bp2.write()?;
-    if has_hgt {
-        let mut hgt2 = MatFile::new(dataset_root.join("hgt2.mat"));
-        hgt2.add_f64_col_vector("hgt", hgt.clone())?;
-        hgt2.write()?;
-    }
-    if has_la {
-        let mut la2 = MatFile::new(dataset_root.join("la2.mat"));
-        la2.add_f64_col_vector("la", la.clone())?;
-        la2.write()?;
-    }
-    if has_rc {
-        let rc_payload = format_merged_rc2_payload(&rc, n_ps, rc_cols);
-        let mut rc2 = MatFile::new(dataset_root.join("rc2.mat"));
-        rc2.add_complex_f32_matrix("ph_rc", rc_cols, n_ps, rc_payload)?;
-        rc2.write()?;
-    }
-
     let ifg_std = merged_ifg_std(
         &parms,
         &base_ps,
@@ -475,6 +453,45 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
         &k_ps,
         &c_ps,
     )?;
+
+    write_merged_ps2(dataset_root, &base_ps, &ij, &lonlat, &xy, &ll0_xy)?;
+    write_merged_ph2(dataset_root, n_ps, ph_cols, ph2)?;
+    write_merged_pm2(
+        dataset_root,
+        n_ps,
+        ph_patch_cols,
+        ph_res_cols,
+        k_ps,
+        c_ps,
+        coh_ps,
+        ph_patch,
+        ph_res,
+    )?;
+    write_psver(dataset_root)?;
+
+    if !has_bp {
+        return stage5_err("bp2.mat is required to write merged Stage 5 outputs");
+    }
+    let mut bp2 = MatFile::new(dataset_root.join("bp2.mat"));
+    bp2.add_f32_matrix("bperp_mat", n_ps, bp_cols, bp)?;
+    bp2.write()?;
+    if has_hgt {
+        let mut hgt2 = MatFile::new(dataset_root.join("hgt2.mat"));
+        hgt2.add_f64_col_vector("hgt", hgt)?;
+        hgt2.write()?;
+    }
+    if has_la {
+        let mut la2 = MatFile::new(dataset_root.join("la2.mat"));
+        la2.add_f64_col_vector("la", la)?;
+        la2.write()?;
+    }
+    if has_rc {
+        let rc_payload = format_merged_rc2_payload(&rc, n_ps, rc_cols);
+        let mut rc2 = MatFile::new(dataset_root.join("rc2.mat"));
+        rc2.add_complex_f32_matrix("ph_rc", rc_cols, n_ps, rc_payload)?;
+        rc2.write()?;
+    }
+
     let mut ifgstd = MatFile::new(dataset_root.join("ifgstd2.mat"));
     ifgstd.add_f32_col_vector("ifg_std", ifg_std)?;
     ifgstd.write()?;
@@ -490,25 +507,46 @@ fn read_mat_stage5(patch_dir: &Path, filename: &str) -> Result<MatData, CoreErro
         .map_err(|err| stage5_err_owned(format!("unable to read {filename}: {err}")))
 }
 
+fn read_mat_stage5_vars(
+    patch_dir: &Path,
+    filename: &str,
+    variables: &[&str],
+) -> Result<MatData, CoreError> {
+    MatData::read_selected(patch_dir.join(filename), variables)
+        .map_err(|err| stage5_err_owned(format!("unable to read {filename}: {err}")))
+}
+
 fn discover_stage5_patch_dirs(dataset_root: &Path) -> Result<Vec<PathBuf>, CoreError> {
-    let patch_list = dataset_root.join("patch.list");
-    let mut discovered = Vec::new();
-    if patch_list.exists() {
-        let names = fs::read_to_string(&patch_list).map_err(|source| CoreError::FileIo {
-            path: patch_list.clone(),
-            source,
-        })?;
-        for name in names.lines().map(str::trim).filter(|name| !name.is_empty()) {
-            let path = dataset_root.join(name);
-            if path.is_dir() {
-                discovered.push(path);
-            }
-        }
-        if !discovered.is_empty() {
-            return Ok(discovered);
+    let patch_list_old = read_stage5_patch_manifest(dataset_root, "patch.list_old")?;
+    let patch_list = read_stage5_patch_manifest(dataset_root, "patch.list")?;
+    if let (Some(old), Some(current)) = (&patch_list_old, &patch_list) {
+        if old != current {
+            return stage5_err(format!(
+                "patch.list lists {} patch(es) but patch.list_old lists {}; restore the full patch.list before merged Stage 5",
+                current.len(),
+                old.len()
+            ));
         }
     }
+    let manifest = patch_list.or(patch_list_old);
+    if let Some(names) = manifest {
+        let mut discovered = Vec::with_capacity(names.len());
+        for name in names {
+            if !valid_stage5_patch_name(&name) {
+                return stage5_err(format!("Invalid patch name in manifest: {name}"));
+            }
+            let path = dataset_root.join(&name);
+            if !path.is_dir() {
+                return stage5_err(format!(
+                    "Patch manifest references missing patch directory: {name}"
+                ));
+            }
+            discovered.push(path);
+        }
+        return Ok(discovered);
+    }
 
+    let mut discovered = Vec::new();
     for entry in fs::read_dir(dataset_root).map_err(|source| CoreError::ReadDataset {
         path: dataset_root.to_path_buf(),
         source,
@@ -529,6 +567,31 @@ fn discover_stage5_patch_dirs(dataset_root: &Path) -> Result<Vec<PathBuf>, CoreE
     }
     discovered.sort();
     Ok(discovered)
+}
+
+fn read_stage5_patch_manifest(
+    dataset_root: &Path,
+    filename: &str,
+) -> Result<Option<Vec<String>>, CoreError> {
+    let path = dataset_root.join(filename);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let text = fs::read_to_string(&path).map_err(|source| CoreError::FileIo {
+        path: path.clone(),
+        source,
+    })?;
+    let names: Vec<String> = text
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(str::to_string)
+        .collect();
+    Ok((!names.is_empty()).then_some(names))
+}
+
+fn valid_stage5_patch_name(name: &str) -> bool {
+    name.starts_with("PATCH_") && !name.contains('/') && !name.contains('\\')
 }
 
 fn load_stage5_patch_bundle(patch: &Path) -> Result<Stage5PatchBundle, CoreError> {
@@ -750,10 +813,10 @@ fn write_merged_ph2(
     dataset_root: &Path,
     rows: usize,
     cols: usize,
-    ph2: &[(f32, f32)],
+    ph2: Vec<(f32, f32)>,
 ) -> Result<(), CoreError> {
     let mut mat = MatFile::new(dataset_root.join("ph2.mat"));
-    mat.add_complex_f32_matrix("ph", rows, cols, ph2.to_vec())?;
+    mat.add_complex_f32_matrix("ph", rows, cols, ph2)?;
     mat.write()?;
     Ok(())
 }
@@ -763,18 +826,18 @@ fn write_merged_pm2(
     rows: usize,
     ph_patch_cols: usize,
     ph_res_cols: usize,
-    k_ps: &[f64],
-    c_ps: &[f64],
-    coh_ps: &[f64],
-    ph_patch: &[(f32, f32)],
-    ph_res: &[f32],
+    k_ps: Vec<f64>,
+    c_ps: Vec<f64>,
+    coh_ps: Vec<f64>,
+    ph_patch: Vec<(f32, f32)>,
+    ph_res: Vec<f32>,
 ) -> Result<(), CoreError> {
     let mut pm2 = MatFile::new(dataset_root.join("pm2.mat"));
-    pm2.add_f64_col_vector("K_ps", k_ps.to_vec())?;
-    pm2.add_f64_col_vector("C_ps", c_ps.to_vec())?;
-    pm2.add_f64_col_vector("coh_ps", coh_ps.to_vec())?;
-    pm2.add_complex_f32_matrix("ph_patch", rows, ph_patch_cols, ph_patch.to_vec())?;
-    pm2.add_f32_matrix("ph_res", rows, ph_res_cols, ph_res.to_vec())?;
+    pm2.add_f64_col_vector("K_ps", k_ps)?;
+    pm2.add_f64_col_vector("C_ps", c_ps)?;
+    pm2.add_f64_col_vector("coh_ps", coh_ps)?;
+    pm2.add_complex_f32_matrix("ph_patch", rows, ph_patch_cols, ph_patch)?;
+    pm2.add_f32_matrix("ph_res", rows, ph_res_cols, ph_res)?;
     pm2.write()?;
     Ok(())
 }
@@ -812,34 +875,48 @@ fn merged_ifg_std(
         ));
     }
 
-    let mut sums = vec![0.0f64; ph_cols];
-    for row in 0..rows {
-        for col in 0..ph_cols {
-            let (patch_value, bperp) = if small_baseline {
-                (
-                    ph_patch[row * ph_patch_cols + col],
-                    bp[row * bp_cols + col] as f64,
-                )
-            } else if col + 1 == master_ix {
-                ((1.0, 0.0), 0.0)
-            } else {
-                let src_col = if col + 1 < master_ix { col } else { col - 1 };
-                (
-                    ph_patch[row * ph_patch_cols + src_col],
-                    bp[row * bp_cols + src_col] as f64,
-                )
-            };
-            let theta = if small_baseline {
-                k_ps[row] * bperp
-            } else {
-                k_ps[row] * bperp + c_ps[row]
-            };
-            let diff = mul_complex(ph2[row * ph_cols + col], conj_complex(patch_value));
-            let diff = mul_exp_neg_i(diff, theta);
-            let angle = (diff.1 as f64).atan2(diff.0 as f64);
-            sums[col] += angle * angle;
-        }
-    }
+    let sums = (0..rows)
+        .into_par_iter()
+        .fold(
+            || vec![0.0f64; ph_cols],
+            |mut local, row| {
+                for col in 0..ph_cols {
+                    let (patch_value, bperp) = if small_baseline {
+                        (
+                            ph_patch[row * ph_patch_cols + col],
+                            bp[row * bp_cols + col] as f64,
+                        )
+                    } else if col + 1 == master_ix {
+                        ((1.0, 0.0), 0.0)
+                    } else {
+                        let src_col = if col + 1 < master_ix { col } else { col - 1 };
+                        (
+                            ph_patch[row * ph_patch_cols + src_col],
+                            bp[row * bp_cols + src_col] as f64,
+                        )
+                    };
+                    let theta = if small_baseline {
+                        k_ps[row] * bperp
+                    } else {
+                        k_ps[row] * bperp + c_ps[row]
+                    };
+                    let diff = mul_complex(ph2[row * ph_cols + col], conj_complex(patch_value));
+                    let diff = mul_exp_neg_i(diff, theta);
+                    let angle = (diff.1 as f64).atan2(diff.0 as f64);
+                    local[col] += angle * angle;
+                }
+                local
+            },
+        )
+        .reduce(
+            || vec![0.0f64; ph_cols],
+            |mut left, right| {
+                for (left, right) in left.iter_mut().zip(right) {
+                    *left += right;
+                }
+                left
+            },
+        );
     Ok(sums
         .into_iter()
         .map(|sum| ((sum / rows.max(1) as f64).sqrt() * 180.0 / std::f64::consts::PI) as f32)
@@ -875,13 +952,9 @@ fn promote_optional_vector_f32(
     if !patch_dir.join(source_file).exists() {
         return Ok(());
     }
-    let source = read_mat_stage5(patch_dir, source_file)?;
-    let values = ps_vector_f32(
-        &source,
-        variable,
-        n_ps,
-        &format!("{source_file}.{variable}"),
-    )?;
+    let source_path = patch_dir.join(source_file);
+    let label = format!("{source_file}.{variable}");
+    let values = read_stage5_optional_vector_f32(&source_path, variable, n_ps, &label)?;
     let mut mat = MatFile::new(patch_dir.join(dest_file));
     mat.add_f32_col_vector(variable, select_values_f32(&values, final_ix0))?;
     mat.write()?;
@@ -908,13 +981,42 @@ fn promote_optional_vector_f64(
     Ok(())
 }
 
+fn read_stage5_optional_vector_f32(
+    path: &Path,
+    variable: &str,
+    n_ps: usize,
+    label: &str,
+) -> Result<Vec<f32>, CoreError> {
+    match MatData::read_selected(path, &[variable]) {
+        Ok(source) => match ps_vector_f32(&source, variable, n_ps, label) {
+            Ok(values) => return Ok(values),
+            Err(mat_err) => match read_hdf5_vector_f32(path, variable, n_ps) {
+                Ok(values) => return Ok(values),
+                Err(hdf_err) => {
+                    return stage5_err(format!(
+                        "{label} is missing in MAT v5 reader ({mat_err}); HDF5 fallback failed for {}: {hdf_err}",
+                        path.display()
+                    ))
+                }
+            },
+        },
+        Err(mat_err) => match read_hdf5_vector_f32(path, variable, n_ps) {
+            Ok(values) => Ok(values),
+            Err(hdf_err) => stage5_err(format!(
+                "unable to read {label} from {} as MAT v5 ({mat_err}) or HDF5 ({hdf_err})",
+                path.display()
+            )),
+        },
+    }
+}
+
 fn read_stage5_optional_vector_f64(
     path: &Path,
     variable: &str,
     n_ps: usize,
     label: &str,
 ) -> Result<Vec<f64>, CoreError> {
-    match MatData::read(path) {
+    match MatData::read_selected(path, &[variable]) {
         Ok(source) => match ps_vector_f64(&source, variable, n_ps, label) {
             Ok(values) => return Ok(values),
             Err(mat_err) => match read_hdf5_vector_f64(path, variable, n_ps) {
@@ -937,21 +1039,60 @@ fn read_stage5_optional_vector_f64(
     }
 }
 
+fn read_hdf5_vector_f32(path: &Path, variable: &str, n_ps: usize) -> Result<Vec<f32>, String> {
+    read_hdf5_with_userblock(path, |candidate| {
+        read_hdf5_vector_f32_direct(candidate, variable, n_ps)
+    })
+}
+
 fn read_hdf5_vector_f64(path: &Path, variable: &str, n_ps: usize) -> Result<Vec<f64>, String> {
-    match read_hdf5_vector_f64_direct(path, variable, n_ps) {
-        Ok(values) => return Ok(values),
+    read_hdf5_with_userblock(path, |candidate| {
+        read_hdf5_vector_f64_direct(candidate, variable, n_ps)
+    })
+}
+
+fn read_hdf5_with_userblock<T, F>(path: &Path, read_direct: F) -> Result<T, String>
+where
+    F: Fn(&Path) -> Result<T, String>,
+{
+    match read_direct(path) {
+        Ok(values) => Ok(values),
         Err(direct_err) => {
             let offset = find_hdf5_signature_offset(path)?;
             if offset == 0 {
                 return Err(direct_err);
             }
-            read_hdf5_vector_f64_from_userblock_file(path, offset, variable, n_ps).map_err(|userblock_err| {
+            read_hdf5_from_userblock_file(path, offset, read_direct).map_err(|userblock_err| {
                 format!(
                     "{direct_err}; MATLAB HDF5 user-block fallback at offset {offset} failed: {userblock_err}"
                 )
             })
         }
     }
+}
+
+fn read_hdf5_vector_f32_direct(
+    path: &Path,
+    variable: &str,
+    n_ps: usize,
+) -> Result<Vec<f32>, String> {
+    let file = rust_hdf5::H5File::open(path).map_err(|err| err.to_string())?;
+    let dataset = file.dataset(variable).map_err(|err| err.to_string())?;
+    let values = dataset
+        .read_raw::<f32>()
+        .or_else(|_| {
+            dataset
+                .read_raw::<f64>()
+                .map(|values| values.into_iter().map(|value| value as f32).collect())
+        })
+        .map_err(|err| err.to_string())?;
+    if values.len() != n_ps {
+        return Err(format!(
+            "{variable} has incompatible length {} for n_ps={n_ps}",
+            values.len()
+        ));
+    }
+    Ok(values)
 }
 
 fn read_hdf5_vector_f64_direct(
@@ -971,12 +1112,14 @@ fn read_hdf5_vector_f64_direct(
     Ok(values)
 }
 
-fn read_hdf5_vector_f64_from_userblock_file(
+fn read_hdf5_from_userblock_file<T, F>(
     path: &Path,
     offset: usize,
-    variable: &str,
-    n_ps: usize,
-) -> Result<Vec<f64>, String> {
+    read_direct: F,
+) -> Result<T, String>
+where
+    F: Fn(&Path) -> Result<T, String>,
+{
     let temp_path = std::env::temp_dir().join(format!(
         "pystamps-stage5-hdf5-{}-{}.h5",
         std::process::id(),
@@ -990,11 +1133,15 @@ fn read_hdf5_vector_f64_from_userblock_file(
         .seek(SeekFrom::Start(offset as u64))
         .map_err(|err| err.to_string())?;
     {
-        let mut output = fs::File::create(&temp_path).map_err(|err| err.to_string())?;
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|err| err.to_string())?;
         std::io::copy(&mut input, &mut output).map_err(|err| err.to_string())?;
         output.flush().map_err(|err| err.to_string())?;
     }
-    let result = read_hdf5_vector_f64_direct(&temp_path, variable, n_ps);
+    let result = read_direct(&temp_path);
     let _ = fs::remove_file(&temp_path);
     result
 }
@@ -1037,12 +1184,21 @@ fn write_rc2(
                 bperp_mat2.cols
             ));
         }
-        let mut ph_rc = Vec::with_capacity(rows * cols);
-        for row in 0..rows {
-            for col in 0..cols {
+        let total = rows * cols;
+        let mut ph_rc = Vec::with_capacity(total);
+        ph_rc
+            .spare_capacity_mut()
+            .par_iter_mut()
+            .enumerate()
+            .for_each(|(idx, dst)| {
+                let row = idx / cols;
+                let col = idx % cols;
                 let theta = k_ps[row] * bperp_mat2.values[row * bperp_mat2.cols + col] as f64;
-                ph_rc.push(mul_exp_neg_i(ph2[row * cols + col], theta));
-            }
+                dst.write(mul_exp_neg_i(ph2[row * cols + col], theta));
+            });
+        // Every spare slot is written exactly once by the parallel loop above.
+        unsafe {
+            ph_rc.set_len(total);
         }
         mat.add_complex_f32_matrix("ph_rc", rows, cols, ph_rc)?;
     } else {
@@ -1064,10 +1220,17 @@ fn write_rc2(
                 bperp_mat2.cols
             ));
         }
-        let mut ph_rc = Vec::with_capacity(rows * cols);
-        let mut ph_reref = Vec::with_capacity(rows * cols);
-        for row in 0..rows {
-            for col in 0..cols {
+        let total = rows * cols;
+        let mut ph_rc = Vec::with_capacity(total);
+        let mut ph_reref = Vec::with_capacity(total);
+        ph_rc
+            .spare_capacity_mut()
+            .par_iter_mut()
+            .zip(ph_reref.spare_capacity_mut().par_iter_mut())
+            .enumerate()
+            .for_each(|(idx, (rc_dst, reref_dst))| {
+                let row = idx / cols;
+                let col = idx % cols;
                 let bperp = if col + 1 == master_ix {
                     0.0
                 } else {
@@ -1075,14 +1238,18 @@ fn write_rc2(
                     bperp_mat2.values[row * bperp_mat2.cols + src_col] as f64
                 };
                 let theta = k_ps[row] * bperp + c_ps[row];
-                ph_rc.push(mul_exp_neg_i(ph2[row * cols + col], theta));
+                rc_dst.write(mul_exp_neg_i(ph2[row * cols + col], theta));
                 if col + 1 == master_ix {
-                    ph_reref.push((1.0, 0.0));
+                    reref_dst.write((1.0, 0.0));
                 } else {
                     let src_col = if col + 1 < master_ix { col } else { col - 1 };
-                    ph_reref.push(ph_patch[row * bperp_mat2.cols + src_col]);
+                    reref_dst.write(ph_patch[row * bperp_mat2.cols + src_col]);
                 }
-            }
+            });
+        // Every spare slot is written exactly once by the parallel loop above.
+        unsafe {
+            ph_rc.set_len(total);
+            ph_reref.set_len(total);
         }
         mat.add_complex_f32_matrix("ph_rc", rows, cols, ph_rc)?;
         mat.add_complex_f32_matrix("ph_reref", rows, cols, ph_reref)?;
@@ -1308,27 +1475,15 @@ fn validate_one_based_indices(values: &[i64], n_ps: usize, label: &str) -> Resul
 }
 
 fn select_rows_f64(matrix: &Matrix<f64>, rows: &[usize]) -> Vec<f64> {
-    let mut values = Vec::with_capacity(rows.len() * matrix.cols);
-    for &row in rows {
-        values.extend_from_slice(&matrix.values[row * matrix.cols..(row + 1) * matrix.cols]);
-    }
-    values
+    select_rows_plain(&matrix.values, matrix.cols, rows)
 }
 
 fn select_rows_f32(matrix: &Matrix<f32>, rows: &[usize]) -> Vec<f32> {
-    let mut values = Vec::with_capacity(rows.len() * matrix.cols);
-    for &row in rows {
-        values.extend_from_slice(&matrix.values[row * matrix.cols..(row + 1) * matrix.cols]);
-    }
-    values
+    select_rows_plain(&matrix.values, matrix.cols, rows)
 }
 
 fn select_rows_complex(matrix: &ComplexMatrixF32, rows: &[usize]) -> Vec<(f32, f32)> {
-    let mut values = Vec::with_capacity(rows.len() * matrix.cols);
-    for &row in rows {
-        values.extend_from_slice(&matrix.values[row * matrix.cols..(row + 1) * matrix.cols]);
-    }
-    values
+    select_rows_plain(&matrix.values, matrix.cols, rows)
 }
 
 fn select_rows_complex_matrix(matrix: &ComplexMatrixF32, rows: &[usize]) -> ComplexMatrixF32 {
@@ -1341,11 +1496,11 @@ fn select_rows_complex_matrix(matrix: &ComplexMatrixF32, rows: &[usize]) -> Comp
 }
 
 fn select_values_f64(values: &[f64], rows: &[usize]) -> Vec<f64> {
-    rows.iter().map(|&row| values[row]).collect()
+    select_values_plain(values, rows)
 }
 
 fn select_values_f32(values: &[f32], rows: &[usize]) -> Vec<f32> {
-    rows.iter().map(|&row| values[row]).collect()
+    select_values_plain(values, rows)
 }
 
 fn append_rows_f64(out: &mut Vec<f64>, matrix: &Matrix<f64>, rows: &[usize]) {
@@ -1470,22 +1625,48 @@ fn apply_stage5_index_all(
     )
 }
 
-fn select_rows_plain<T: Copy>(values: &[T], cols: usize, rows: &[usize]) -> Vec<T> {
+fn select_rows_plain<T: Copy + Send + Sync>(values: &[T], cols: usize, rows: &[usize]) -> Vec<T> {
     if cols == 0 || values.is_empty() {
         return Vec::new();
     }
-    let mut out = Vec::with_capacity(rows.len() * cols);
-    for &row in rows {
-        out.extend_from_slice(&values[row * cols..(row + 1) * cols]);
+    let total = rows.len() * cols;
+    if total == 0 {
+        return Vec::new();
+    }
+    let mut out = Vec::with_capacity(total);
+    let spare = out.spare_capacity_mut();
+    spare
+        .par_chunks_mut(cols)
+        .zip(rows.par_iter())
+        .for_each(|(chunk, &row)| {
+            for (dst, &value) in chunk.iter_mut().zip(&values[row * cols..(row + 1) * cols]) {
+                dst.write(value);
+            }
+        });
+    // Every spare slot is written exactly once by the chunk loop above.
+    unsafe {
+        out.set_len(total);
     }
     out
 }
 
-fn select_values_plain<T: Copy>(values: &[T], rows: &[usize]) -> Vec<T> {
+fn select_values_plain<T: Copy + Send + Sync>(values: &[T], rows: &[usize]) -> Vec<T> {
     if values.is_empty() {
         return Vec::new();
     }
-    rows.iter().map(|&row| values[row]).collect()
+    let mut out = Vec::with_capacity(rows.len());
+    let spare = out.spare_capacity_mut();
+    spare
+        .par_iter_mut()
+        .zip(rows.par_iter())
+        .for_each(|(dst, &row)| {
+            dst.write(values[row]);
+        });
+    // Every spare slot is written exactly once by the parallel zip above.
+    unsafe {
+        out.set_len(rows.len());
+    }
+    out
 }
 
 fn ps_complex_rows(
@@ -1533,18 +1714,21 @@ fn dedup_lonlat_keep_highest_coh(lonlat: &[f64], coh_ps: &[f64]) -> Vec<bool> {
 }
 
 fn format_merged_rc2_payload(rc: &[(f32, f32)], rows: usize, cols: usize) -> Vec<(f32, f32)> {
-    let mut out = Vec::with_capacity(rc.len());
-    for col in 0..cols {
-        for row in 0..rows {
-            let mut value = rc[row * cols + col];
-            let amp = (value.0 * value.0 + value.1 * value.1).sqrt();
-            if amp != 0.0 {
-                value.0 /= amp;
-                value.1 /= amp;
-            }
-            out.push(value);
-        }
+    if rows == 0 || cols == 0 || rc.is_empty() {
+        return Vec::new();
     }
+    let mut out = vec![(0.0, 0.0); rc.len()];
+    out.par_iter_mut().enumerate().for_each(|(dst, out)| {
+        let col = dst / rows;
+        let row = dst % rows;
+        let mut value = rc[row * cols + col];
+        let amp = (value.0 * value.0 + value.1 * value.1).sqrt();
+        if amp != 0.0 {
+            value.0 /= amp;
+            value.1 /= amp;
+        }
+        *out = value;
+    });
     out
 }
 
@@ -1859,26 +2043,59 @@ mod tests {
         create_stage5_fixture(&root, "n");
         let patch = root.join("PATCH_1");
         fs::remove_file(patch.join("la1.mat")).unwrap();
-        let raw_hdf5 = patch.join("la-raw.h5");
-        let h5 = rust_hdf5::H5File::create(&raw_hdf5).unwrap();
-        let ds = h5
-            .new_dataset::<f64>()
-            .shape(&[1usize, 5usize])
-            .create("la")
-            .unwrap();
-        ds.write_raw(&[0.1, 0.2, 0.3, 0.4, 0.5]).unwrap();
-        h5.close().unwrap();
-        let mut matlab_hdf5 = fs::File::create(patch.join("la1.mat")).unwrap();
-        matlab_hdf5.write_all(&vec![b' '; 512]).unwrap();
-        matlab_hdf5
-            .write_all(&fs::read(&raw_hdf5).unwrap())
-            .unwrap();
-        fs::remove_file(raw_hdf5).unwrap();
+        write_matlab_hdf5_f64_vector(
+            &patch,
+            "la-raw.h5",
+            "la1.mat",
+            "la",
+            &[0.1, 0.2, 0.3, 0.4, 0.5],
+        );
 
         run_stage5_patch_native(&patch).unwrap();
 
         let la2 = MatData::read(patch.join("la2.mat")).unwrap();
         assert_eq!(la2.get_f64_matrix("la").unwrap().values, vec![0.1, 0.5]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stage5_promotes_hdf5_hgt1_vector() {
+        let root = temp_root("stage5-hdf5-hgt");
+        create_stage5_fixture(&root, "n");
+        let patch = root.join("PATCH_1");
+        fs::remove_file(patch.join("hgt1.mat")).unwrap();
+        write_matlab_hdf5_f64_vector(
+            &patch,
+            "hgt-raw.h5",
+            "hgt1.mat",
+            "hgt",
+            &[10.0, 20.0, 30.0, 40.0, 50.0],
+        );
+
+        run_stage5_patch_native(&patch).unwrap();
+
+        let hgt2 = MatData::read(patch.join("hgt2.mat")).unwrap();
+        assert_eq!(hgt2.get_f32_matrix("hgt").unwrap().values, vec![10.0, 50.0]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stage5_unreadable_optional_vector_returns_structured_error() {
+        let root = temp_root("stage5-bad-optional");
+        create_stage5_fixture(&root, "n");
+        let patch = root.join("PATCH_1");
+        fs::write(patch.join("la1.mat"), b"not a readable mat file").unwrap();
+
+        let err = run_stage5_patch_native(&patch).unwrap_err();
+        match err {
+            CoreError::NativeStage { stage, message } => {
+                assert_eq!(stage, 5);
+                assert!(message.contains("la1.mat.la"));
+                assert!(message.contains("unable to read"));
+            }
+            other => panic!("expected structured Stage 5 error, got {other:?}"),
+        }
+        assert!(!patch.join("la2.mat").exists());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1947,6 +2164,31 @@ mod tests {
             rust_elapsed < python_elapsed,
             "Rust Stage 5 merge should beat Python path: rust={rust_elapsed:?} python={python_elapsed:?}"
         );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn stage5_merge_rejects_subset_patch_list_when_legacy_manifest_has_more_patches() {
+        let root = temp_root("stage5-merge-subset-manifest");
+        create_stage5_merge_fixture(&root);
+        fs::write(root.join("patch.list"), "PATCH_1\n").unwrap();
+        fs::write(
+            root.join("patch.list_old"),
+            "PATCH_1\nPATCH_2\nPATCH_3\nPATCH_4\n",
+        )
+        .unwrap();
+
+        let err = run_stage5_merge_native(&root).unwrap_err();
+        match err {
+            CoreError::NativeStage { stage, message } => {
+                assert_eq!(stage, 5);
+                assert!(message.contains("patch.list"));
+                assert!(message.contains("patch.list_old"));
+                assert!(message.contains("restore the full patch.list"));
+            }
+            other => panic!("expected structured merged Stage 5 error, got {other:?}"),
+        }
+        assert!(!root.join("ifgstd2.mat").exists());
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -2169,6 +2411,30 @@ mod tests {
         da.add_f64_row_vector("D_A", vec![1.0, 1.1, 1.2, 1.3, 1.4])
             .unwrap();
         da.write().unwrap();
+    }
+
+    fn write_matlab_hdf5_f64_vector(
+        patch: &Path,
+        raw_name: &str,
+        matlab_name: &str,
+        variable: &str,
+        values: &[f64],
+    ) {
+        let raw_hdf5 = patch.join(raw_name);
+        let h5 = rust_hdf5::H5File::create(&raw_hdf5).unwrap();
+        let ds = h5
+            .new_dataset::<f64>()
+            .shape(&[1usize, values.len()])
+            .create(variable)
+            .unwrap();
+        ds.write_raw(values).unwrap();
+        h5.close().unwrap();
+        let mut matlab_hdf5 = fs::File::create(patch.join(matlab_name)).unwrap();
+        matlab_hdf5.write_all(&vec![b' '; 512]).unwrap();
+        matlab_hdf5
+            .write_all(&fs::read(&raw_hdf5).unwrap())
+            .unwrap();
+        fs::remove_file(raw_hdf5).unwrap();
     }
 
     fn create_stage5_merge_fixture(root: &Path) {
