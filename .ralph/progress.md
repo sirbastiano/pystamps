@@ -780,3 +780,39 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: the current checked-in `select1.mat` has upstream Stage 3 drift, so Stage 4 parity must be isolated with `inputs_and_outputs/validation_runs/stage4_debug_probe` and targeted `PATCH_*/weed1.mat` verification against the golden dataset.
   - Useful context: the normal full-chain verifier checks all artifacts and can fail on unrelated upstream/downstream outputs even when Stage 4 `weed1.mat` parity passes; record targeted Stage 4 verifier evidence separately.
 ---
+## [2026-05-27 05:36:40 UTC] - US-008: Complete Stage 5 promotion and merge parity
+Thread:
+Run: 20260526-142844-454144 (iteration 8)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-8.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-8.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: a290923 fix(stage5): support v7.3 promotion and guarded merge
+- Post-commit status: `clean` after final progress-log commit
+- Verification:
+  - Command: cargo test --workspace -> PASS
+  - Command: cargo build --release -p pystamps-core --bin pystamps-native -> PASS
+  - Command: uv run pytest -q tests/test_kernels_accelerated.py -> PASS
+  - Command: make native-full-chain-verify DATASET=inputs_and_outputs/validation_runs/stage4_debug_probe GOLDEN=inputs_and_outputs/InSAR_dataset_test START_STEP=5 END_STEP=5 RUN=inputs_and_outputs/validation_runs/us008-stage5-focused THREADS=8 -> FAIL (native Stage 5 execution and performance budget passed, merged 4 patches into the golden 587320 PS records; verifier failed upstream/source artifacts from the debug-probe dataset)
+  - Command: target/release/pystamps-native stage5-merge --dataset inputs_and_outputs/InSAR_dataset_test -> PASS (expected structured failure for patch.list PATCH_1 vs patch.list_old four-patch mismatch)
+  - Command: make native-full-chain-verify -> FAIL (native run completed; performance budget failed on total runtime and merged stages 5-8)
+  - Command: git diff --check -> PASS
+  - Command: cargo fmt --check -> FAIL (pre-existing formatting diff in crates/pystamps-core/src/native_stage2.rs; file was not changed for US-008)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - Cargo.lock
+  - crates/pystamps-core/src/native_stage5.rs
+  - crates/pystamps-mat/Cargo.toml
+  - crates/pystamps-mat/src/lib.rs
+- What was implemented
+  - Added selective Stage 5 MAT reads and MATLAB v7.3/HDF5 support, including user-block payloads and optional vector promotion for `la1.mat`/`hgt1.mat`.
+  - Promoted patch outputs for `ps2.mat`, `ph2.mat`, `pm2.mat`, `bp2.mat`, `hgt2.mat`, `la2.mat`, `rc2.mat`, and `psver.mat` while preserving selected row order.
+  - Hardened merged Stage 5 patch discovery so a shortened `patch.list` cannot silently pass when `patch.list_old` names the full patch population.
+  - Added structured negative-path coverage for unreadable optional sources and the PATCH_1-only merge manifest case.
+  - Optimized large Stage 5 row selection, correction payloads, IFG std accumulation, and MAT writing paths with selective reads and parallelized writes.
+- **Learnings for future iterations:**
+  - `patch.list_old` is the authoritative four-patch population for the bundled golden; the checked-in `patch.list` only lists `PATCH_1` and must not be accepted for merged Stage 5.
+  - MATLAB v7.3 files in the fixtures can include a 512-byte user block; complex single datasets are identified from `MATLAB_class=single` plus the compound element size.
+  - Focused Stage 5 validation needs a source tree whose upstream Stage 2-4 artifacts match the golden; otherwise the Stage 5 run can hit the golden PS count while the verifier still fails inherited upstream differences.
+---
