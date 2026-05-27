@@ -816,3 +816,36 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - MATLAB v7.3 files in the fixtures can include a 512-byte user block; complex single datasets are identified from `MATLAB_class=single` plus the compound element size.
   - Focused Stage 5 validation needs a source tree whose upstream Stage 2-4 artifacts match the golden; otherwise the Stage 5 run can hit the golden PS count while the verifier still fails inherited upstream differences.
 ---
+## [2026-05-27 08:19:54 UTC] - US-009: Make Stage 6 unwrap parity fast
+Thread: 019e67f3-092c-7032-af2b-8dd8ddca5c5a
+Run: 20260526-142844-454144 (iteration 9)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-9.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260526-142844-454144-iter-9.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 83af533 perf(stage6): speed unwrap interpolation
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `cargo test -p pystamps-core native_stage6 --lib` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `git diff --check` -> PASS
+  - Command: `make native-full-chain-verify` -> FAIL (full native run completed; Stage 6 completed in 28.077s, but overall gate failed total runtime plus Stage 5 merged, Stage 7, and Stage 8 budgets before verifier comparison)
+  - Command: `make native-full-chain-run START_STEP=6 END_STEP=6 RUN=inputs_and_outputs/validation_runs/us009_final_stage6_only` -> FAIL (checked-in validation `rc2.mat` is incompatible with `ps2.n_ps`, fallback path completed in 48.685s and exceeded the Stage 6 budget)
+  - Command: `verify_run_against_golden(..., patterns=('uw_interp.mat','uw_grid.mat','phuw2.mat','uw_phaseuw.mat'))` on `us009_final_stage6_only` -> FAIL (golden shape matched for `uw_interp.mat/Z` but one structural tie cell remains; `uw_grid.ph`/`msd` still differ on stale fallback inputs)
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/progress.md
+  - crates/pystamps-core/src/native_stage6.rs
+- What was implemented
+  - Replaced Stage 6 interpolation edge construction with a nearest-label grid transform plus grid-adjacency edge extraction, avoiding per-grid-cell PS scans and matching golden `uw_interp` shape and edge count on the checked-in validation geometry.
+  - Added guarded `rc2` shape inspection and selective MAT reads so compatible `rc2.ph_rc` paths avoid loading full `ph2.ph` and `pm2.ph_patch`.
+  - Kept wrapped-phase rotation in f32 tuples, reduced bperp working storage to f32, parallelized wrapped-phase/MSD/phuw2 hot loops, and reused one graph traversal across interferograms.
+  - Added an environment-gated `PYSTAMPS_STAGE6_TIMINGS=1` substep timer for future Stage 6 performance probes.
+  - Completed security/performance/regression review: no new external inputs, secrets, or unsafe filesystem paths; hot loops avoid O(grid_cells * n_ps) scans; focused Rust, workspace, Python accelerated, build, and diff-check gates pass.
+- **Learnings for future iterations:**
+  - Patterns discovered: MATLAB `dsearchn` golden artifacts choose the later/highest nearest label on exact grid ties for almost all validation cells; changing the distance transform boundary from `<` to `<=` reduces `Z` drift from 286,007 cells to one tie cell.
+  - Gotchas encountered: Stage 6-only runs on `inputs_and_outputs/InSAR_dataset_test` are misleading because checked-in `rc2.mat` has 587312 rows while `ps2.n_ps` is 587320, forcing fallback phase synthesis that is slower and does not match golden `uw_grid.ph`.
+  - Useful context: the full-chain run with regenerated upstream artifacts measured Stage 6 at 28.077s, satisfying the US-009 Stage 6 budget, but full gate completion remains blocked by out-of-scope Stage 5/7/8/total performance budgets and upstream parity drift.
+---
