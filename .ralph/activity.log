@@ -273,3 +273,4 @@
 [2026-05-27 12:37:51] US-010: optimized Stage 7 with parallel MAT reads, sparse smoothing, row-major HDF5 writes, and STAMPS-style coest_mean_vel default
 [2026-05-27 12:56:02] US-010: verification completed with Stage 7 budget pass; full-chain gate still fails existing Stage 5/6/8 budgets
 [2026-05-27 13:06:47] US-010: focused Stage 7 Rust tests and diff checks passed after cleanup
+[2026-05-27 13:08:59] US-010: updated progress log with commit and verification outcome
