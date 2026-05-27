@@ -1,11 +1,20 @@
 use crate::CoreError;
-use delaunator::{triangulate, Point};
 use num_complex::Complex64;
 use pystamps_mat::{ComplexMatrixF32, MatData, MatFile, Matrix};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use rayon::prelude::*;
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::fs::File;
+use std::io::Read;
 use std::path::Path;
+use std::time::Instant;
 
 const DIST_INF: usize = usize::MAX / 4;
+const MAT_V5_HEADER_BYTES: u64 = 128;
+const MI_INT8: u32 = 1;
+const MI_UINT8: u32 = 2;
+const MI_INT32: u32 = 5;
+const MI_MATRIX: u32 = 14;
+const MI_COMPRESSED: u32 = 15;
 
 #[derive(Clone, Debug)]
 struct Stage6Parms {
@@ -28,7 +37,7 @@ impl Default for Stage6Parms {
 
 #[derive(Clone, Debug)]
 struct WrappedPhase {
-    values: Vec<Complex64>,
+    values: Vec<(f32, f32)>,
     phase_restore: Vec<f32>,
     cols: usize,
 }
@@ -56,26 +65,68 @@ struct UwInterp {
     colix: Matrix<f64>,
     z: Matrix<f64>,
     n_edge: usize,
+    edge_counts: Vec<usize>,
 }
 
 pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreError> {
     let dataset_root = dataset_root.as_ref();
-    let ps2 = read_mat_stage6(dataset_root, "ps2.mat")?;
-    let ph2 = read_mat_stage6(dataset_root, "ph2.mat")?;
-    let pm2 = read_mat_stage6(dataset_root, "pm2.mat")?;
-    let bp2 = read_mat_stage6(dataset_root, "bp2.mat")?;
-    let _ifgstd2 = read_mat_stage6(dataset_root, "ifgstd2.mat")?;
+    let mut timer = Stage6Timer::new();
+    let ps2 = read_mat_stage6_selected(
+        dataset_root,
+        "ps2.mat",
+        &["n_ps", "n_ifg", "master_ix", "xy", "bperp"],
+    )?;
     let parms = load_stage6_parms(dataset_root);
+    timer.mark("read ps/parms");
 
     let n_ps = scalar_from_mat(&ps2, "n_ps", 0.0).round() as usize;
     if n_ps == 0 {
         return stage6_err("ps2.mat missing valid n_ps");
     }
-    let ph2 = complex_ps_matrix(&ph2, "ph", n_ps, "ph2.ph")?;
-    let n_ifg = ph2.cols;
+    let rc2_shape = if parms.unwrap_patch_phase.eq_ignore_ascii_case("y") {
+        None
+    } else {
+        rc2_phase_shape_if_compatible(dataset_root, n_ps)?
+    };
+    let mut n_ifg = scalar_from_mat(&ps2, "n_ifg", 0.0).round() as usize;
+    if n_ifg == 0 {
+        if let Some((_, cols)) = rc2_shape {
+            n_ifg = cols;
+        }
+    }
+    let need_ph2 = !parms.unwrap_patch_phase.eq_ignore_ascii_case("y") && rc2_shape.is_none();
+    let ph2 = if need_ph2 || n_ifg == 0 {
+        let ph2 = read_mat_stage6_selected(dataset_root, "ph2.mat", &["ph"])?;
+        let ph2 = complex_ps_matrix(&ph2, "ph", n_ps, "ph2.ph")?;
+        if n_ifg == 0 {
+            n_ifg = ph2.cols;
+        }
+        Some(ph2)
+    } else {
+        None
+    };
     if n_ifg == 0 {
         return stage6_err("ph2.ph must contain at least one interferogram");
     }
+    if let Some(ph2) = &ph2 {
+        if ph2.cols != n_ifg {
+            return stage6_err(format!(
+                "ph2.ph has {} interferograms but ps2.n_ifg is {n_ifg}",
+                ph2.cols
+            ));
+        }
+    }
+    let pm_vars: &[&str] = if parms.unwrap_patch_phase.eq_ignore_ascii_case("y") {
+        &["ph_patch"]
+    } else if need_ph2 {
+        &["K_ps", "C_ps", "ph_patch"]
+    } else {
+        &["K_ps"]
+    };
+    let pm2 = read_mat_stage6_selected(dataset_root, "pm2.mat", pm_vars)?;
+    let bp2 = read_mat_stage6_selected(dataset_root, "bp2.mat", &["bperp_mat"])?;
+    ensure_mat_stage6(dataset_root, "ifgstd2.mat")?;
+    timer.mark("read phase inputs");
     let master_ix = scalar_from_mat(&ps2, "master_ix", 1.0).round() as usize;
     if master_ix == 0 || master_ix > n_ifg {
         return stage6_err(format!(
@@ -98,9 +149,10 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
     }
 
     let bperp_full = expand_bperp_matrix(&bp2, &ps2, n_ps, n_ifg, master_ix)?;
+    timer.mark("expand bperp");
     let wrapped = build_wrapped_phase(
         dataset_root,
-        &ph2,
+        ph2.as_ref(),
         &pm2,
         &bperp_full,
         n_ps,
@@ -108,6 +160,7 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
         master_ix,
         &parms,
     )?;
+    timer.mark("build wrapped phase");
     let uw_grid = if dataset_root.join("uw_grid.mat").exists() {
         read_uw_grid(dataset_root, n_ps)?
     } else {
@@ -115,6 +168,7 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
         write_uw_grid(dataset_root, &grid)?;
         grid
     };
+    timer.mark("uw_grid");
     let uw_interp = if dataset_root.join("uw_interp.mat").exists() {
         read_uw_interp(dataset_root, uw_grid.n_i, uw_grid.n_j)?
     } else {
@@ -122,9 +176,11 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
         write_uw_interp(dataset_root, &interp)?;
         interp
     };
+    timer.mark("uw_interp");
     validate_connected_graph(&uw_interp, uw_grid.n_ps)?;
 
     let ph_uw_some = unwrap_grid_phase(&uw_grid, &uw_interp)?;
+    timer.mark("unwrap grid phase");
     let msd_some = grid_msd(&ph_uw_some, uw_grid.n_ps, unwrap_cols.len(), &uw_interp);
     write_uw_phaseuw(
         dataset_root,
@@ -133,6 +189,7 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
         unwrap_cols.len(),
         &msd_some,
     )?;
+    timer.mark("write uw_phaseuw");
     write_phuw2(
         dataset_root,
         &uw_grid,
@@ -143,67 +200,152 @@ pub fn run_stage6_native(dataset_root: impl AsRef<Path>) -> Result<String, CoreE
         n_ps,
         n_ifg,
     )?;
+    timer.mark("write phuw2");
 
     Ok(format!(
         "Stage 6 natively unwrapped {n_ps} PS across {n_ifg} interferograms using Rust graph unwrap"
     ))
 }
 
+struct Stage6Timer {
+    enabled: bool,
+    last: Instant,
+}
+
+impl Stage6Timer {
+    fn new() -> Self {
+        Self {
+            enabled: std::env::var_os("PYSTAMPS_STAGE6_TIMINGS").is_some(),
+            last: Instant::now(),
+        }
+    }
+
+    fn mark(&mut self, label: &str) {
+        if self.enabled {
+            let elapsed = self.last.elapsed();
+            eprintln!("stage6 timing {label}: {:.3}s", elapsed.as_secs_f64());
+            self.last = Instant::now();
+        }
+    }
+}
+
 fn build_wrapped_phase(
     dataset_root: &Path,
-    ph2: &ComplexMatrixF32,
+    ph2: Option<&ComplexMatrixF32>,
     pm2: &MatData,
-    bperp_full: &Matrix<f64>,
+    bperp_full: &Matrix<f32>,
     n_ps: usize,
     n_ifg: usize,
     master_ix: usize,
     parms: &Stage6Parms,
 ) -> Result<WrappedPhase, CoreError> {
-    let mut ph_w: Vec<Complex64> = if parms.unwrap_patch_phase.eq_ignore_ascii_case("y") {
-        let ph_patch = complex_ps_matrix(pm2, "ph_patch", n_ps, "pm2.ph_patch")?;
-        if ph_patch.cols + 1 != n_ifg {
-            return stage6_err(format!(
-                "pm2.ph_patch has {} columns but single-master ph2.ph has {n_ifg}",
-                ph_patch.cols
-            ));
-        }
-        let mut values = vec![Complex64::new(1.0, 0.0); n_ps * n_ifg];
-        for row in 0..n_ps {
-            for col in 0..n_ifg {
-                if col == master_ix - 1 {
-                    continue;
-                }
-                let src_col = if col < master_ix - 1 { col } else { col - 1 };
-                values[row * n_ifg + col] =
-                    tuple_to_complex(ph_patch.values[row * ph_patch.cols + src_col]);
+    let (mut ph_w, used_rc2): (Vec<(f32, f32)>, bool) =
+        if parms.unwrap_patch_phase.eq_ignore_ascii_case("y") {
+            let ph_patch = complex_ps_matrix(pm2, "ph_patch", n_ps, "pm2.ph_patch")?;
+            if ph_patch.cols + 1 != n_ifg {
+                return stage6_err(format!(
+                    "pm2.ph_patch has {} columns but single-master ph2.ph has {n_ifg}",
+                    ph_patch.cols
+                ));
             }
-        }
-        values
-    } else if dataset_root.join("rc2.mat").exists() {
-        let rc2 = read_mat_stage6(dataset_root, "rc2.mat")?;
-        let ph_rc = complex_ps_matrix(&rc2, "ph_rc", n_ps, "rc2.ph_rc")?;
-        ph_rc
-            .values
-            .iter()
-            .map(|&value| tuple_to_complex(value))
-            .collect()
-    } else {
-        ph2.values
-            .iter()
-            .map(|&value| tuple_to_complex(value))
-            .collect()
-    };
+            let mut values = vec![(1.0f32, 0.0f32); n_ps * n_ifg];
+            for row in 0..n_ps {
+                for col in 0..n_ifg {
+                    if col == master_ix - 1 {
+                        continue;
+                    }
+                    let src_col = if col < master_ix - 1 { col } else { col - 1 };
+                    values[row * n_ifg + col] = ph_patch.values[row * ph_patch.cols + src_col];
+                }
+            }
+            (values, false)
+        } else if dataset_root.join("rc2.mat").exists() {
+            match read_rc2_phase_if_compatible(dataset_root, n_ps) {
+                Ok(Some(ph_rc)) => (ph_rc.values, true),
+                Ok(None) => (
+                    ph2.ok_or_else(|| {
+                        stage6_err_owned(
+                            "ph2.ph is required when rc2.ph_rc is missing or incompatible"
+                                .to_string(),
+                        )
+                    })?
+                    .values
+                    .iter()
+                    .copied()
+                    .collect(),
+                    false,
+                ),
+                Err(err) => return Err(err),
+            }
+        } else {
+            (
+                ph2.ok_or_else(|| {
+                    stage6_err_owned("ph2.ph is required when rc2.mat is not available".to_string())
+                })?
+                .values
+                .iter()
+                .copied()
+                .collect(),
+                false,
+            )
+        };
 
     if !parms.unwrap_patch_phase.eq_ignore_ascii_case("y") {
-        if let Some(k_ps) = optional_vector_f64(pm2, "K_ps") {
-            if k_ps.len() == n_ps {
-                for row in 0..n_ps {
-                    for col in 0..n_ifg {
-                        let theta = k_ps[row] * bperp_full.values[row * n_ifg + col];
-                        ph_w[row * n_ifg + col] *= Complex64::from_polar(1.0, theta);
-                    }
+        let k_ps = optional_vector_f64(pm2, "K_ps").filter(|values| values.len() == n_ps);
+        if used_rc2 {
+            if let Some(k_ps) = k_ps {
+                ph_w.par_chunks_mut(n_ifg)
+                    .enumerate()
+                    .for_each(|(row, row_values)| {
+                        let bperp_row = &bperp_full.values[row * n_ifg..(row + 1) * n_ifg];
+                        for col in 0..n_ifg {
+                            let theta = k_ps[row] as f32 * bperp_row[col];
+                            rotate_tuple(&mut row_values[col], theta);
+                        }
+                    });
+            }
+        } else if !parms.small_baseline_flag.eq_ignore_ascii_case("y") {
+            if let Ok(ph_patch) = complex_ps_matrix(pm2, "ph_patch", n_ps, "pm2.ph_patch") {
+                if ph_patch.cols + 1 == n_ifg {
+                    ph_w.par_chunks_mut(n_ifg)
+                        .enumerate()
+                        .for_each(|(row, row_values)| {
+                            let patch_row =
+                                &ph_patch.values[row * ph_patch.cols..(row + 1) * ph_patch.cols];
+                            for col in 0..n_ifg {
+                                if col == master_ix - 1 {
+                                    continue;
+                                }
+                                let src_col = if col < master_ix - 1 { col } else { col - 1 };
+                                multiply_tuple_conj_patch(&mut row_values[col], patch_row[src_col]);
+                            }
+                        });
                 }
             }
+            if let Some(k_ps) = k_ps {
+                let c_ps = optional_vector_f64(pm2, "C_ps")
+                    .filter(|values| values.len() == n_ps)
+                    .unwrap_or_else(|| vec![0.0; n_ps]);
+                ph_w.par_chunks_mut(n_ifg)
+                    .enumerate()
+                    .for_each(|(row, row_values)| {
+                        let bperp_row = &bperp_full.values[row * n_ifg..(row + 1) * n_ifg];
+                        for col in 0..n_ifg {
+                            let theta = k_ps[row] as f32 * bperp_row[col] + c_ps[row] as f32;
+                            rotate_tuple(&mut row_values[col], -theta);
+                        }
+                    });
+            }
+        } else if let Some(k_ps) = k_ps {
+            ph_w.par_chunks_mut(n_ifg)
+                .enumerate()
+                .for_each(|(row, row_values)| {
+                    let bperp_row = &bperp_full.values[row * n_ifg..(row + 1) * n_ifg];
+                    for col in 0..n_ifg {
+                        let theta = k_ps[row] as f32 * bperp_row[col];
+                        rotate_tuple(&mut row_values[col], theta);
+                    }
+                });
         }
     }
 
@@ -215,9 +357,9 @@ fn build_wrapped_phase(
                 if k_ps_uw.len() == n_ps {
                     for row in 0..n_ps {
                         for col in 0..n_ifg {
-                            let theta = k_ps_uw[row] * bperp_full.values[row * n_ifg + col];
-                            ph_w[row * n_ifg + col] *= Complex64::from_polar(1.0, -theta);
-                            phase_restore[row * n_ifg + col] += theta as f32;
+                            let theta = k_ps_uw[row] as f32 * bperp_full.values[row * n_ifg + col];
+                            rotate_tuple(&mut ph_w[row * n_ifg + col], -theta);
+                            phase_restore[row * n_ifg + col] += theta;
                         }
                     }
                 }
@@ -226,7 +368,7 @@ fn build_wrapped_phase(
                 if c_ps_uw.len() == n_ps {
                     for row in 0..n_ps {
                         for col in 0..n_ifg {
-                            ph_w[row * n_ifg + col] *= Complex64::from_polar(1.0, -c_ps_uw[row]);
+                            rotate_tuple(&mut ph_w[row * n_ifg + col], -(c_ps_uw[row] as f32));
                             phase_restore[row * n_ifg + col] += c_ps_uw[row] as f32;
                         }
                     }
@@ -236,9 +378,9 @@ fn build_wrapped_phase(
                 if ph_ramp.cols == n_ifg {
                     for row in 0..n_ps {
                         for col in 0..n_ifg {
-                            let theta = ph_ramp.values[row * n_ifg + col] as f64;
-                            ph_w[row * n_ifg + col] *= Complex64::from_polar(1.0, -theta);
-                            phase_restore[row * n_ifg + col] += theta as f32;
+                            let theta = ph_ramp.values[row * n_ifg + col];
+                            rotate_tuple(&mut ph_w[row * n_ifg + col], -theta);
+                            phase_restore[row * n_ifg + col] += theta;
                         }
                     }
                 }
@@ -246,11 +388,11 @@ fn build_wrapped_phase(
         }
     }
 
-    for value in &mut ph_w {
-        let norm = value.norm();
-        if norm > 0.0 {
-            *value /= norm;
-        }
+    if ph_w.par_iter().any(|&(re, im)| {
+        let mag2 = re.mul_add(re, im * im);
+        mag2 > 0.0 && (mag2 - 1.0).abs() > 1.0e-4
+    }) {
+        ph_w.par_iter_mut().for_each(normalize_tuple);
     }
 
     Ok(WrappedPhase {
@@ -267,25 +409,25 @@ fn build_uw_grid(
     n_ps: usize,
     parms: &Stage6Parms,
 ) -> Result<UwGrid, CoreError> {
-    let xy = ps_dim_f64(ps2, "xy", n_ps, 3, "ps2.xy")?;
+    let xy = ps_dim_f32(ps2, "xy", n_ps, 3, "ps2.xy")?;
     let pix_size = if parms.unwrap_grid_size > 0.0 {
-        parms.unwrap_grid_size
+        parms.unwrap_grid_size as f32
     } else {
-        20.0
+        20.0f32
     };
     let grid_x_min = (0..n_ps)
         .map(|row| xy.values[row * 3 + 1])
-        .fold(f64::INFINITY, f64::min);
+        .fold(f32::INFINITY, f32::min);
     let grid_y_min = (0..n_ps)
         .map(|row| xy.values[row * 3 + 2])
-        .fold(f64::INFINITY, f64::min);
+        .fold(f32::INFINITY, f32::min);
     let mut grid_i = vec![1usize; n_ps];
     let mut grid_j = vec![1usize; n_ps];
     for row in 0..n_ps {
         let x = xy.values[row * 3 + 1];
         let y = xy.values[row * 3 + 2];
-        grid_i[row] = ((y - grid_y_min + 1.0e-3) / pix_size).ceil().max(1.0) as usize;
-        grid_j[row] = ((x - grid_x_min + 1.0e-3) / pix_size).ceil().max(1.0) as usize;
+        grid_i[row] = ((y - grid_y_min + 1.0e-3f32) / pix_size).ceil().max(1.0) as usize;
+        grid_j[row] = ((x - grid_x_min + 1.0e-3f32) / pix_size).ceil().max(1.0) as usize;
     }
     if let Some(max_i) = grid_i.iter().copied().max() {
         if max_i > 1 {
@@ -318,8 +460,8 @@ fn build_uw_grid(
             .or_insert_with(|| vec![Complex64::new(0.0, 0.0); n_unwrap]);
         for (out_col, &src_col) in unwrap_cols.iter().enumerate() {
             let value = wrapped.values[row * wrapped.cols + src_col];
-            entry[out_col] += value;
-            ph_in[row * n_unwrap + out_col] = (value.re as f32, value.im as f32);
+            entry[out_col] += tuple_to_complex(value);
+            ph_in[row * n_unwrap + out_col] = value;
         }
     }
 
@@ -358,12 +500,13 @@ fn build_uw_grid(
     }
     let mut xy_grid = Vec::with_capacity(n_grid * 3);
     let mut ij_grid = Vec::with_capacity(n_grid * 2);
+    let pix_size_f64 = pix_size as f64;
     for (pos, &lin) in nz_lins.iter().enumerate() {
         let i = (lin % n_i) + 1;
         let j = (lin / n_i) + 1;
         xy_grid.push((pos + 1) as f64);
-        xy_grid.push((j as f64 - 0.5) * pix_size);
-        xy_grid.push((i as f64 - 0.5) * pix_size);
+        xy_grid.push((j as f64 - 0.5) * pix_size_f64);
+        xy_grid.push((i as f64 - 0.5) * pix_size_f64);
         ij_grid.push(i as f64);
         ij_grid.push(j as f64);
     }
@@ -408,53 +551,86 @@ fn build_uw_grid(
             cols: 2,
             values: ij_grid,
         },
-        grid_x_min: grid_x_min as f32,
-        grid_y_min: grid_y_min as f32,
-        pix_size,
+        grid_x_min,
+        grid_y_min,
+        pix_size: pix_size_f64,
     })
 }
 
 fn build_uw_interp(uw_grid: &UwGrid) -> Result<UwInterp, CoreError> {
-    let points = grid_points(uw_grid)?;
     let z = nearest_grid_labels(uw_grid)?;
 
-    let mut edge_ids = BTreeMap::<(usize, usize), usize>::new();
-    for (a, b) in native_graph_edges(&points) {
-        let _ = edge_id_signed(&mut edge_ids, a + 1, b + 1);
-    }
-    let mut rowix = vec![0.0; uw_grid.n_i.saturating_sub(1) * uw_grid.n_j];
+    let mut edge_keys = Vec::with_capacity(
+        uw_grid.n_i.saturating_sub(1) * uw_grid.n_j + uw_grid.n_i * uw_grid.n_j.saturating_sub(1),
+    );
     for row in 0..uw_grid.n_i.saturating_sub(1) {
         for col in 0..uw_grid.n_j {
-            let value = edge_id_signed(
-                &mut edge_ids,
+            if let Some(key) =
+                label_edge_key(z[row * uw_grid.n_j + col], z[(row + 1) * uw_grid.n_j + col])
+            {
+                edge_keys.push(key);
+            }
+        }
+    }
+    for row in 0..uw_grid.n_i {
+        for col in 0..uw_grid.n_j.saturating_sub(1) {
+            if let Some(key) =
+                label_edge_key(z[row * uw_grid.n_j + col], z[row * uw_grid.n_j + col + 1])
+            {
+                edge_keys.push(key);
+            }
+        }
+    }
+    edge_keys.sort_unstable();
+    edge_keys.dedup();
+
+    let edge_ids: HashMap<u64, usize> = edge_keys
+        .iter()
+        .enumerate()
+        .map(|(ix, &edge)| (edge, ix + 1))
+        .collect();
+
+    let mut rowix = vec![0.0; uw_grid.n_i.saturating_sub(1) * uw_grid.n_j];
+    let mut colix = vec![0.0; uw_grid.n_i * uw_grid.n_j.saturating_sub(1)];
+    let mut edge_counts = vec![0usize; edge_ids.len()];
+    for row in 0..uw_grid.n_i.saturating_sub(1) {
+        for col in 0..uw_grid.n_j {
+            let value = signed_label_edge_id(
+                &edge_ids,
                 z[row * uw_grid.n_j + col],
                 z[(row + 1) * uw_grid.n_j + col],
             );
+            if value != 0 {
+                edge_counts[value.unsigned_abs() - 1] += 1;
+            }
             rowix[row * uw_grid.n_j + col] = value as f64;
         }
     }
-    let mut colix = vec![0.0; uw_grid.n_i * uw_grid.n_j.saturating_sub(1)];
     for row in 0..uw_grid.n_i {
         for col in 0..uw_grid.n_j.saturating_sub(1) {
-            let value = edge_id_signed(
-                &mut edge_ids,
+            let value = signed_label_edge_id(
+                &edge_ids,
                 z[row * uw_grid.n_j + col],
                 z[row * uw_grid.n_j + col + 1],
             );
+            if value != 0 {
+                edge_counts[value.unsigned_abs() - 1] += 1;
+            }
             colix[row * uw_grid.n_j.saturating_sub(1) + col] = value as f64;
         }
     }
-    let mut edgs = vec![0.0; edge_ids.len() * 3];
-    for ((a, b), id) in &edge_ids {
-        let row = *id - 1;
-        edgs[row * 3] = *id as f64;
-        edgs[row * 3 + 1] = *a as f64;
-        edgs[row * 3 + 2] = *b as f64;
+
+    let mut edgs = vec![0.0; edge_keys.len() * 3];
+    for (row, &key) in edge_keys.iter().enumerate() {
+        let (a, b) = decode_label_edge_key(key);
+        edgs[row * 3] = (row + 1) as f64;
+        edgs[row * 3 + 1] = a as f64;
+        edgs[row * 3 + 2] = b as f64;
     }
     Ok(UwInterp {
         edgs: Matrix {
             name: "edgs".to_string(),
-            rows: edge_ids.len(),
+            rows: edge_keys.len(),
             cols: 3,
             values: edgs,
         },
@@ -476,7 +652,8 @@ fn build_uw_interp(uw_grid: &UwGrid) -> Result<UwInterp, CoreError> {
             cols: uw_grid.n_j,
             values: z.iter().map(|&value| value as f64).collect(),
         },
-        n_edge: edge_ids.len(),
+        n_edge: edge_keys.len(),
+        edge_counts,
     })
 }
 
@@ -595,7 +772,8 @@ fn distance_transform_1d(
 
     k = 0;
     for q in 0..n {
-        while z[k + 1] < q as f64 {
+        // MATLAB dsearchn picks the later node on exact grid ties for these artifacts.
+        while z[k + 1] <= q as f64 {
             k += 1;
         }
         let site = v[k];
@@ -612,35 +790,52 @@ fn parabola_intersection(f: &[usize], q: usize, p: usize) -> f64 {
 }
 
 fn unwrap_grid_phase(uw_grid: &UwGrid, uw_interp: &UwInterp) -> Result<Vec<f32>, CoreError> {
-    validate_connected_graph(uw_interp, uw_grid.n_ps)?;
     let adjacency = graph_adjacency(&uw_interp.edgs, uw_grid.n_ps)?;
+    let traversal = graph_unwrap_traversal(&adjacency)?;
     let mut output = vec![0.0f32; uw_grid.n_ps * uw_grid.ph.cols];
-    for col in 0..uw_grid.ph.cols {
-        let wrapped: Vec<f64> = (0..uw_grid.n_ps)
-            .map(|row| tuple_to_complex(uw_grid.ph.values[row * uw_grid.ph.cols + col]).arg())
-            .collect();
-        let mut visited = vec![false; uw_grid.n_ps];
-        let mut queue = VecDeque::new();
-        output[col] = wrapped[0] as f32;
-        visited[0] = true;
-        queue.push_back(0usize);
-        while let Some(node) = queue.pop_front() {
-            for &next in &adjacency[node] {
-                if visited[next] {
-                    continue;
-                }
-                let delta = wrap_phase(wrapped[next] - wrapped[node]);
-                output[next * uw_grid.ph.cols + col] =
-                    output[node * uw_grid.ph.cols + col] + delta as f32;
-                visited[next] = true;
-                queue.push_back(next);
-            }
+    let mut wrapped = vec![0.0f64; uw_grid.n_ps * uw_grid.ph.cols];
+    for row in 0..uw_grid.n_ps {
+        for col in 0..uw_grid.ph.cols {
+            wrapped[row * uw_grid.ph.cols + col] =
+                tuple_to_complex(uw_grid.ph.values[row * uw_grid.ph.cols + col]).arg();
         }
-        if visited.iter().any(|&seen| !seen) {
-            return stage6_err("disconnected unwrap graph: not all grid points are reachable");
+    }
+    for col in 0..uw_grid.ph.cols {
+        output[col] = wrapped[0] as f32;
+    }
+    for &(parent, child) in &traversal {
+        for col in 0..uw_grid.ph.cols {
+            let parent_ix = parent * uw_grid.ph.cols + col;
+            let child_ix = child * uw_grid.ph.cols + col;
+            let delta = wrap_phase(wrapped[child_ix] - wrapped[parent_ix]);
+            output[child_ix] = output[parent_ix] + delta as f32;
         }
     }
     Ok(output)
+}
+
+fn graph_unwrap_traversal(adjacency: &[Vec<usize>]) -> Result<Vec<(usize, usize)>, CoreError> {
+    if adjacency.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut traversal = Vec::with_capacity(adjacency.len().saturating_sub(1));
+    let mut visited = vec![false; adjacency.len()];
+    let mut queue = VecDeque::new();
+    visited[0] = true;
+    queue.push_back(0usize);
+    while let Some(node) = queue.pop_front() {
+        for &next in &adjacency[node] {
+            if !visited[next] {
+                visited[next] = true;
+                traversal.push((node, next));
+                queue.push_back(next);
+            }
+        }
+    }
+    if visited.iter().any(|&seen| !seen) {
+        return stage6_err("disconnected unwrap graph: not all grid points are reachable");
+    }
+    Ok(traversal)
 }
 
 fn grid_msd(ph_uw: &[f32], n_ps_grid: usize, n_unwrap: usize, uw_interp: &UwInterp) -> Vec<f64> {
@@ -648,10 +843,14 @@ fn grid_msd(ph_uw: &[f32], n_ps_grid: usize, n_unwrap: usize, uw_interp: &UwInte
     if uw_interp.edgs.rows == 0 {
         return msd;
     }
-    for col in 0..n_unwrap {
+    msd.par_iter_mut().enumerate().for_each(|(col, value)| {
         let mut sum = 0.0;
         let mut count = 0usize;
         for row in 0..uw_interp.edgs.rows {
+            let edge_count = uw_interp.edge_counts.get(row).copied().unwrap_or(1);
+            if edge_count == 0 {
+                continue;
+            }
             let a = uw_interp.edgs.values[row * 3 + 1].round() as isize - 1;
             let b = uw_interp.edgs.values[row * 3 + 2].round() as isize - 1;
             if a < 0 || b < 0 || a as usize >= n_ps_grid || b as usize >= n_ps_grid {
@@ -659,13 +858,15 @@ fn grid_msd(ph_uw: &[f32], n_ps_grid: usize, n_unwrap: usize, uw_interp: &UwInte
             }
             let diff = ph_uw[a as usize * n_unwrap + col] as f64
                 - ph_uw[b as usize * n_unwrap + col] as f64;
-            sum += diff * diff;
-            count += 1;
+            if diff != 0.0 {
+                sum += diff * diff * edge_count as f64;
+                count += edge_count;
+            }
         }
         if count > 0 {
-            msd[col] = sum / count as f64;
+            *value = sum / count as f64;
         }
-    }
+    });
     msd
 }
 
@@ -691,28 +892,30 @@ fn write_phuw2(
     }
 
     let mut ph_uw = vec![0.0f32; n_ps * n_ifg];
-    for row in 0..n_ps {
-        let grid_i = uw_grid.grid_ij.values[row * 2].round() as isize;
-        let grid_j = uw_grid.grid_ij.values[row * 2 + 1].round() as isize;
-        if grid_i <= 0
-            || grid_j <= 0
-            || grid_i as usize > uw_grid.n_i
-            || grid_j as usize > uw_grid.n_j
-        {
-            continue;
-        }
-        let ps_grid_idx = gridix[(grid_i as usize - 1) * uw_grid.n_j + (grid_j as usize - 1)];
-        if ps_grid_idx == 0 {
-            continue;
-        }
-        for (out_col, &src_col) in unwrap_cols.iter().enumerate() {
-            let ph_pix = ph_uw_some[(ps_grid_idx - 1) * unwrap_cols.len() + out_col];
-            let ph_in = tuple_to_complex(uw_grid.ph_in.values[row * unwrap_cols.len() + out_col]);
-            let residual = (ph_in * Complex64::from_polar(1.0, -(ph_pix as f64))).arg() as f32;
-            ph_uw[row * n_ifg + src_col] =
-                ph_pix + residual + wrapped.phase_restore[row * n_ifg + src_col];
-        }
-    }
+    ph_uw
+        .par_chunks_mut(n_ifg)
+        .enumerate()
+        .for_each(|(row, out_row)| {
+            let grid_i = uw_grid.grid_ij.values[row * 2].round() as isize;
+            let grid_j = uw_grid.grid_ij.values[row * 2 + 1].round() as isize;
+            if grid_i <= 0
+                || grid_j <= 0
+                || grid_i as usize > uw_grid.n_i
+                || grid_j as usize > uw_grid.n_j
+            {
+                return;
+            }
+            let ps_grid_idx = gridix[(grid_i as usize - 1) * uw_grid.n_j + (grid_j as usize - 1)];
+            if ps_grid_idx == 0 {
+                return;
+            }
+            for (out_col, &src_col) in unwrap_cols.iter().enumerate() {
+                let ph_pix = ph_uw_some[(ps_grid_idx - 1) * unwrap_cols.len() + out_col];
+                let ph_in = uw_grid.ph_in.values[row * unwrap_cols.len() + out_col];
+                let residual = residual_phase(ph_in, ph_pix);
+                out_row[src_col] = ph_pix + residual + wrapped.phase_restore[row * n_ifg + src_col];
+            }
+        });
     let mut msd = vec![0.0f32; n_ifg];
     for (out_col, &src_col) in unwrap_cols.iter().enumerate() {
         msd[src_col] = msd_some[out_col] as f32;
@@ -906,12 +1109,14 @@ fn read_uw_interp(dataset_root: &Path, n_i: usize, n_j: usize) -> Result<UwInter
         cols: n_j,
         values: vec![1.0; n_i * n_j],
     });
+    let edge_counts = edge_counts_from_indices(&rowix, &colix, edgs.rows);
     Ok(UwInterp {
         n_edge: scalar_from_mat(&mat, "n_edge", edgs.rows as f64).round() as usize,
         edgs,
         rowix,
         colix,
         z,
+        edge_counts,
     })
 }
 
@@ -921,15 +1126,10 @@ fn expand_bperp_matrix(
     n_ps: usize,
     n_ifg: usize,
     master_ix: usize,
-) -> Result<Matrix<f64>, CoreError> {
+) -> Result<Matrix<f32>, CoreError> {
     if let Ok(bp_nm) = ps_matrix_f32(bp2, "bperp_mat", n_ps, "bp2.bperp_mat") {
         if bp_nm.cols == n_ifg {
-            return Ok(Matrix {
-                name: "bperp_mat".to_string(),
-                rows: n_ps,
-                cols: n_ifg,
-                values: bp_nm.values.iter().map(|&value| value as f64).collect(),
-            });
+            return Ok(bp_nm);
         }
         if bp_nm.cols + 1 == n_ifg {
             let mut values = vec![0.0; n_ps * n_ifg];
@@ -939,7 +1139,7 @@ fn expand_bperp_matrix(
                         continue;
                     }
                     let src_col = if col < master_ix - 1 { col } else { col - 1 };
-                    values[row * n_ifg + col] = bp_nm.values[row * bp_nm.cols + src_col] as f64;
+                    values[row * n_ifg + col] = bp_nm.values[row * bp_nm.cols + src_col];
                 }
             }
             return Ok(Matrix {
@@ -953,7 +1153,7 @@ fn expand_bperp_matrix(
     let bperp = ps_vector_f64(ps2, "bperp", n_ifg, "ps2.bperp")?;
     let mut values = Vec::with_capacity(n_ps * n_ifg);
     for _ in 0..n_ps {
-        values.extend_from_slice(&bperp);
+        values.extend(bperp.iter().map(|&value| value as f32));
     }
     Ok(Matrix {
         name: "bperp_mat".to_string(),
@@ -963,50 +1163,7 @@ fn expand_bperp_matrix(
     })
 }
 
-fn native_graph_edges(points: &[(f64, f64)]) -> Vec<(usize, usize)> {
-    if points.len() < 2 {
-        return Vec::new();
-    }
-    if points.len() == 2 {
-        return vec![(0, 1)];
-    }
-    let delaunay_points: Vec<Point> = points.iter().map(|&(x, y)| Point { x, y }).collect();
-    let triangulation = triangulate(&delaunay_points);
-    let mut edges = BTreeSet::new();
-    for tri in triangulation.triangles.chunks_exact(3) {
-        insert_edge(&mut edges, tri[0], tri[1]);
-        insert_edge(&mut edges, tri[1], tri[2]);
-        insert_edge(&mut edges, tri[0], tri[2]);
-    }
-    if edges.is_empty() {
-        nearest_neighbor_edges(points)
-    } else {
-        edges.into_iter().collect()
-    }
-}
-
-fn nearest_neighbor_edges(points: &[(f64, f64)]) -> Vec<(usize, usize)> {
-    let mut edges = BTreeSet::new();
-    for (i, &point) in points.iter().enumerate() {
-        if let Some((j, _)) = points
-            .iter()
-            .enumerate()
-            .filter(|(j, _)| *j != i)
-            .map(|(j, &other)| (j, (point.0 - other.0).powi(2) + (point.1 - other.1).powi(2)))
-            .min_by(|left, right| left.1.total_cmp(&right.1))
-        {
-            insert_edge(&mut edges, i, j);
-        }
-    }
-    edges.into_iter().collect()
-}
-
-fn insert_edge(edges: &mut BTreeSet<(usize, usize)>, a: usize, b: usize) {
-    if a != b {
-        edges.insert((a.min(b), a.max(b)));
-    }
-}
-
+#[cfg(test)]
 fn grid_points(uw_grid: &UwGrid) -> Result<Vec<(f64, f64)>, CoreError> {
     let mut points = Vec::with_capacity(uw_grid.n_ps);
     for col in 0..uw_grid.n_j {
@@ -1036,24 +1193,51 @@ fn nearest_point(points: &[(f64, f64)], target: (f64, f64)) -> usize {
         .min_by(|left, right| {
             left.1
                 .total_cmp(&right.1)
-                .then_with(|| left.0.cmp(&right.0))
+                .then_with(|| right.0.cmp(&left.0))
         })
         .map(|(ix, _)| ix)
         .unwrap_or(0)
 }
 
-fn edge_id_signed(edge_ids: &mut BTreeMap<(usize, usize), usize>, a: usize, b: usize) -> isize {
+fn label_edge_key(a: usize, b: usize) -> Option<u64> {
+    (a != b).then(|| {
+        let lo = a.min(b) as u64;
+        let hi = a.max(b) as u64;
+        (lo << 32) | hi
+    })
+}
+
+fn decode_label_edge_key(key: u64) -> (usize, usize) {
+    ((key >> 32) as usize, (key & 0xffff_ffff) as usize)
+}
+
+fn signed_label_edge_id(edge_ids: &HashMap<u64, usize>, a: usize, b: usize) -> isize {
     if a == b {
         return 0;
     }
-    let edge = (a.min(b), a.max(b));
-    let next_id = edge_ids.len() + 1;
-    let id = *edge_ids.entry(edge).or_insert(next_id);
+    let Some(key) = label_edge_key(a, b) else {
+        return 0;
+    };
+    let id = *edge_ids.get(&key).unwrap_or(&0);
     if a <= b {
         id as isize
     } else {
         -(id as isize)
     }
+}
+
+fn edge_counts_from_indices(rowix: &Matrix<f64>, colix: &Matrix<f64>, n_edge: usize) -> Vec<usize> {
+    let mut counts = vec![0usize; n_edge];
+    for &value in rowix.values.iter().chain(colix.values.iter()) {
+        if !value.is_finite() {
+            continue;
+        }
+        let edge_id = value.round().abs() as usize;
+        if (1..=n_edge).contains(&edge_id) {
+            counts[edge_id - 1] += 1;
+        }
+    }
+    counts
 }
 
 fn validate_connected_graph(uw_interp: &UwInterp, n_nodes: usize) -> Result<(), CoreError> {
@@ -1127,6 +1311,219 @@ fn load_stage6_parms(dataset_root: &Path) -> Stage6Parms {
 fn read_mat_stage6(dataset_root: &Path, filename: &str) -> Result<MatData, CoreError> {
     MatData::read(dataset_root.join(filename))
         .map_err(|err| stage6_err_owned(format!("unable to read {filename}: {err}")))
+}
+
+fn read_mat_stage6_selected(
+    dataset_root: &Path,
+    filename: &str,
+    variables: &[&str],
+) -> Result<MatData, CoreError> {
+    MatData::read_selected(dataset_root.join(filename), variables)
+        .map_err(|err| stage6_err_owned(format!("unable to read {filename}: {err}")))
+}
+
+fn ensure_mat_stage6(dataset_root: &Path, filename: &str) -> Result<(), CoreError> {
+    if dataset_root.join(filename).is_file() {
+        Ok(())
+    } else {
+        stage6_err(format!(
+            "Missing required artifact: {filename} before stage 6"
+        ))
+    }
+}
+
+fn read_rc2_phase_if_compatible(
+    dataset_root: &Path,
+    n_ps: usize,
+) -> Result<Option<ComplexMatrixF32>, CoreError> {
+    let path = dataset_root.join("rc2.mat");
+    if let Some((rows, cols)) = mat_v5_variable_shape(&path, "ph_rc")? {
+        if rows != n_ps && cols != n_ps {
+            return Ok(None);
+        }
+    }
+    let rc2 = read_mat_stage6_selected(dataset_root, "rc2.mat", &["ph_rc"])?;
+    let Ok(source) = rc2.get_complex_f32_matrix("ph_rc") else {
+        return Ok(None);
+    };
+    if source.rows == n_ps {
+        Ok(Some(source))
+    } else if source.cols == n_ps {
+        Ok(Some(transpose_complex_f32(source)))
+    } else {
+        Ok(None)
+    }
+}
+
+fn rc2_phase_shape_if_compatible(
+    dataset_root: &Path,
+    n_ps: usize,
+) -> Result<Option<(usize, usize)>, CoreError> {
+    let path = dataset_root.join("rc2.mat");
+    if !path.exists() {
+        return Ok(None);
+    }
+    let Some((rows, cols)) = mat_v5_variable_shape(&path, "ph_rc")? else {
+        return Ok(None);
+    };
+    if rows == n_ps {
+        Ok(Some((rows, cols)))
+    } else if cols == n_ps {
+        Ok(Some((cols, rows)))
+    } else {
+        Ok(None)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum MatEndian {
+    Little,
+    Big,
+}
+
+impl MatEndian {
+    fn read_u16(self, bytes: &[u8]) -> u16 {
+        match self {
+            MatEndian::Little => u16::from_le_bytes([bytes[0], bytes[1]]),
+            MatEndian::Big => u16::from_be_bytes([bytes[0], bytes[1]]),
+        }
+    }
+
+    fn read_u32(self, bytes: &[u8]) -> u32 {
+        match self {
+            MatEndian::Little => u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+            MatEndian::Big => u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+        }
+    }
+
+    fn read_i32(self, bytes: &[u8]) -> i32 {
+        match self {
+            MatEndian::Little => i32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+            MatEndian::Big => i32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]),
+        }
+    }
+}
+
+struct MatElementHeader {
+    data_type: u32,
+    data_size: usize,
+    data_start: usize,
+    padded_end: usize,
+}
+
+fn mat_v5_variable_shape(path: &Path, variable: &str) -> Result<Option<(usize, usize)>, CoreError> {
+    let mut file = File::open(path)
+        .map_err(|err| stage6_err_owned(format!("unable to inspect rc2.mat: {err}")))?;
+    let mut header = vec![0u8; 4096];
+    let bytes_read = file
+        .read(&mut header)
+        .map_err(|err| stage6_err_owned(format!("unable to inspect rc2.mat: {err}")))?;
+    header.truncate(bytes_read);
+    if header.len() < MAT_V5_HEADER_BYTES as usize {
+        return Ok(None);
+    }
+    let endian = match &header[126..128] {
+        b"IM" => MatEndian::Little,
+        b"MI" => MatEndian::Big,
+        _ => return Ok(None),
+    };
+
+    let mut offset = MAT_V5_HEADER_BYTES as usize;
+    while offset + 8 <= header.len() {
+        let top = mat_element_header(&header, offset, endian)?;
+        if top.data_type == MI_COMPRESSED {
+            return Ok(None);
+        }
+        if top.data_type != MI_MATRIX {
+            offset = top.padded_end;
+            continue;
+        }
+        let Some(shape) = mat_matrix_shape_from_prefix(&header, top.data_start, endian, variable)?
+        else {
+            return Ok(None);
+        };
+        return Ok(Some(shape));
+    }
+    Ok(None)
+}
+
+fn mat_matrix_shape_from_prefix(
+    bytes: &[u8],
+    matrix_start: usize,
+    endian: MatEndian,
+    variable: &str,
+) -> Result<Option<(usize, usize)>, CoreError> {
+    let flags = mat_element_header(bytes, matrix_start, endian)?;
+    let dims = mat_element_header(bytes, flags.padded_end, endian)?;
+    if dims.data_type != MI_INT32
+        || dims.data_size < 8
+        || dims.data_start + dims.data_size > bytes.len()
+    {
+        return Ok(None);
+    }
+    let dim_values = bytes[dims.data_start..dims.data_start + dims.data_size]
+        .chunks_exact(4)
+        .map(|chunk| endian.read_i32(chunk))
+        .collect::<Vec<_>>();
+    if dim_values.len() < 2 || dim_values.iter().any(|&dim| dim < 0) {
+        return Ok(None);
+    }
+    let name = mat_element_header(bytes, dims.padded_end, endian)?;
+    if name.data_start + name.data_size > bytes.len()
+        || (name.data_type != MI_INT8 && name.data_type != MI_UINT8)
+    {
+        return Ok(None);
+    }
+    let name_text =
+        String::from_utf8_lossy(&bytes[name.data_start..name.data_start + name.data_size]);
+    if name_text != variable {
+        return Ok(None);
+    }
+    let rows = dim_values[0] as usize;
+    let mut cols = 1usize;
+    for dim in &dim_values[1..] {
+        cols = cols
+            .checked_mul(*dim as usize)
+            .ok_or_else(|| stage6_err_owned("MAT v5 dimensions overflow usize".to_string()))?;
+    }
+    Ok(Some((rows, cols)))
+}
+
+fn mat_element_header(
+    bytes: &[u8],
+    offset: usize,
+    endian: MatEndian,
+) -> Result<MatElementHeader, CoreError> {
+    if offset + 8 > bytes.len() {
+        return stage6_err("MAT v5 element header is truncated");
+    }
+    let small_type = endian.read_u16(&bytes[offset..offset + 2]) as u32;
+    let small_size = endian.read_u16(&bytes[offset + 2..offset + 4]) as usize;
+    if small_size > 0 {
+        if small_size > 4 {
+            return stage6_err("MAT v5 small data element is malformed");
+        }
+        return Ok(MatElementHeader {
+            data_type: small_type,
+            data_size: small_size,
+            data_start: offset + 4,
+            padded_end: offset + 8,
+        });
+    }
+    let data_type = endian.read_u32(&bytes[offset..offset + 4]);
+    let data_size = endian.read_u32(&bytes[offset + 4..offset + 8]) as usize;
+    let data_start = offset + 8;
+    let padded = (8 - (data_size % 8)) % 8;
+    let padded_end = data_start
+        .checked_add(data_size)
+        .and_then(|end| end.checked_add(padded))
+        .ok_or_else(|| stage6_err_owned("MAT v5 data element size overflows usize".to_string()))?;
+    Ok(MatElementHeader {
+        data_type,
+        data_size,
+        data_start,
+        padded_end,
+    })
 }
 
 fn scalar_from_mat(mat: &MatData, name: &str, default: f64) -> f64 {
@@ -1211,6 +1608,31 @@ fn ps_dim_f64(
     }
     if source.rows == n_dim && source.cols == n_ps {
         return Ok(transpose_f64(source));
+    }
+    stage6_err(format!(
+        "{label} has incompatible shape {}x{} for n_ps={n_ps}, expected {n_ps}x{n_dim}",
+        source.rows, source.cols
+    ))
+}
+
+fn ps_dim_f32(
+    mat: &MatData,
+    name: &str,
+    n_ps: usize,
+    n_dim: usize,
+    label: &str,
+) -> Result<Matrix<f32>, CoreError> {
+    let source = mat
+        .get_f32_matrix(name)
+        .map_err(|err| CoreError::NativeStage {
+            stage: 6,
+            message: format!("{label} is invalid: {err}"),
+        })?;
+    if source.rows == n_ps && source.cols == n_dim {
+        return Ok(source);
+    }
+    if source.rows == n_dim && source.cols == n_ps {
+        return Ok(transpose_f32(source));
     }
     stage6_err(format!(
         "{label} has incompatible shape {}x{} for n_ps={n_ps}, expected {n_ps}x{n_dim}",
@@ -1306,6 +1728,34 @@ fn transpose_complex_f32(matrix: ComplexMatrixF32) -> ComplexMatrixF32 {
 
 fn tuple_to_complex(value: (f32, f32)) -> Complex64 {
     Complex64::new(value.0 as f64, value.1 as f64)
+}
+
+fn rotate_tuple(value: &mut (f32, f32), theta: f32) {
+    let (sin_theta, cos_theta) = theta.sin_cos();
+    let re = value.0 * cos_theta - value.1 * sin_theta;
+    let im = value.0 * sin_theta + value.1 * cos_theta;
+    *value = (re, im);
+}
+
+fn multiply_tuple_conj_patch(value: &mut (f32, f32), patch: (f32, f32)) {
+    let re = value.0 * patch.0 + value.1 * patch.1;
+    let im = value.1 * patch.0 - value.0 * patch.1;
+    *value = (re, im);
+}
+
+fn normalize_tuple(value: &mut (f32, f32)) {
+    let mag = value.0.hypot(value.1);
+    if mag > 0.0 {
+        value.0 /= mag;
+        value.1 /= mag;
+    }
+}
+
+fn residual_phase(value: (f32, f32), ph_pix: f32) -> f32 {
+    let (sin_theta, cos_theta) = (-ph_pix).sin_cos();
+    let re = value.0 * cos_theta - value.1 * sin_theta;
+    let im = value.0 * sin_theta + value.1 * cos_theta;
+    im.atan2(re)
 }
 
 fn wrap_phase(value: f64) -> f64 {

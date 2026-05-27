@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-27 05:39:41 | run=20260526-142844-454144 | iter=8 | mode=build | story=US-008 | duration=12805s | status=success
 - 2026-05-27 02:06:03 | run=20260526-142844-454144 | iter=7 | mode=build | story=US-007 | duration=9248s | status=success
 - 2026-05-26 23:31:51 | run=20260526-142844-454144 | iter=6 | mode=build | story=US-006 | duration=6079s | status=success
 - 2026-05-26 21:50:28 | run=20260526-142844-454144 | iter=5 | mode=build | story=US-005 | duration=11605s | status=success
@@ -248,3 +249,17 @@
 [2026-05-27 05:33:52] US-008: accelerated kernel pytest gate passed
 [2026-05-27 05:35:38] US-008: pre-commit review completed; cargo fmt difference is outside Stage 5 scope, required diff check passed
 [2026-05-27 05:38:23] US-008: appended progress log entry with implementation commit and verification outcomes
+[2026-05-27 05:39:32] ITERATION 8 end (duration=12805s)
+[2026-05-27 05:39:48] ITERATION 9 start (mode=build story=US-009)
+[2026-05-27 05:42:47] Start work on US-009 Stage 6 unwrap parity
+[2026-05-27 05:48:39] US-009: audited Stage 6 Rust, Python parity path, and STAMPS MATLAB unwrap routines
+[2026-05-27 06:05:55] US-009: Stage 6 Rust patch compiled and focused native_stage6 tests passed
+[2026-05-27 06:26:59] US-009: adjusted Stage 6 nearest-grid tie handling and graph unwrap traversal
+[2026-05-27 06:50:05] US-009: optimized Stage 6 interpolation edge indexing away from tree insertions
+[2026-05-27 07:04:31] US-009: made Stage 6 skip ph2/ph_patch reads when compatible rc2 can supply wrapped phase
+[2026-05-27 07:08:55] US-009: added env-gated Stage 6 substep timing probe
+[2026-05-27 07:12:44] US-009: kept Stage 6 wrapped-phase rotation in f32 and skipped unit normalization
+[2026-05-27 07:17:05] US-009: parallelized Stage 6 wrapped-phase, msd, and phuw2 hot loops
+[2026-05-27 07:20:49] US-009: replaced Stage 6 grid BTreeMap accumulation with direct sorted grid-cell accumulation
+[2026-05-27 07:33:41] US-009: reduced Stage 6 bperp working matrix to f32
+[2026-05-27 08:17:11] US-009: verification run completed; Stage 6 full-chain duration 28.077s but overall gate failed out-of-scope budgets
