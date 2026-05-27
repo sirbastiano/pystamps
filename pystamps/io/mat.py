@@ -17,6 +17,7 @@ def _decode_h5_dataset(obj: Any, h5file: Any) -> Any:
     if isinstance(obj, h5py.Dataset):
         arr = obj[()]
         arr = np.asarray(arr)
+        row_major = bool(np.asarray(obj.attrs.get("PY_STAMPS_row_major", 0)).reshape(-1)[0])
 
         # MATLAB complex arrays in v7.3 often appear as compound datasets.
         if arr.dtype.names and {"real", "imag"}.issubset(set(arr.dtype.names)):
@@ -30,7 +31,7 @@ def _decode_h5_dataset(obj: Any, h5file: Any) -> Any:
             arr = out
 
         # MATLAB stores arrays in column-major order; h5py exposes reversed axes.
-        if arr.ndim >= 2:
+        if arr.ndim >= 2 and not row_major:
             arr = np.transpose(arr, axes=tuple(reversed(range(arr.ndim))))
         return arr
 
@@ -47,15 +48,18 @@ def read_mat(path: str | Path) -> dict[str, Any]:
     mat_path = Path(path)
     try:
         payload = loadmat(mat_path, simplify_cells=True)
-    except NotImplementedError:
-        try:
-            import mat73  # type: ignore
+    except (NotImplementedError, ValueError):
+        with mat_path.open("rb") as f:
+            pure_hdf5 = f.read(8) == b"\x89HDF\r\n\x1a\n"
+        if not pure_hdf5:
+            try:
+                import mat73  # type: ignore
 
-            payload = mat73.loadmat(str(mat_path))
-            if isinstance(payload, dict):
-                return payload
-        except Exception:
-            pass
+                payload = mat73.loadmat(str(mat_path))
+                if isinstance(payload, dict) and any(value is not None for value in payload.values()):
+                    return payload
+            except Exception:
+                pass
 
         try:
             import h5py  # type: ignore

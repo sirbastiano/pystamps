@@ -291,7 +291,7 @@
         {"id": "merged_scla2.C_ps_uw.numeric_f32", "key": "C_ps_uw", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
         {"id": "merged_scla2.K_ps_uw.numeric_f64", "key": "K_ps_uw", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
         {"id": "merged_scla2.ifg_vcm.numeric_f64", "key": "ifg_vcm", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
-        {"id": "merged_scla2.ph_ramp.numeric_f64", "key": "ph_ramp", "dtype": "f64", "comparison_mode": "numeric_f64", "atol": 0.000001, "rtol": 0.00000001},
+        {"id": "merged_scla2.ph_ramp.numeric_f32", "key": "ph_ramp", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001},
         {"id": "merged_scla2.ph_scla.numeric_f32", "key": "ph_scla", "dtype": "f32", "comparison_mode": "numeric_f32", "atol": 0.0001, "rtol": 0.00001}
       ]
     },

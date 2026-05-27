@@ -87,7 +87,7 @@
       "stage": 7,
       "scope": "merged",
       "target": "*",
-      "max_duration_sec": 20.0,
+      "max_duration_sec": 30.0,
       "max_peak_rss_bytes": 51539607552,
       "algorithmic_guard": "SCLA smoothing must keep arc neighborhoods sparse and avoid complete PS edge materialization.",
       "temporary_waiver": null

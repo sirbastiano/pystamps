@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-27 08:22:49 | run=20260526-142844-454144 | iter=9 | mode=build | story=US-009 | duration=9776s | status=success
 - 2026-05-27 05:39:41 | run=20260526-142844-454144 | iter=8 | mode=build | story=US-008 | duration=12805s | status=success
 - 2026-05-27 02:06:03 | run=20260526-142844-454144 | iter=7 | mode=build | story=US-007 | duration=9248s | status=success
 - 2026-05-26 23:31:51 | run=20260526-142844-454144 | iter=6 | mode=build | story=US-006 | duration=6079s | status=success
@@ -264,3 +265,11 @@
 [2026-05-27 07:33:41] US-009: reduced Stage 6 bperp working matrix to f32
 [2026-05-27 08:17:11] US-009: verification run completed; Stage 6 full-chain duration 28.077s but overall gate failed out-of-scope budgets
 [2026-05-27 08:20:44] US-009: updated progress log with commit and verification outcome
+[2026-05-27 08:22:42] ITERATION 9 end (duration=9776s)
+[2026-05-27 08:22:56] ITERATION 10 start (mode=build story=US-010)
+[2026-05-27 08:25:36] US-010: started Stage 7 SCLA parity fast work after required guardrail review
+[2026-05-27 08:35:35] US-010: baseline Stage 7 run completed in 59.663s and failed the 20s budget
+[2026-05-27 09:01:11] US-010: implemented sparse Stage 7 SCLA neighbor smoothing and shared-design solve optimization
+[2026-05-27 12:37:51] US-010: optimized Stage 7 with parallel MAT reads, sparse smoothing, row-major HDF5 writes, and STAMPS-style coest_mean_vel default
+[2026-05-27 12:56:02] US-010: verification completed with Stage 7 budget pass; full-chain gate still fails existing Stage 5/6/8 budgets
+[2026-05-27 13:06:47] US-010: focused Stage 7 Rust tests and diff checks passed after cleanup

@@ -1510,7 +1510,7 @@ fn read_hdf5_complex_f32_dataset(
                 name: name.to_string(),
                 data_type: 0,
             })?;
-    let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+    let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
     let (real, imag): (Vec<f32>, Vec<f32>) =
         values.into_iter().map(|value| (value.re, value.im)).unzip();
     Ok(MatArray {
@@ -1534,7 +1534,7 @@ fn read_hdf5_complex_f64_dataset(
                 name: name.to_string(),
                 data_type: 0,
             })?;
-    let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+    let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
     let (real, imag): (Vec<f64>, Vec<f64>) =
         values.into_iter().map(|value| (value.re, value.im)).unzip();
     Ok(MatArray {
@@ -1550,7 +1550,7 @@ fn read_hdf5_complex_f64_dataset(
 fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData) -> MatArray {
     match data {
         NumericData::F64(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1561,7 +1561,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::F32(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1572,7 +1572,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::I8(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1583,7 +1583,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::U8(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1594,7 +1594,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::I16(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1605,7 +1605,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::U16(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1616,7 +1616,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::I32(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1627,7 +1627,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::U32(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1638,7 +1638,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::I64(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1649,7 +1649,7 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
         NumericData::U64(values) => {
-            let (rows, cols, values) = orient_hdf5_values(&dataset.shape(), values);
+            let (rows, cols, values) = orient_hdf5_dataset_values(dataset, values);
             MatArray {
                 name: name.to_string(),
                 rows,
@@ -1660,6 +1660,41 @@ fn real_hdf5_array(name: &str, dataset: &rust_hdf5::H5Dataset, data: NumericData
             }
         }
     }
+}
+
+fn orient_hdf5_dataset_values<T: Copy>(
+    dataset: &rust_hdf5::H5Dataset,
+    values: Vec<T>,
+) -> (usize, usize, Vec<T>) {
+    let shape = dataset.shape();
+    if hdf5_pystamps_row_major(dataset) {
+        return orient_row_major_hdf5_values(&shape, values);
+    }
+    orient_hdf5_values(&shape, values)
+}
+
+fn orient_row_major_hdf5_values<T: Copy>(
+    shape: &[usize],
+    values: Vec<T>,
+) -> (usize, usize, Vec<T>) {
+    match shape {
+        [] => (1, 1, values),
+        [_] => (values.len(), 1, values),
+        [rows, cols] => (*rows, *cols, values),
+        _ => {
+            let rows = *shape.first().unwrap_or(&1);
+            let cols = values.len() / rows.max(1);
+            (rows, cols, values)
+        }
+    }
+}
+
+fn hdf5_pystamps_row_major(dataset: &rust_hdf5::H5Dataset) -> bool {
+    dataset
+        .attr("PY_STAMPS_row_major")
+        .ok()
+        .and_then(|attr| attr.read_numeric::<u8>().ok())
+        .is_some_and(|value| value != 0)
 }
 
 fn orient_hdf5_values<T: Copy>(shape: &[usize], values: Vec<T>) -> (usize, usize, Vec<T>) {
