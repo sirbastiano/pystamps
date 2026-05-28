@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-28 00:46:22 | run=20260527-184635-826673 | iter=3 | mode=build | story=US-013 | duration=2784s | status=success
 - 2026-05-27 23:59:36 | run=20260527-184635-826673 | iter=2 | mode=build | story=US-012 | duration=3310s | status=success
 - 2026-05-27 23:04:17 | run=20260527-184635-826673 | iter=1 | mode=build | story=US-011 | duration=15439s | status=success
 - 2026-05-27 13:10:39 | run=20260526-142844-454144 | iter=10 | mode=build | story=US-010 | duration=17248s | status=success
@@ -309,3 +310,10 @@
 [2026-05-28 00:41:18] US-013 verification: cargo workspace PASS, release build PASS, accelerated pytest PASS, browser PASS, full-chain verify failed on known Stage 5/release runtime budgets
 [2026-05-28 00:42:21] US-013 review: checked report path handling, bounded scan behavior, and dry-run job fallback before commit
 [2026-05-28 00:43:42] US-013 progress log updated with commit, verification, and browser details
+[2026-05-28 00:46:05] ITERATION 3 end (duration=2784s)
+[2026-05-28 00:46:30] ITERATION 4 start (mode=build story=US-014)
+[2026-05-28 00:52:00] US-014 audit: reviewed guardrails, errors, PRD story, README, Makefile, AGENTS, native gate script, and tolerance/budget manifests
+[2026-05-28 00:52:00] US-014 docs change: documented fresh VM setup, full-chain commands, dataset copy/mount workflow, report paths, thread overrides, HDF5/MAT notes, and waiver policy
+[2026-05-28 01:20:52] US-014 verification: HDF5/MAT import PASS, cargo workspace PASS, release build PASS, accelerated pytest PASS, diff check PASS, exact full-chain verify FAIL on known release runtime and Stage 5 merged budgets
+[2026-05-28 01:21:33] US-014 guardrail update: added docs-story sign for repeated full-chain native budget failures outside documentation scope
+[2026-05-28 01:22:49] US-014 pre-commit review: security docs-only/no secrets, performance no runtime code changed, regression gates attempted with known native budget blocker disclosed

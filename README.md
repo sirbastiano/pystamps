@@ -53,6 +53,77 @@ python -m pip install -e "[dev]"
 native Rust CLI, and the Rust HTML frontend. Wheels from PyPI may avoid local
 compilation.
 
+## Fresh VM native validation
+
+Use this path when reproducing the fast native full-chain gate on a new VM. It
+documents both the implementation intent and the test evidence expected from the
+release runner: build the release Rust binary, create a clean validation run
+copy, execute native-only stages 1-8, then compare the generated MAT artifacts
+against the golden dataset.
+
+Fresh-clone validation commands:
+
+```bash
+make deps-ubuntu
+make deps-check
+uv run python -c "import h5py, mat73"
+cargo build --release -p pystamps-core --bin pystamps-native
+make native-full-chain-verify
+```
+
+For non-Ubuntu hosts, install the equivalent of `build-essential`, `curl`,
+`pkg-config`, Python development headers, `uv`, and a Rust toolchain through
+`rustup`. The vendored Rust HDF5 reader/writer is pure Rust and does not require
+a system `libhdf5` for native execution. Python verification still uses `h5py`
+and `mat73` for MATLAB v7.3/HDF5 MAT support, so keep the `uv run python -c
+"import h5py, mat73"` check in the setup path. If that import fails, run
+`uv sync` through `make deps` or install the platform HDF5 build headers needed
+by your Python wheels before running the gate.
+
+The default validation dataset is `inputs_and_outputs/InSAR_dataset_test`.
+Either copy it into the checkout or mount it read-only and pass explicit paths:
+
+```bash
+mkdir -p inputs_and_outputs/validation_runs
+cp -a /mnt/pystamps-validation/InSAR_dataset_test inputs_and_outputs/
+
+make native-full-chain-verify \
+  DATASET=/mnt/pystamps-validation/InSAR_dataset_test \
+  GOLDEN=/mnt/pystamps-validation/InSAR_dataset_test \
+  RUN=inputs_and_outputs/validation_runs/native-full-chain-vm \
+  THREADS=8
+```
+
+`DATASET` is the source tree copied into a clean run directory. `GOLDEN` is the
+reference tree used by the verifier. `RUN` is deleted and recreated by the gate,
+so do not point it at `DATASET`, inside `DATASET`, the repo root, `/`, or your
+home directory. `THREADS=0` is the default and lets the native runner use its CPU
+budget; set `THREADS=N` to pin both `--cpu-workers` and
+`--stage2-native-threads`. `START_STEP` and `END_STEP` can scope focused
+verification while preserving the same copy/clean/report behavior.
+
+The gate writes machine-readable evidence under `RUN/_native_gate_reports/`:
+
+- `native-coverage-report.json`: native-only coverage precheck
+- `native-run-report.json`: command, stdout/stderr, stage results, budget status
+- `native-run-timings.json`: per-stage durations and performance waivers
+- `native-verify-report.json`: parity verifier payload and failed comparisons
+
+Artifact parity uses `pystamps/data/artifact_tolerances.json`. The accepted
+defaults are exact structural and sparse parity, f64 `atol=1e-6`/`rtol=1e-8`,
+f32 `atol=1e-4`/`rtol=1e-5`, and wrapped phase modulo `2*pi` with
+`atol=1e-4` radians. Shape, required-key, sparse-structure, and PS ordering
+mismatches are not waived by the verifier. Runtime and stage performance
+waivers live in `pystamps/data/native_performance_budgets.json` as
+`temporary_waiver` objects with non-empty `reason`, `owner`, and future
+`expires_at_utc`; expired or incomplete waivers are ignored by the gate.
+
+Expected setup failures are ordinary errors, not panics. An absent validation
+dataset exits with status 2 and an error like `dataset root is not a directory:
+...`. Missing Python HDF5/MAT support is caught by the import check above or by
+the verifier as an environment/setup error; repair the `uv` environment before
+interpreting parity results.
+
 ## Run by stage
 
 Set a local dataset path and always work on a writeable copy:

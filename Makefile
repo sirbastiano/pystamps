@@ -3,6 +3,24 @@ AUDIT_DATASETS = inputs_and_outputs/InSAR_dataset_test_stage8diag inputs_and_out
 AUDIT_OUTPUT = inputs_and_outputs/validation_runs/latest_audit.json
 VERIFY_RUN = inputs_and_outputs/RUN_FULL_GATE_1e10
 VERIFY_GOLDEN = inputs_and_outputs/InSAR_dataset_test
+
+# Native VM reproduction:
+#   make deps-ubuntu && make deps-check
+#   uv run python -c "import h5py, mat73"
+#   cargo build --release -p pystamps-core --bin pystamps-native
+#   make native-full-chain-verify
+#
+# DATASET is copied to RUN before execution; GOLDEN is the parity reference.
+# RUN is removed/recreated and must stay outside DATASET. Reports are written to
+# $(RUN)/_native_gate_reports/{native-coverage-report.json,native-run-report.json,
+# native-run-timings.json,native-verify-report.json}. THREADS=0 lets the native
+# runner choose its CPU budget; THREADS=N pins --cpu-workers and
+# --stage2-native-threads. START_STEP/END_STEP scope focused gates.
+#
+# MAT/HDF5 support: native Rust uses the vendored pure-Rust HDF5/MAT support and
+# Python verification uses uv-managed h5py/mat73. Performance waivers are checked
+# in $(PERFORMANCE_BUDGETS) as temporary_waiver objects with reason, owner, and
+# future expires_at_utc.
 DATASET ?= inputs_and_outputs/InSAR_dataset_test
 RUN ?= inputs_and_outputs/validation_runs/native-full-chain
 GOLDEN ?= inputs_and_outputs/InSAR_dataset_test

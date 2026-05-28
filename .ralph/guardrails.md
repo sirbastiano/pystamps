@@ -47,3 +47,9 @@
 - **Instruction**: Record the stage budget failure and coverage result separately; do not widen the coverage story into Stage 5/6/7/8 performance work unless that stage is explicitly selected.
 - **Added after**: Iteration 2 - US-012 native coverage precheck passed twice, but exact full-chain verification failed before parity comparison on existing Stage 5 merged budget drift.
 - **Example**: For US-012, cite `_native_gate_reports/native-coverage-report.json` as the coverage signal and record the separate Stage 5 merged duration budget failure from `_native_gate_reports/native-run-timings.json`.
+
+### Sign: Keep Documentation Stories Out Of Native Budget Repairs
+- **Trigger**: When a documentation/setup workflow story completes its docs changes and local validation, but exact `make native-full-chain-verify` fails on an existing native runtime or stage budget.
+- **Instruction**: Record the exact budget failure and report paths, but do not change native stage code, performance budgets, or tolerance manifests unless that repair is the selected story.
+- **Added after**: Iteration 4 - US-014 documented VM setup and native run workflow, while exact full-chain verification again failed on release runtime and Stage 5 merged duration budgets.
+- **Example**: For docs-only workflow stories, cite `README.md`, `Makefile`, and `RUN/_native_gate_reports/native-run-timings.json` as evidence, then leave Stage 5 performance work to a Stage 5 story.
