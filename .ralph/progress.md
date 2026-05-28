@@ -87,6 +87,41 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Unsupported char/logical/sparse payloads should remain structured errors until a stage story specifically needs them.
   - `rustfmt` is still unavailable in this environment; keep code manually formatted or install the component outside this run.
 ---
+## [2026-05-28 01:24:02 UTC] - US-014: Document VM setup and native run workflow
+Thread:
+Run: 20260527-184635-826673 (iteration 4)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260527-184635-826673-iter-4.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260527-184635-826673-iter-4.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 559b745 docs(native): document VM full-chain workflow
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `uv run python -c "import h5py, mat73"` -> PASS
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `make native-full-chain-verify` -> FAIL (known out-of-scope native budget blocker: release runtime 648.337s > 600s and Stage 5 merged 51.171s > 30s; verifier comparison was not reached)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/guardrails.md
+  - .ralph/progress.md
+  - AGENTS.md
+  - Makefile
+  - README.md
+- What was implemented
+  - Added a fresh VM native validation section to README with Rust/uv/system prerequisites, the release build and full-chain commands, dataset copy or read-only mount workflow, thread overrides, and report locations under `RUN/_native_gate_reports/`.
+  - Documented MAT/HDF5 support boundaries: native Rust uses vendored pure-Rust HDF5/MAT support, while Python verification depends on uv-managed `h5py`/`mat73`.
+  - Documented accepted artifact tolerance defaults, performance waiver structure, and clear setup failure behavior for absent datasets or missing HDF5/MAT Python support.
+  - Added Makefile comments and an AGENTS operational note for the native VM reproduction path.
+  - Recorded the repeated full-chain Stage 5/release budget blocker in `.ralph/errors.log` and added a docs-story guardrail to keep documentation work out of native budget repair scope.
+- **Learnings for future iterations:**
+  - Patterns discovered: the native gate writes coverage, run, and timing reports before parity verification, so budget failures can leave no `native-verify-report.json`.
+  - Gotchas encountered: the requested `ralph log` helper is absent at repo root; activity entries were appended directly to `.ralph/activity.log`.
+  - Useful context: exact full-chain verification currently fails before parity on Stage 5 merged and total release runtime budgets even after documentation-only changes; use `inputs_and_outputs/validation_runs/native-full-chain/_native_gate_reports/native-run-timings.json` for current evidence.
+---
 ## [2026-05-26 23:30:38 UTC] - US-006: Restore Stage 3 selection parity
 Thread: 019e6645-7045-78d3-a900-fa638a9f8a0b
 Run: 20260526-142844-454144 (iteration 6)

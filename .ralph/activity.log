@@ -317,3 +317,4 @@
 [2026-05-28 01:20:52] US-014 verification: HDF5/MAT import PASS, cargo workspace PASS, release build PASS, accelerated pytest PASS, diff check PASS, exact full-chain verify FAIL on known release runtime and Stage 5 merged budgets
 [2026-05-28 01:21:33] US-014 guardrail update: added docs-story sign for repeated full-chain native budget failures outside documentation scope
 [2026-05-28 01:22:49] US-014 pre-commit review: security docs-only/no secrets, performance no runtime code changed, regression gates attempted with known native budget blocker disclosed
+[2026-05-28 01:24:02] US-014 progress log updated with commit, verification, and known blocker details
