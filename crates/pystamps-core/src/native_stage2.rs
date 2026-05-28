@@ -27,6 +27,90 @@ const STAGE2_RANDOM_SEED: u32 = 2005;
 const STAGE2_RANDOM_COUNT: usize = 300_000;
 #[cfg(test)]
 const STAGE2_RANDOM_COUNT: usize = 10_000;
+// MATLAB interp([1, Prand], 10) delegates to the Signal Processing Toolbox
+// interpolation FIR. Stage 2 only uses factor 10, so keep the audited taps
+// fixed instead of approximating them with a different low-pass designer.
+const STAGE2_INTERP10_TAPS: [f64; 79] = [
+    -7.92925708923623813e-05,
+    -1.73293349766172333e-04,
+    -3.00248431516961407e-04,
+    -4.48605550383722462e-04,
+    -5.95835452295412349e-04,
+    -7.08759204842826507e-04,
+    -7.46231412934915406e-04,
+    -6.64375214040318490e-04,
+    -4.24121369705182660e-04,
+    -3.01053961794528480e-07,
+    6.08939001185030554e-04,
+    1.37399755086099230e-03,
+    2.22872001918483081e-03,
+    3.06999955141492101e-03,
+    3.76333143346069959e-03,
+    4.15488007985555935e-03,
+    4.08970016389962471e-03,
+    3.43472424182160452e-03,
+    2.10413493213892910e-03,
+    8.39421246326618742e-05,
+    -2.54786253685349538e-03,
+    -5.60918261221970971e-03,
+    -8.81278723412589476e-03,
+    -1.17783753398490003e-02,
+    -1.40582499688596801e-02,
+    -1.51753768689126753e-02,
+    -1.46708218626883501e-02,
+    -1.21559904304523667e-02,
+    -7.36396963079587880e-03,
+    -1.93792008491816548e-04,
+    9.25827682864269544e-03,
+    2.06852593184593814e-02,
+    3.35768644427044682e-02,
+    4.72485589714582085e-02,
+    6.08905923193367796e-02,
+    7.36328154139928304e-02,
+    8.46190871379102622e-02,
+    9.30836882813813049e-02,
+    9.84216619119140101e-02,
+    1.00245459871706619e-01,
+    9.84216619119134828e-02,
+    9.30836882813811800e-02,
+    8.46190871379124271e-02,
+    7.36328154139975766e-02,
+    6.08905923193391457e-02,
+    4.72485589714637388e-02,
+    3.35768644427109145e-02,
+    2.06852593184574732e-02,
+    9.25827682864464527e-03,
+    -1.93792008489998774e-04,
+    -7.36396963079247527e-03,
+    -1.21559904304541604e-02,
+    -1.46708218626876996e-02,
+    -1.51753768689126579e-02,
+    -1.40582499688608267e-02,
+    -1.17783753398508096e-02,
+    -8.81278723413165405e-03,
+    -5.60918261221661496e-03,
+    -2.54786253685826761e-03,
+    8.39421246353382272e-05,
+    2.10413493213411785e-03,
+    3.43472424182329154e-03,
+    4.08970016390024574e-03,
+    4.15488007985538154e-03,
+    3.76333143346146634e-03,
+    3.06999955141576842e-03,
+    2.22872001918783102e-03,
+    1.37399755086213202e-03,
+    6.08939001188346478e-04,
+    -3.01053965413812172e-07,
+    -4.24121369703597340e-04,
+    -6.64375214039929912e-04,
+    -7.46231412935480926e-04,
+    -7.08759204842192465e-04,
+    -5.95835452295058465e-04,
+    -4.48605550383040716e-04,
+    -3.00248431517695195e-04,
+    -1.73293349768269614e-04,
+    -7.92925708931989381e-05,
+];
 
 #[derive(Clone, Copy, Debug)]
 struct Stage2Options {
@@ -279,13 +363,15 @@ fn run_stage2_native_inner(patch_dir: &Path) -> Result<String, CoreError> {
 
         if parms.filter_weighting.eq_ignore_ascii_case("P-square") {
             let na = hist_with_centers(&coh_ps, &prepared.coh_bins);
-            let denom: f64 = prepared.nr_base.iter().take(prepared.low_coh_thresh).sum();
+            let denom: f64 = nr_scaled_last.iter().take(prepared.low_coh_thresh).sum();
             let scale = if denom > 0.0 {
                 na.iter().take(prepared.low_coh_thresh).sum::<f64>() / denom
             } else {
                 1.0
             };
-            nr_scaled_last = prepared.nr_base.iter().map(|value| value * scale).collect();
+            for value in &mut nr_scaled_last {
+                *value *= scale;
+            }
             weighting = psquare_weighting(
                 &nr_scaled_last,
                 &na,
@@ -559,12 +645,11 @@ fn fill_phase_weight(
                     };
                     mat.values[row * prepared.n_ifg + col]
                 };
-                let phase = -(bp * k_ps[row]);
+                let phase = -((bp as f32) * (k_ps[row] as f32));
                 let (sn, cs) = phase.sin_cos();
-                let ramp = Complex64::new(cs, sn);
+                let ramp = Complex32::new(cs, sn);
                 let src = prepared.ph_nm[row * prepared.n_ifg + col];
-                let value = Complex64::new(src.re as f64, src.im as f64) * ramp * weighting[row];
-                out_row[col] = Complex32::new(value.re as f32, value.im as f32);
+                out_row[col] = src * ramp * (weighting[row] as f32);
             }
             Ok(())
         },
@@ -596,17 +681,16 @@ fn fit_stage2_rows(
 
                 let row_start = row * prepared.n_ifg;
                 let row_end = row_start + prepared.n_ifg;
-                let mut psdph = vec![Complex64::new(0.0, 0.0); prepared.n_ifg];
-                let mut valid = false;
+                let mut psdph = vec![Complex32::new(0.0, 0.0); prepared.n_ifg];
+                let mut valid = true;
                 for col in 0..prepared.n_ifg {
                     let patch_value = ph_patch[row_start + col].conj();
                     let ph_value = prepared.ph_nm[row_start + col];
-                    let value = Complex64::new(patch_value.re as f64, patch_value.im as f64)
-                        * Complex64::new(ph_value.re as f64, ph_value.im as f64);
-                    if value != Complex64::new(0.0, 0.0) {
-                        valid = true;
+                    let value32 = patch_value * ph_value;
+                    if value32 == Complex32::new(0.0, 0.0) {
+                        valid = false;
                     }
-                    psdph[col] = value;
+                    psdph[col] = value32;
                 }
                 if !valid {
                     return Ok(());
@@ -1120,13 +1204,13 @@ fn normalize_complex_unit_magnitude(values: &mut [Complex32]) {
     });
 }
 
-fn topofit_row(cpx: &[Complex64], bperp: &[f64], trial_mult: &[f64]) -> TopofitRow {
+fn topofit_row(cpx: &[Complex32], bperp: &[f64], trial_mult: &[f64]) -> TopofitRow {
     let valid = cpx
         .iter()
         .zip(bperp.iter())
         .enumerate()
         .filter_map(|(ix, (&value, &bp))| {
-            (value != Complex64::new(0.0, 0.0)).then_some((ix, value, bp))
+            (value != Complex32::new(0.0, 0.0)).then_some((ix, value, bp as f32))
         })
         .collect::<Vec<_>>();
     if valid.is_empty() {
@@ -1137,76 +1221,83 @@ fn topofit_row(cpx: &[Complex64], bperp: &[f64], trial_mult: &[f64]) -> TopofitR
             residual: vec![Complex32::new(0.0, 0.0); cpx.len()],
         };
     }
-    let denom: f64 = valid
-        .iter()
-        .map(|(_, value, _)| value.norm())
-        .sum::<f64>()
-        .max(1.0);
+    let mut denom: f32 = 0.0;
+    for (_, value, _) in &valid {
+        denom += value.norm();
+    }
+    if denom == 0.0 {
+        denom = 1.0;
+    }
     let min_bp = valid
         .iter()
         .map(|(_, _, bp)| *bp)
-        .fold(f64::INFINITY, f64::min);
+        .fold(f32::INFINITY, f32::min);
     let max_bp = valid
         .iter()
         .map(|(_, _, bp)| *bp)
-        .fold(f64::NEG_INFINITY, f64::max);
-    let bperp_range = (max_bp - min_bp).max(1.0);
-    let mut coh_trial = vec![0.0; trial_mult.len()];
+        .fold(f32::NEG_INFINITY, f32::max);
+    let mut bperp_range = max_bp - min_bp;
+    if bperp_range == 0.0 {
+        bperp_range = 1.0;
+    }
+    let mut coh_trial = vec![0.0_f32; trial_mult.len()];
     for (trial_ix, &trial_value) in trial_mult.iter().enumerate() {
-        let mut sum = Complex64::new(0.0, 0.0);
+        let mut sum = Complex32::new(0.0, 0.0);
         for (_, value, bp) in &valid {
-            let phase = (bp / bperp_range) * (std::f64::consts::PI / 4.0) * trial_value;
+            let phase = (bp / bperp_range) * (std::f32::consts::PI / 4.0) * (trial_value as f32);
             let (sn, cs) = phase.sin_cos();
-            sum += *value * Complex64::new(cs, -sn);
+            sum += *value * Complex32::new(cs, -sn);
         }
         coh_trial[trial_ix] = sum.norm() / denom;
     }
-    let trial_ix = argmax_first(&coh_trial);
-    let coarse_k0 = (std::f64::consts::PI / 4.0) / bperp_range * trial_mult[trial_ix];
+    let trial_ix = argmax_first_f32(&coh_trial);
+    let coarse_k0 =
+        ((std::f32::consts::PI / 4.0) / bperp_range * (trial_mult[trial_ix] as f32)) as f64;
     refine_candidate(&valid, cpx.len(), coarse_k0)
 }
 
-fn refine_candidate(valid: &[(usize, Complex64, f64)], n_col: usize, coarse_k0: f64) -> TopofitRow {
-    let mut offset = Complex64::new(0.0, 0.0);
+fn refine_candidate(valid: &[(usize, Complex32, f32)], n_col: usize, coarse_k0: f64) -> TopofitRow {
+    let mut k0 = coarse_k0 as f32;
+    let mut offset = Complex32::new(0.0, 0.0);
     for (_, value, bp) in valid {
-        let phase = coarse_k0 * bp;
+        let phase = k0 * bp;
         let (sn, cs) = phase.sin_cos();
-        offset += *value * Complex64::new(cs, -sn);
+        offset += *value * Complex32::new(cs, -sn);
     }
     let offset_conj = offset.conj();
     let mut mopt_num = 0.0;
     let mut den_lin = 0.0;
     for (_, value, bp) in valid {
-        let weight = value.norm();
-        let wb = weight * bp;
+        let weight = value.norm() as f64;
+        let wb = weight * (*bp as f64);
         den_lin += wb * wb;
-        let phase = coarse_k0 * bp;
+        let phase = k0 * bp;
         let (sn, cs) = phase.sin_cos();
-        let res = *value * Complex64::new(cs, -sn);
-        mopt_num += wb * (weight * (res * offset_conj).arg());
+        let res = *value * Complex32::new(cs, -sn);
+        mopt_num += wb * (weight * (res * offset_conj).arg() as f64);
     }
     if den_lin == 0.0 {
         den_lin = 1.0;
     }
-    let k = coarse_k0 + mopt_num / den_lin;
-    let mut mean_phase_residual = Complex64::new(0.0, 0.0);
-    let mut denom = 0.0;
+    k0 = (k0 as f64 + mopt_num / den_lin) as f32;
+    let mut mean_phase_residual = Complex32::new(0.0, 0.0);
+    let mut denom = 0.0_f32;
     let mut residual = vec![Complex32::new(0.0, 0.0); n_col];
     for (col, value, bp) in valid {
-        let phase = k * bp;
+        let phase = k0 * bp;
         let (sn, cs) = phase.sin_cos();
-        let res = *value * Complex64::new(cs, -sn);
+        let res = *value * Complex32::new(cs, -sn);
         mean_phase_residual += res;
         denom += res.norm();
-        residual[*col] = Complex32::new(res.re as f32, res.im as f32);
+        residual[*col] = res;
     }
     if denom == 0.0 {
         denom = 1.0;
     }
     TopofitRow {
-        k,
-        c: mean_phase_residual.arg(),
-        coh: mean_phase_residual.norm() / denom,
+        k: k0 as f64,
+        c: mean_phase_residual.arg() as f64,
+        coh: (mean_phase_residual.norm() / denom) as f64,
         residual,
     }
 }
@@ -1358,7 +1449,10 @@ where
     }
     let min_bp = bperp.iter().copied().fold(f64::INFINITY, f64::min);
     let max_bp = bperp.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-    let bperp_range = (max_bp - min_bp).max(1.0);
+    let mut bperp_range = max_bp - min_bp;
+    if bperp_range == 0.0 {
+        bperp_range = 1.0;
+    }
     let denom = n_col as f64;
     let mut coh_trial = vec![0.0; trial_values.len()];
     for (trial_ix, &trial_value) in trial_values.iter().enumerate() {
@@ -1420,6 +1514,18 @@ where
 fn argmax_first(values: &[f64]) -> usize {
     let mut best_ix = 0;
     let mut best_value = values.first().copied().unwrap_or(f64::NEG_INFINITY);
+    for (ix, &value) in values.iter().enumerate().skip(1) {
+        if value > best_value {
+            best_value = value;
+            best_ix = ix;
+        }
+    }
+    best_ix
+}
+
+fn argmax_first_f32(values: &[f32]) -> usize {
+    let mut best_ix = 0;
+    let mut best_value = values.first().copied().unwrap_or(f32::NEG_INFINITY);
     for (ix, &value) in values.iter().enumerate().skip(1) {
         if value > best_value {
             best_value = value;
@@ -1494,8 +1600,9 @@ fn histogram_center_index(
             return Some(0);
         }
         let cutoff0 = (centers[0] + centers[1]) / 2.0;
-        let assignment =
-            ((value - cutoff0) / d).ceil().clamp(0.0, (centers.len() - 1) as f64);
+        let assignment = ((value - cutoff0) / d)
+            .ceil()
+            .clamp(0.0, (centers.len() - 1) as f64);
         return Some(assignment as usize);
     }
     let owned_mids;
@@ -1609,16 +1716,33 @@ fn matlab_interp(values: &[f64], factor: usize) -> Vec<f64> {
     if factor <= 1 || values.is_empty() {
         return values.to_vec();
     }
+    if factor == 10 {
+        return interp_with_taps(values, factor, &STAGE2_INTERP10_TAPS, 39);
+    }
     let n = 4usize;
-    let mut expanded = vec![0.0; values.len() * factor + factor * n + 1];
+    let mut expanded = vec![0.0; values.len() * factor + factor * n];
     for (ix, &value) in values.iter().enumerate() {
         expanded[ix * factor] = value;
     }
-    let taps = firwin_hamming_lowpass(2 * factor * n + 2, 0.5 / factor as f64);
+    let taps = firwin_hamming_lowpass(2 * factor * n + 1, 1.0 / factor as f64);
     let filtered = lfilter(&taps, &expanded);
     filtered
         .into_iter()
-        .skip(factor * n + 1)
+        .skip(factor * n)
+        .map(|value| value * factor as f64)
+        .collect()
+}
+
+fn interp_with_taps(values: &[f64], factor: usize, taps: &[f64], delay: usize) -> Vec<f64> {
+    let mut expanded = vec![0.0; values.len() * factor + delay];
+    for (ix, &value) in values.iter().enumerate() {
+        expanded[ix * factor] = value;
+    }
+    let filtered = lfilter(taps, &expanded);
+    filtered
+        .into_iter()
+        .skip(delay)
+        .take(values.len() * factor)
         .map(|value| value * factor as f64)
         .collect()
 }
@@ -2368,11 +2492,11 @@ mod tests {
         let weighting = psquare_weighting(&nr, &na, 31, 45.0, &coh);
 
         let expected = [
-            0.052159239626102791,
-            0.0029095255364919221,
-            0.0029095255364919221,
-            1.5402358377538873e-07,
-            3.4841978752396286e-06,
+            1.8308507589276466e-06,
+            0.011860147976383777,
+            0.011860147976383777,
+            4.288734335628797e-06,
+            8.21030522409814e-06,
             1.0,
             1.0,
         ];
