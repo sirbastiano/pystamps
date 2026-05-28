@@ -308,3 +308,4 @@
 [2026-05-28 00:17:17] US-013 browser verification passed for failed parity fixture at /runs/us013-failed
 [2026-05-28 00:41:18] US-013 verification: cargo workspace PASS, release build PASS, accelerated pytest PASS, browser PASS, full-chain verify failed on known Stage 5/release runtime budgets
 [2026-05-28 00:42:21] US-013 review: checked report path handling, bounded scan behavior, and dry-run job fallback before commit
+[2026-05-28 00:43:42] US-013 progress log updated with commit, verification, and browser details

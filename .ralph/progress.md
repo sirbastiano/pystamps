@@ -976,3 +976,35 @@ Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/r
   - Gotchas encountered: exact full-chain verification still fails before parity comparison when Stage 5 merged drifts over its 30s budget; that is separate from US-012 coverage/native-only enforcement.
   - Useful context: the native full-chain gate now proves coverage first, then runs `pystamps-native run --native-only`, so a future Python/MATLAB/Octave bridge regression fails before being treated as a native execution path.
 ---
+## [2026-05-28 00:43:14 UTC] - US-013: Expose run and parity status in web console
+Thread:
+Run: 20260527-184635-826673 (iteration 3)
+Run log: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260527-184635-826673-iter-3.log
+Run summary: /shared/home/rdelprete/PythonProjects/AgenticWork/pySTAMPS/.ralph/runs/run-20260527-184635-826673-iter-3.md
+- Guardrails reviewed: yes
+- No-commit run: false
+- Commit: 108bc2f feat(web): expose native run status
+- Post-commit status: `clean` after follow-up progress-log commit
+- Verification:
+  - Command: `cargo test -p pystamps-web` -> PASS
+  - Command: `PYSTAMPS_WEB_RUNS_DIR=/tmp/pystamps-us013-runs make web` -> PASS (server started; browser check against `/` and `/runs/us013-failed` passed; server terminated intentionally)
+  - Command: `cargo test --workspace` -> PASS
+  - Command: `cargo build --release -p pystamps-core --bin pystamps-native` -> PASS
+  - Command: `uv run pytest -q tests/test_kernels_accelerated.py` -> PASS
+  - Command: `make native-full-chain-verify` -> FAIL (known out-of-scope performance blocker: release runtime 657.240s > 600s and Stage 5 merged 49.370s > 30s; verifier comparison was not reached)
+  - Command: `git diff --check` -> PASS
+- Files changed:
+  - .ralph/activity.log
+  - .ralph/errors.log
+  - .ralph/progress.md
+  - crates/pystamps-web/src/main.rs
+- What was implemented
+  - Added filesystem-backed native run discovery for `inputs_and_outputs/validation_runs/*/_native_gate_reports`, with `PYSTAMPS_WEB_RUNS_DIR` override support for local/browser validation.
+  - Updated `/` to list recent native runs with overall status, total duration, verifier state, generated timestamp, and peak memory derived from existing JSON reports.
+  - Updated `/runs/:runId` to show stage timing rows, artifact input/output counts, command metadata, and verifier failures with artifact path, key, observed/expected shape, `max_abs`, and tolerance id.
+  - Kept verifier/run JSON as the source of truth and added tests proving `ok: false` verifier reports render as failed, not green/successful.
+- **Learnings for future iterations:**
+  - Patterns discovered: the native gate writes run/timing/coverage reports before parity verification; the console must handle runs with no `native-verify-report.json` when performance budgets fail first.
+  - Gotchas encountered: dev-browser Chromium needed local extracted Ubuntu libraries because the VM lacked system `libnspr4`/NSS/ATK/X11 audio dependencies and sudo was unavailable.
+  - Useful context: exact full-chain verification still fails on Stage 5 merged/release runtime budget drift; this is unrelated to the US-013 web-console read-only status implementation.
+---
