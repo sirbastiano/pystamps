@@ -1,6 +1,7 @@
 # Activity Log
 
 ## Run Summary
+- 2026-05-28 01:25:53 | run=20260527-184635-826673 | iter=4 | mode=build | story=US-014 | duration=2349s | status=success
 - 2026-05-28 00:46:22 | run=20260527-184635-826673 | iter=3 | mode=build | story=US-013 | duration=2784s | status=success
 - 2026-05-27 23:59:36 | run=20260527-184635-826673 | iter=2 | mode=build | story=US-012 | duration=3310s | status=success
 - 2026-05-27 23:04:17 | run=20260527-184635-826673 | iter=1 | mode=build | story=US-011 | duration=15439s | status=success
@@ -318,3 +319,13 @@
 [2026-05-28 01:21:33] US-014 guardrail update: added docs-story sign for repeated full-chain native budget failures outside documentation scope
 [2026-05-28 01:22:49] US-014 pre-commit review: security docs-only/no secrets, performance no runtime code changed, regression gates attempted with known native budget blocker disclosed
 [2026-05-28 01:24:02] US-014 progress log updated with commit, verification, and known blocker details
+[2026-05-28 01:25:36] ITERATION 4 end (duration=2349s)
+[2026-05-28 01:26:02] ITERATION 5 start (mode=build story=US-015)
+[2026-05-28 01:29:34] US-015 context read: guardrails errors PRD AGENTS and prior blockers reviewed
+[2026-05-28 01:32:01] US-015 audit: certification belongs in scripts/native_full_chain_gate.py with tests in tests/test_native_full_chain_gate.py
+[2026-05-28 01:36:53] US-015 implemented certification JSON generation and focused gate tests passed
+[2026-05-28 02:02:45] US-015 verification blocker: native-full-chain certification blocked by release runtime 624.522s and Stage 5 merged 51.223s budget failures
+[2026-05-28 02:37:29] US-015 performance repair: Stage 5 merged avoids redundant selector copies and unused rc2 variable parsing; focused parity tests passed
+[2026-05-28 03:05:18] US-015 verification complete: certification JSON produced, performance gate passed with documented Stage 4/5 waivers, but full parity remains blocked by unapproved Stage 2 pm1 failures cascading to ps2/downstream shapes
+[2026-05-28 03:05:56] US-015 guardrail update: added certification boundary sign after repeated full-chain Stage 2 parity blocker cascaded into ps2/downstream shapes
+[2026-05-28 03:06:30] US-015 pre-commit review: security no new secret handling or shelling from untrusted input; performance certification uses existing telemetry and Stage 5 copies fewer large arrays; regression gates passed except documented full-chain parity blocker

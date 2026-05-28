@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -16,6 +18,7 @@ from typing import Any
 PATCH_PREFIX = "PATCH_"
 REPORT_DIR_NAME = "_native_gate_reports"
 DEFAULT_BUDGET_MANIFEST = Path(__file__).resolve().parents[1] / "pystamps" / "data" / "native_performance_budgets.json"
+DEFAULT_TOLERANCE_MANIFEST = Path(__file__).resolve().parents[1] / "pystamps" / "data" / "artifact_tolerances.json"
 FORBIDDEN_NATIVE_ONLY_PROGRAMS = {"uv", "matlab", "octave"}
 REQUIRED_COVERAGE_UNSUPPORTED_MODES = {"python", "matlab", "octave", "bridge"}
 
@@ -217,6 +220,54 @@ def ensure_run_manifest_matches_golden(run_root: Path, golden_root: Path) -> Non
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _git_commit_sha(repo_root: Path | None = None) -> str:
+    repo = (repo_root or Path(__file__).resolve().parents[1]).resolve()
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    sha = completed.stdout.strip()
+    if completed.returncode != 0 or not sha:
+        detail = (completed.stderr or completed.stdout).strip() or f"exit code {completed.returncode}"
+        raise GateError(f"could not resolve git commit SHA for certification: {detail}")
+    return sha
+
+
+def _command_line(command: Any) -> str | None:
+    if not isinstance(command, list):
+        return None
+    return shlex.join([str(token) for token in command])
+
+
+def _certification_command_lines(run_report: dict[str, Any], verify_report: dict[str, Any] | None) -> dict[str, str]:
+    commands: dict[str, str] = {}
+    coverage = run_report.get("coverage", {})
+    if isinstance(coverage, dict):
+        line = _command_line(coverage.get("command"))
+        if line is not None:
+            commands["native_coverage"] = line
+    line = _command_line(run_report.get("command"))
+    if line is not None:
+        commands["native_run"] = line
+    if verify_report is not None:
+        line = _command_line(verify_report.get("command"))
+        if line is not None:
+            commands["parity_verify"] = line
+    return commands
+
+
+def _peak_memory_bytes(stage_rows: list[dict[str, Any]]) -> int | None:
+    peaks: list[int] = []
+    for row in stage_rows:
+        memory = _number_or_none(row.get("memory_peak_bytes"))
+        if memory is not None:
+            peaks.append(int(memory))
+    return max(peaks) if peaks else None
 
 
 def _native_bin(args: argparse.Namespace) -> Path:
@@ -624,6 +675,188 @@ def _parse_utc_datetime(value: str) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _tolerance_manifest_path(args: argparse.Namespace) -> Path:
+    return Path(getattr(args, "tolerance_manifest", DEFAULT_TOLERANCE_MANIFEST)).expanduser()
+
+
+def load_tolerance_waiver_manifest(path: Path, *, now: datetime | None = None) -> dict[str, Any]:
+    now = now or datetime.now(timezone.utc)
+    if not path.is_file():
+        raise GateError(f"tolerance manifest does not exist: {path}")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise GateError(f"tolerance manifest is invalid JSON: {path}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise GateError(f"tolerance manifest must be a JSON object: {path}")
+
+    raw_waivers = payload.get("waivers", [])
+    if raw_waivers is None:
+        raw_waivers = []
+    if not isinstance(raw_waivers, list):
+        raise GateError("tolerance manifest field 'waivers' must be a list when present")
+
+    approved: list[dict[str, Any]] = []
+    invalid: list[dict[str, Any]] = []
+    for index, waiver in enumerate(raw_waivers):
+        normalized, message = _normalize_tolerance_waiver(waiver, index, now)
+        if normalized is None:
+            invalid.append({"index": index, "message": message})
+        else:
+            approved.append(normalized)
+    return {
+        "manifest_path": str(path),
+        "approved_waivers": approved,
+        "invalid_waivers": invalid,
+    }
+
+
+def _normalize_tolerance_waiver(
+    waiver: Any,
+    index: int,
+    now: datetime,
+) -> tuple[dict[str, Any] | None, str]:
+    if not isinstance(waiver, dict):
+        return None, "waiver is not an object"
+
+    tolerance_rule_id = str(waiver.get("tolerance_rule_id", "")).strip()
+    path_pattern = str(waiver.get("path", "")).strip()
+    key = str(waiver.get("key", "")).strip()
+    failure_kind = str(waiver.get("failure_kind", "")).strip()
+    scientific_reason = str(waiver.get("scientific_reason", "")).strip()
+    owner = str(waiver.get("owner", "")).strip()
+    expires_raw = str(waiver.get("expires_at_utc", "")).strip()
+
+    if not tolerance_rule_id and not path_pattern:
+        return None, "waiver must include tolerance_rule_id or path"
+    if not scientific_reason:
+        return None, "waiver must include scientific_reason"
+    if not owner:
+        return None, "waiver must include owner"
+    if not expires_raw:
+        return None, "waiver must include expires_at_utc"
+    expires = _parse_utc_datetime(expires_raw)
+    if expires is None:
+        return None, f"waiver expires_at_utc is invalid: {expires_raw}"
+    if expires <= now:
+        return None, f"waiver expired at {expires_raw}"
+
+    normalized: dict[str, Any] = {
+        "index": index,
+        "scientific_reason": scientific_reason,
+        "owner": owner,
+        "expires_at_utc": expires_raw,
+    }
+    if tolerance_rule_id:
+        normalized["tolerance_rule_id"] = tolerance_rule_id
+    if path_pattern:
+        normalized["path"] = path_pattern
+    if key:
+        normalized["key"] = key
+    if failure_kind:
+        normalized["failure_kind"] = failure_kind
+    return normalized, ""
+
+
+def _waiver_matches_failure(waiver: dict[str, Any], failure: dict[str, Any]) -> bool:
+    tolerance_rule_id = str(failure.get("tolerance_rule_id", "") or "")
+    if waiver_rule := waiver.get("tolerance_rule_id"):
+        if str(waiver_rule) != tolerance_rule_id:
+            return False
+
+    failure_path = str(failure.get("path", "") or "")
+    if path_pattern := waiver.get("path"):
+        if not fnmatch.fnmatchcase(failure_path, str(path_pattern)):
+            return False
+
+    failure_key = str(failure.get("failing_key", "") or "")
+    if waiver_key := waiver.get("key"):
+        if str(waiver_key) != failure_key:
+            return False
+
+    failure_kind = str(failure.get("failure_kind", "") or "")
+    if waiver_failure_kind := waiver.get("failure_kind"):
+        if str(waiver_failure_kind) != failure_kind:
+            return False
+
+    return True
+
+
+def evaluate_verifier_tolerance_waivers(
+    verify_payload: Any,
+    tolerance_manifest: Path,
+    *,
+    returncode: int = 0,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    manifest = load_tolerance_waiver_manifest(tolerance_manifest, now=now)
+    approved = manifest["approved_waivers"]
+    invalid = manifest["invalid_waivers"]
+
+    if not isinstance(verify_payload, dict):
+        return {
+            "ok": False,
+            "verifier_ok": False,
+            "manifest_path": manifest["manifest_path"],
+            "approved_waivers": approved,
+            "invalid_waivers": invalid,
+            "waived_failures": [],
+            "unapproved_failures": [
+                {
+                    "message": "verifier payload is not a JSON object",
+                    "failure_kind": "invalid_verifier_payload",
+                }
+            ],
+        }
+
+    failures = verify_payload.get("failed", [])
+    failures = failures if isinstance(failures, list) else []
+    verifier_ok = bool(verify_payload.get("ok"))
+    unapproved: list[dict[str, Any]] = []
+    waived: list[dict[str, Any]] = []
+
+    if verifier_ok:
+        if returncode != 0:
+            unapproved.append(
+                {
+                    "message": f"verifier returned {returncode} despite ok payload",
+                    "failure_kind": "verifier_returncode",
+                }
+            )
+    else:
+        if not failures:
+            unapproved.append(
+                {
+                    "message": "verifier did not report ok and did not provide failures to waive",
+                    "failure_kind": "missing_verifier_failures",
+                }
+            )
+        for failure in failures:
+            if not isinstance(failure, dict):
+                unapproved.append(
+                    {
+                        "message": "verifier failure is not an object",
+                        "failure_kind": "invalid_verifier_failure",
+                    }
+                )
+                continue
+            waiver = next((candidate for candidate in approved if _waiver_matches_failure(candidate, failure)), None)
+            if waiver is None:
+                unapproved.append(failure)
+            else:
+                waived.append({"failure": failure, "waiver": waiver})
+
+    return {
+        "ok": not invalid and not unapproved and (verifier_ok or bool(waived)),
+        "verifier_ok": verifier_ok,
+        "manifest_path": manifest["manifest_path"],
+        "approved_waivers": approved,
+        "invalid_waivers": invalid,
+        "waived_failures": waived,
+        "unapproved_failures": unapproved,
+    }
+
+
 def _matching_stage_budget(manifest: dict[str, Any], row: dict[str, Any]) -> dict[str, Any] | None:
     stages = manifest.get("stages", [])
     if not isinstance(stages, list):
@@ -657,6 +890,13 @@ def _number_or_none(value: Any) -> float | None:
         return None
 
 
+def _returncode_or_zero(value: Any) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _print_budget_report(report: dict[str, Any]) -> None:
     print(f"Performance budget status: {'ok' if report.get('ok') else 'failed'}")
     for violation in report.get("violations", []):
@@ -671,7 +911,7 @@ def _print_budget_report(report: dict[str, Any]) -> None:
 
 
 def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
-    start = time.monotonic()
+    gate_start = time.monotonic()
     dataset = Path(args.dataset)
     run_root = Path(args.run)
     setup = prepare_run_copy(dataset, run_root, args.start_step, args.end_step)
@@ -682,12 +922,13 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     validate_native_only_command(command)
 
     if not coverage_report.get("ok"):
-        elapsed = time.monotonic() - start
+        elapsed = time.monotonic() - gate_start
         run_report = {
             "generated_at_utc": _now_utc(),
             "ok": False,
             "status": "failed",
             "elapsed_sec": elapsed,
+            "gate_elapsed_sec": elapsed,
             "setup": setup,
             "coverage": coverage_report,
             "command": command,
@@ -713,8 +954,10 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         print(f"Native run report: {run_report_path}")
         return 1, run_report
 
+    native_start = time.monotonic()
     completed = subprocess.run(command, text=True, capture_output=True, check=False)
-    elapsed = time.monotonic() - start
+    elapsed = time.monotonic() - native_start
+    gate_elapsed = time.monotonic() - gate_start
     try:
         results = json.loads(completed.stdout) if completed.stdout.strip() else []
     except json.JSONDecodeError:
@@ -733,6 +976,7 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         "ok": ok,
         "status": "passed" if ok else "failed",
         "elapsed_sec": elapsed,
+        "gate_elapsed_sec": gate_elapsed,
         "setup": setup,
         "command": command,
         "returncode": completed.returncode,
@@ -746,6 +990,7 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
         "generated_at_utc": run_report["generated_at_utc"],
         "run_root": str(run_root),
         "elapsed_sec": elapsed,
+        "gate_elapsed_sec": gate_elapsed,
         "stages": duration_rows,
         "performance_budget": budget_report,
     }
@@ -762,6 +1007,179 @@ def run_native_gate(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
     if completed.stderr.strip():
         print(completed.stderr.strip(), file=sys.stderr)
     return (0 if ok else 1), run_report
+
+
+def _verifier_result_summary(verify_report: dict[str, Any] | None) -> dict[str, Any]:
+    if verify_report is None:
+        return {
+            "ok": False,
+            "checked": None,
+            "failed_count": None,
+            "failures": [],
+            "returncode": None,
+            "status": "not_run",
+        }
+    verify_payload = verify_report.get("verifier", {})
+    if not isinstance(verify_payload, dict):
+        verify_payload = {}
+    failures = verify_payload.get("failed", [])
+    failures = failures if isinstance(failures, list) else []
+    return {
+        "ok": bool(verify_payload.get("ok")),
+        "checked": verify_payload.get("checked"),
+        "failed_count": len(failures),
+        "failures": failures,
+        "returncode": verify_report.get("returncode"),
+        "status": verify_report.get("status"),
+    }
+
+
+def _certification_blockers(
+    run_report: dict[str, Any],
+    verify_report: dict[str, Any] | None,
+    tolerance_evaluation: dict[str, Any],
+) -> list[dict[str, Any]]:
+    blockers: list[dict[str, Any]] = []
+    if not run_report.get("ok"):
+        performance = run_report.get("performance_budget", {})
+        if isinstance(performance, dict):
+            for violation in performance.get("violations", []):
+                if isinstance(violation, dict):
+                    blockers.append(
+                        {
+                            "kind": "performance_budget",
+                            "message": violation.get("message") or violation.get("kind") or "performance budget failed",
+                        }
+                    )
+        coverage = run_report.get("coverage", {})
+        if isinstance(coverage, dict):
+            evaluation = coverage.get("evaluation", {})
+            if isinstance(evaluation, dict):
+                for violation in evaluation.get("violations", []):
+                    if isinstance(violation, dict):
+                        blockers.append(
+                            {
+                                "kind": "native_coverage",
+                                "message": violation.get("message") or violation.get("kind") or "native coverage failed",
+                            }
+                        )
+        if not blockers:
+            blockers.append({"kind": "native_run", "message": "native run gate failed"})
+
+    if verify_report is None:
+        blockers.append({"kind": "parity_verifier", "message": "parity verifier did not run"})
+    elif not tolerance_evaluation.get("ok"):
+        for invalid in tolerance_evaluation.get("invalid_waivers", []):
+            if isinstance(invalid, dict):
+                blockers.append(
+                    {
+                        "kind": "invalid_tolerance_waiver",
+                        "message": invalid.get("message") or "tolerance waiver is invalid",
+                    }
+                )
+        for failure in tolerance_evaluation.get("unapproved_failures", []):
+            if isinstance(failure, dict):
+                blockers.append(
+                    {
+                        "kind": "unapproved_verifier_failure",
+                        "path": failure.get("path"),
+                        "failing_key": failure.get("failing_key"),
+                        "failure_kind": failure.get("failure_kind"),
+                        "message": failure.get("message") or "verifier failure has no approved tolerance waiver",
+                    }
+                )
+    return blockers
+
+
+def build_certification_payload(
+    run_report: dict[str, Any],
+    verify_report: dict[str, Any] | None,
+    *,
+    golden_root: Path,
+    tolerance_manifest: Path,
+    commit_sha: str | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    generated_at = _now_utc()
+    setup = run_report.get("setup", {})
+    if not isinstance(setup, dict):
+        setup = {}
+    results = run_report.get("results", [])
+    if not isinstance(results, list):
+        results = []
+    stage_rows = _stage_durations([result for result in results if isinstance(result, dict)])
+    tolerance_evaluation = (
+        verify_report.get("tolerance_waiver_evaluation")
+        if isinstance(verify_report, dict) and isinstance(verify_report.get("tolerance_waiver_evaluation"), dict)
+        else None
+    )
+    if tolerance_evaluation is None:
+        verify_payload = verify_report.get("verifier", {}) if isinstance(verify_report, dict) else {}
+        returncode = _returncode_or_zero(verify_report.get("returncode")) if isinstance(verify_report, dict) else 0
+        tolerance_evaluation = evaluate_verifier_tolerance_waivers(
+            verify_payload,
+            tolerance_manifest,
+            returncode=returncode,
+            now=now,
+        )
+    blockers = _certification_blockers(run_report, verify_report, tolerance_evaluation)
+    command_lines = _certification_command_lines(run_report, verify_report)
+    return {
+        "generated_at_utc": generated_at,
+        "ok": not blockers,
+        "status": "certified" if not blockers else "blocked",
+        "commit_sha": commit_sha or _git_commit_sha(),
+        "dataset_path": setup.get("dataset"),
+        "run_root": setup.get("run_root"),
+        "golden_path": str(golden_root),
+        "stage_range": {
+            "start_step": setup.get("start_step"),
+            "end_step": setup.get("end_step"),
+        },
+        "command_lines": command_lines,
+        "commands": {
+            "native_coverage": (
+                run_report.get("coverage", {}).get("command")
+                if isinstance(run_report.get("coverage"), dict)
+                else None
+            ),
+            "native_run": run_report.get("command"),
+            "parity_verify": verify_report.get("command") if verify_report is not None else None,
+        },
+        "total_runtime_sec": run_report.get("elapsed_sec"),
+        "gate_runtime_sec": run_report.get("gate_elapsed_sec"),
+        "per_stage_runtime": stage_rows,
+        "peak_memory_bytes": _peak_memory_bytes(stage_rows),
+        "verifier_result": _verifier_result_summary(verify_report),
+        "performance_budget": run_report.get("performance_budget"),
+        "tolerance_waiver_list": tolerance_evaluation.get("waived_failures", []),
+        "tolerance_waiver_evaluation": tolerance_evaluation,
+        "blockers": blockers,
+    }
+
+
+def write_certification_report(
+    report_dir: Path,
+    run_report: dict[str, Any],
+    verify_report: dict[str, Any] | None,
+    *,
+    golden_root: Path,
+    tolerance_manifest: Path,
+) -> dict[str, Any]:
+    payload = build_certification_payload(
+        run_report,
+        verify_report,
+        golden_root=golden_root,
+        tolerance_manifest=tolerance_manifest,
+    )
+    certification_path = report_dir / "native-certification.json"
+    _write_json(certification_path, payload)
+    print(f"Certification status: {'ok' if payload.get('ok') else 'blocked'}")
+    for blocker in payload.get("blockers", []):
+        if isinstance(blocker, dict):
+            print(f"  certification blocker: {blocker.get('message')}")
+    print(f"Certification report: {certification_path}")
+    return payload
 
 
 def _verify_command(run_root: Path, golden_root: Path) -> list[str]:
@@ -781,8 +1199,16 @@ def run_verify_gate(args: argparse.Namespace) -> int:
     run_exit, run_report = run_native_gate(args)
     run_root = Path(run_report["setup"]["run_root"])
     golden_root = Path(args.golden).expanduser().resolve()
+    tolerance_manifest = _tolerance_manifest_path(args)
     report_dir = run_root / REPORT_DIR_NAME
     if run_exit != 0:
+        write_certification_report(
+            report_dir,
+            run_report,
+            None,
+            golden_root=golden_root,
+            tolerance_manifest=tolerance_manifest,
+        )
         return run_exit
 
     ensure_run_manifest_matches_golden(run_root, golden_root)
@@ -793,10 +1219,15 @@ def run_verify_gate(args: argparse.Namespace) -> int:
     except json.JSONDecodeError:
         verify_payload = {}
     verifier_ok = bool(verify_payload.get("ok")) and completed.returncode == 0
+    tolerance_evaluation = evaluate_verifier_tolerance_waivers(
+        verify_payload,
+        tolerance_manifest,
+        returncode=completed.returncode,
+    )
     report = {
         "generated_at_utc": _now_utc(),
-        "ok": verifier_ok,
-        "status": "passed" if verifier_ok else "failed",
+        "ok": bool(tolerance_evaluation["ok"]),
+        "status": "passed" if tolerance_evaluation["ok"] else "failed",
         "run_root": str(run_root),
         "golden_root": str(golden_root),
         "command": command,
@@ -804,20 +1235,29 @@ def run_verify_gate(args: argparse.Namespace) -> int:
         "stdout": completed.stdout,
         "stderr": completed.stderr,
         "verifier": verify_payload,
+        "verifier_ok": verifier_ok,
+        "tolerance_waiver_evaluation": tolerance_evaluation,
     }
     verify_report_path = report_dir / "native-verify-report.json"
     _write_json(verify_report_path, report)
+    certification = write_certification_report(
+        report_dir,
+        run_report,
+        report,
+        golden_root=golden_root,
+        tolerance_manifest=tolerance_manifest,
+    )
 
     print(
         "Parity status: "
-        f"{'ok' if verifier_ok else 'failed'} "
+        f"{'ok' if verifier_ok else ('waived' if tolerance_evaluation['ok'] else 'failed')} "
         f"(checked={verify_payload.get('checked', 'n/a')}, "
         f"failed={len(verify_payload.get('failed', [])) if isinstance(verify_payload.get('failed'), list) else 'n/a'})"
     )
     print(f"Parity report: {verify_report_path}")
     if completed.stderr.strip():
         print(completed.stderr.strip(), file=sys.stderr)
-    return 0 if verifier_ok else 1
+    return 0 if certification.get("ok") else 1
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -839,6 +1279,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     verify_parser = subparsers.add_parser("verify", help="Run native stages and verify parity")
     add_common(verify_parser)
     verify_parser.add_argument("--golden", required=True)
+    verify_parser.add_argument("--tolerance-manifest", default=str(DEFAULT_TOLERANCE_MANIFEST))
 
     args = parser.parse_args(argv)
     if args.start_step < 1 or args.end_step > 8 or args.start_step > args.end_step:

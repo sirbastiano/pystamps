@@ -53,3 +53,9 @@
 - **Instruction**: Record the exact budget failure and report paths, but do not change native stage code, performance budgets, or tolerance manifests unless that repair is the selected story.
 - **Added after**: Iteration 4 - US-014 documented VM setup and native run workflow, while exact full-chain verification again failed on release runtime and Stage 5 merged duration budgets.
 - **Example**: For docs-only workflow stories, cite `README.md`, `Makefile`, and `RUN/_native_gate_reports/native-run-timings.json` as evidence, then leave Stage 5 performance work to a Stage 5 story.
+
+### Sign: Certify Only The First Clean Boundary
+- **Trigger**: When a final certification story reaches parity verification but reports downstream shape/value cascades.
+- **Instruction**: Use the verifier's earliest boundary failure as the blocking cause and do not waive downstream `ps2.mat`, unwrap, SCLA, or space-time shape mismatches that are consequences of an unresolved earlier stage.
+- **Added after**: Iteration 5 - US-015 produced `native-certification.json` and cleared the performance gate, but exact full-chain verification still failed at Stage 2 `pm1.mat` before cascading into certification-blocking `ps2.mat` shapes.
+- **Example**: If `PATCH_1/pm1.mat/C_ps` or `PATCH_2/pm1.mat/Nr` fails first, debug Stage 2 with focused `START_STEP=1 END_STEP=2` probes before changing Stage 3-8 or adding artifact waivers.

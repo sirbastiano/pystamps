@@ -329,7 +329,6 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
             rc_cols = rc_patch.cols;
             append_rows_complex(&mut rc, rc_patch, &kept_ix);
         }
-
         for (offset, &idx) in kept_ix.iter().enumerate() {
             merged_index_by_key
                 .entry(bundle.ij_keys[idx])
@@ -341,82 +340,38 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
     let Some(base_ps) = base_ps else {
         return stage5_err("No patch PS data available for merge");
     };
-    let mut n_ps = ij.len() / 3;
-    if n_ps == 0 {
+    let initial_n_ps = ij.len() / 3;
+    if initial_n_ps == 0 {
         return stage5_err("No patch PS data available for merge");
     }
 
+    let mut active_indices: Vec<usize> = (0..initial_n_ps).collect();
     if !remove_ix.is_empty() {
-        let mut keep = vec![true; n_ps];
+        let mut keep = vec![true; initial_n_ps];
         for idx in remove_ix {
             if idx < keep.len() {
                 keep[idx] = false;
             }
         }
-        (
-            ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc,
-        ) = apply_stage5_selector_all(
-            &keep,
-            ij,
-            lonlat,
-            ph2,
-            k_ps,
-            c_ps,
-            coh_ps,
-            ph_patch,
-            ph_res,
-            bp,
-            hgt,
-            la,
-            rc,
-            ph_cols,
-            ph_patch_cols,
-            ph_res_cols,
-            bp_cols,
-            rc_cols,
-        );
-        n_ps = ij.len() / 3;
+        active_indices.retain(|&idx| keep[idx]);
     }
 
-    let dedup_keep = dedup_lonlat_keep_highest_coh(&lonlat, &coh_ps);
-    if dedup_keep.iter().any(|&keep| !keep) {
-        (
-            ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc,
-        ) = apply_stage5_selector_all(
-            &dedup_keep,
-            ij,
-            lonlat,
-            ph2,
-            k_ps,
-            c_ps,
-            coh_ps,
-            ph_patch,
-            ph_res,
-            bp,
-            hgt,
-            la,
-            rc,
-            ph_cols,
-            ph_patch_cols,
-            ph_res_cols,
-            bp_cols,
-            rc_cols,
-        );
-        n_ps = ij.len() / 3;
-    }
+    active_indices = dedup_lonlat_keep_highest_coh_indices(&lonlat, &coh_ps, &active_indices);
 
-    let (xy_local, ll0_xy) = local_xy_from_lonlat(&lonlat, parms.heading)?;
-    let mut sort_ix: Vec<usize> = (0..n_ps).collect();
+    let active_lonlat = select_rows_plain(&lonlat, 2, &active_indices);
+    let (xy_local, ll0_xy) = local_xy_from_lonlat(&active_lonlat, parms.heading)?;
+    let mut sort_ix: Vec<usize> = (0..active_indices.len()).collect();
     sort_ix.sort_by(|&left, &right| {
         xy_local[left * 2 + 1]
             .total_cmp(&xy_local[right * 2 + 1])
             .then_with(|| xy_local[left * 2].total_cmp(&xy_local[right * 2]))
     });
     let xy_sorted = select_rows_plain(&xy_local, 2, &sort_ix);
+    let final_indices: Vec<usize> = sort_ix.iter().map(|&pos| active_indices[pos]).collect();
     (
         ij, lonlat, ph2, k_ps, c_ps, coh_ps, ph_patch, ph_res, bp, hgt, la, rc,
     ) = apply_stage5_index_all(
-        &sort_ix,
+        &final_indices,
         ij,
         lonlat,
         ph2,
@@ -435,11 +390,14 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
         bp_cols,
         rc_cols,
     );
-    n_ps = ij.len() / 3;
+    let n_ps = ij.len() / 3;
     for row in 0..n_ps {
         ij[row * 3] = (row + 1) as f64;
     }
     let xy = merged_xy(&xy_sorted);
+    if !has_bp {
+        return stage5_err("bp2.mat is required to write merged Stage 5 outputs");
+    }
     let ifg_std = merged_ifg_std(
         &parms,
         &base_ps,
@@ -469,9 +427,6 @@ pub fn run_stage5_merge_native(dataset_root: impl AsRef<Path>) -> Result<String,
     )?;
     write_psver(dataset_root)?;
 
-    if !has_bp {
-        return stage5_err("bp2.mat is required to write merged Stage 5 outputs");
-    }
     let mut bp2 = MatFile::new(dataset_root.join("bp2.mat"));
     bp2.add_f32_matrix("bperp_mat", n_ps, bp_cols, bp)?;
     bp2.write()?;
@@ -665,7 +620,7 @@ fn load_stage5_patch_bundle(patch: &Path) -> Result<Stage5PatchBundle, CoreError
         None
     };
     let rc = if patch.join("rc2.mat").exists() {
-        let mat = read_mat_stage5(patch, "rc2.mat")?;
+        let mat = read_mat_stage5_vars(patch, "rc2.mat", &["ph_rc", "rc"])?;
         match mat
             .get_complex_f32_matrix("ph_rc")
             .or_else(|_| mat.get_complex_f32_matrix("rc"))
@@ -680,7 +635,6 @@ fn load_stage5_patch_bundle(patch: &Path) -> Result<Stage5PatchBundle, CoreError
     } else {
         None
     };
-
     Ok(Stage5PatchBundle {
         ps,
         ij,
@@ -1542,53 +1496,6 @@ type Stage5MergeArrays = (
     Vec<(f32, f32)>,
 );
 
-fn apply_stage5_selector_all(
-    keep: &[bool],
-    ij: Vec<f64>,
-    lonlat: Vec<f64>,
-    ph2: Vec<(f32, f32)>,
-    k_ps: Vec<f64>,
-    c_ps: Vec<f64>,
-    coh_ps: Vec<f64>,
-    ph_patch: Vec<(f32, f32)>,
-    ph_res: Vec<f32>,
-    bp: Vec<f32>,
-    hgt: Vec<f64>,
-    la: Vec<f64>,
-    rc: Vec<(f32, f32)>,
-    ph_cols: usize,
-    ph_patch_cols: usize,
-    ph_res_cols: usize,
-    bp_cols: usize,
-    rc_cols: usize,
-) -> Stage5MergeArrays {
-    let indices: Vec<usize> = keep
-        .iter()
-        .enumerate()
-        .filter_map(|(idx, &keep)| keep.then_some(idx))
-        .collect();
-    apply_stage5_index_all(
-        &indices,
-        ij,
-        lonlat,
-        ph2,
-        k_ps,
-        c_ps,
-        coh_ps,
-        ph_patch,
-        ph_res,
-        bp,
-        hgt,
-        la,
-        rc,
-        ph_cols,
-        ph_patch_cols,
-        ph_res_cols,
-        bp_cols,
-        rc_cols,
-    )
-}
-
 fn apply_stage5_index_all(
     indices: &[usize],
     ij: Vec<f64>,
@@ -1669,6 +1576,38 @@ fn select_values_plain<T: Copy + Send + Sync>(values: &[T], rows: &[usize]) -> V
     out
 }
 
+fn dedup_lonlat_keep_highest_coh_indices(
+    lonlat: &[f64],
+    coh_ps: &[f64],
+    indices: &[usize],
+) -> Vec<usize> {
+    let mut best_by_key: HashMap<(u64, u64), (usize, f64)> = HashMap::new();
+    for &row in indices {
+        let key = (lonlat[row * 2].to_bits(), lonlat[row * 2 + 1].to_bits());
+        let coh = coh_ps[row];
+        match best_by_key.get_mut(&key) {
+            Some((best_idx, best_coh)) if coh > *best_coh => {
+                *best_idx = row;
+                *best_coh = coh;
+            }
+            Some(_) => {}
+            None => {
+                best_by_key.insert(key, (row, coh));
+            }
+        }
+    }
+    indices
+        .iter()
+        .copied()
+        .filter(|&row| {
+            let key = (lonlat[row * 2].to_bits(), lonlat[row * 2 + 1].to_bits());
+            best_by_key
+                .get(&key)
+                .map_or(true, |&(best_idx, _)| row == best_idx)
+        })
+        .collect()
+}
+
 fn ps_complex_rows(
     source: ComplexMatrixF32,
     n_ps: usize,
@@ -1684,33 +1623,6 @@ fn ps_complex_rows(
         "{label} has incompatible shape {}x{} for n_ps={n_ps}",
         source.rows, source.cols
     ))
-}
-
-fn dedup_lonlat_keep_highest_coh(lonlat: &[f64], coh_ps: &[f64]) -> Vec<bool> {
-    let n = lonlat.len() / 2;
-    let mut best_by_key: HashMap<(u64, u64), (usize, f64)> = HashMap::new();
-    for row in 0..n {
-        let key = (lonlat[row * 2].to_bits(), lonlat[row * 2 + 1].to_bits());
-        let coh = coh_ps[row];
-        match best_by_key.get_mut(&key) {
-            Some((best_idx, best_coh)) if coh > *best_coh => {
-                *best_idx = row;
-                *best_coh = coh;
-            }
-            Some(_) => {}
-            None => {
-                best_by_key.insert(key, (row, coh));
-            }
-        }
-    }
-    let mut keep = vec![true; n];
-    for row in 0..n {
-        let key = (lonlat[row * 2].to_bits(), lonlat[row * 2 + 1].to_bits());
-        if let Some(&(best_idx, _)) = best_by_key.get(&key) {
-            keep[row] = row == best_idx;
-        }
-    }
-    keep
 }
 
 fn format_merged_rc2_payload(rc: &[(f32, f32)], rows: usize, cols: usize) -> Vec<(f32, f32)> {

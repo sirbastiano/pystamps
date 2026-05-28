@@ -204,6 +204,137 @@ def test_stage_duration_rows_preserve_native_telemetry_fields() -> None:
     ]
 
 
+def test_verifier_waiver_evaluation_blocks_unapproved_shape_mismatch(tmp_path: Path) -> None:
+    module = _load_gate_module()
+    manifest = tmp_path / "artifact_tolerances.json"
+    manifest.write_text('{"manifest_version": 1, "artifacts": [], "waivers": []}', encoding="utf-8")
+
+    report = module.evaluate_verifier_tolerance_waivers(
+        {
+            "ok": False,
+            "checked": 1,
+            "failed": [
+                {
+                    "path": "ps2.mat",
+                    "message": "Shape mismatch for key 'ij'",
+                    "failure_kind": "shape_mismatch",
+                    "failing_key": "ij",
+                    "tolerance_rule_id": "merged_ps2.ij.exact_structural",
+                }
+            ],
+        },
+        manifest,
+        returncode=1,
+        now=datetime(2026, 5, 28, tzinfo=timezone.utc),
+    )
+
+    assert report["ok"] is False
+    assert report["unapproved_failures"][0]["path"] == "ps2.mat"
+    assert report["waived_failures"] == []
+
+
+def test_verifier_waiver_evaluation_accepts_documented_manifest_waiver(tmp_path: Path) -> None:
+    module = _load_gate_module()
+    manifest = tmp_path / "artifact_tolerances.json"
+    manifest.write_text(
+        """
+{
+  "manifest_version": 1,
+  "artifacts": [],
+  "waivers": [
+    {
+      "path": "uw_space_time.mat",
+      "key": "spread",
+      "failure_kind": "sparse_structure_mismatch",
+      "scientific_reason": "Legacy STAMPS sparse encoding differs but data vectors are analytically equivalent.",
+      "owner": "native-parity",
+      "expires_at_utc": "2026-06-30T00:00:00Z"
+    }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    report = module.evaluate_verifier_tolerance_waivers(
+        {
+            "ok": False,
+            "checked": 1,
+            "failed": [
+                {
+                    "path": "uw_space_time.mat",
+                    "message": "Sparse structure mismatch for key 'spread'",
+                    "failure_kind": "sparse_structure_mismatch",
+                    "failing_key": "spread",
+                    "tolerance_rule_id": "merged_uw_space_time.spread.sparse_exact",
+                }
+            ],
+        },
+        manifest,
+        returncode=1,
+        now=datetime(2026, 5, 28, tzinfo=timezone.utc),
+    )
+
+    assert report["ok"] is True
+    assert report["unapproved_failures"] == []
+    assert report["waived_failures"][0]["waiver"]["scientific_reason"].startswith("Legacy STAMPS")
+
+
+def test_certification_payload_contains_release_evidence(tmp_path: Path) -> None:
+    module = _load_gate_module()
+    manifest = tmp_path / "artifact_tolerances.json"
+    manifest.write_text('{"manifest_version": 1, "artifacts": [], "waivers": []}', encoding="utf-8")
+    run_report = {
+        "ok": True,
+        "elapsed_sec": 42.5,
+        "setup": {
+            "dataset": "/data/InSAR_dataset_test",
+            "run_root": "/runs/native-full-chain",
+            "start_step": 1,
+            "end_step": 8,
+        },
+        "coverage": {"command": ["target/release/pystamps-native", "coverage"]},
+        "command": ["target/release/pystamps-native", "run", "--native-only"],
+        "results": [
+            {
+                "stage": 8,
+                "scope": "merged",
+                "target": "native-full-chain",
+                "status": "completed",
+                "duration_sec": 12.25,
+                "memory_peak_bytes": 4096,
+            }
+        ],
+        "performance_budget": {"ok": True, "violations": [], "waivers": []},
+    }
+    verify_report = {
+        "ok": True,
+        "status": "passed",
+        "command": [sys.executable, "-m", "pystamps.cli", "verify"],
+        "returncode": 0,
+        "verifier": {"ok": True, "checked": 7, "failed": []},
+    }
+
+    payload = module.build_certification_payload(
+        run_report,
+        verify_report,
+        golden_root=tmp_path / "golden",
+        tolerance_manifest=manifest,
+        commit_sha="abc123",
+        now=datetime(2026, 5, 28, tzinfo=timezone.utc),
+    )
+
+    assert payload["ok"] is True
+    assert payload["commit_sha"] == "abc123"
+    assert payload["dataset_path"] == "/data/InSAR_dataset_test"
+    assert payload["total_runtime_sec"] == 42.5
+    assert payload["peak_memory_bytes"] == 4096
+    assert payload["per_stage_runtime"][0]["stage"] == 8
+    assert payload["verifier_result"]["ok"] is True
+    assert payload["tolerance_waiver_list"] == []
+    assert "native_run" in payload["command_lines"]
+
+
 def test_native_command_requires_native_only_policy(tmp_path: Path) -> None:
     module = _load_gate_module()
     native_bin = tmp_path / "pystamps-native"
