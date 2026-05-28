@@ -40,12 +40,24 @@ impl Default for RunTimeConfig {
 
 impl RunTimeConfig {
     fn stage2_thread_count(&self) -> usize {
+        self.stage2_thread_count_with_available(default_processing_threads())
+    }
+
+    fn stage2_thread_count_with_available(&self, available: usize) -> usize {
         if self.stage2_native_threads > 0 {
             self.stage2_native_threads as usize
-        } else {
+        } else if self.cpu_workers > 0 {
             self.cpu_workers as usize
+        } else {
+            available.max(1)
         }
     }
+}
+
+fn default_processing_threads() -> usize {
+    std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1)
 }
 
 fn main() -> ExitCode {
@@ -439,4 +451,32 @@ fn usage() {
   pystamps-native stage7 --dataset PATH
   pystamps-native stage8 --dataset PATH"
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn runtime(cpu_workers: u16, stage2_native_threads: u16) -> RunTimeConfig {
+        RunTimeConfig {
+            cpu_workers,
+            stage2_native_threads,
+            ..RunTimeConfig::default()
+        }
+    }
+
+    #[test]
+    fn stage2_auto_threads_use_available_parallelism() {
+        assert_eq!(runtime(0, 0).stage2_thread_count_with_available(16), 16);
+    }
+
+    #[test]
+    fn stage2_auto_threads_honor_cpu_worker_cap() {
+        assert_eq!(runtime(4, 0).stage2_thread_count_with_available(16), 4);
+    }
+
+    #[test]
+    fn stage2_explicit_native_threads_override_cpu_workers() {
+        assert_eq!(runtime(4, 6).stage2_thread_count_with_available(16), 6);
+    }
 }

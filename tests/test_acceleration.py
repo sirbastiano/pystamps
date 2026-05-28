@@ -116,6 +116,12 @@ def test_effective_stage2_native_threads_default_uses_all_cpu_workers(monkeypatc
     assert _effective_stage2_native_threads(STAGE_DEFS[1], context, patch_count=1) == 9
 
 
+def test_hybrid_executor_auto_cpu_workers_use_all_available_cpus(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pystamps.runtime.executor.os.cpu_count", lambda: 12)
+
+    assert HybridExecutor(cpu_workers=0).cpu_workers == 12
+
+
 def test_effective_stage2_native_threads_is_disabled_for_python_backend() -> None:
     context = _ctx(stage2_kernel_backend="python")
     assert _effective_stage2_native_threads(STAGE_DEFS[1], context, patch_count=4) == 0

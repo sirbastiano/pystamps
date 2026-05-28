@@ -8,12 +8,16 @@ from typing import Any, Callable, Literal
 TaskKind = Literal["io", "cpu"]
 
 
+def _default_cpu_workers() -> int:
+    return max(1, os.cpu_count() or 4)
+
+
 class HybridExecutor:
     """Hybrid execution model: threads for IO/orchestration, processes for CPU kernels."""
 
     def __init__(self, io_workers: int = 8, cpu_workers: int = 0) -> None:
         self.io_workers = max(1, int(io_workers))
-        self.cpu_workers = int(cpu_workers) if cpu_workers and cpu_workers > 0 else max(1, (os.cpu_count() or 4) - 1)
+        self.cpu_workers = int(cpu_workers) if cpu_workers and cpu_workers > 0 else _default_cpu_workers()
         self._thread_pool: ThreadPoolExecutor | None = None
         self._process_pool: ProcessPoolExecutor | None = None
 

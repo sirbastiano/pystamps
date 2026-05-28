@@ -97,8 +97,8 @@ make native-full-chain-verify \
 `DATASET` is the source tree copied into a clean run directory. `GOLDEN` is the
 reference tree used by the verifier. `RUN` is deleted and recreated by the gate,
 so do not point it at `DATASET`, inside `DATASET`, the repo root, `/`, or your
-home directory. `THREADS=0` is the default and lets the native runner use its CPU
-budget; set `THREADS=N` to pin both `--cpu-workers` and
+home directory. `THREADS=0` is the default and lets the native runner use all
+available processing threads; set `THREADS=N` to pin both `--cpu-workers` and
 `--stage2-native-threads`. `START_STEP` and `END_STEP` can scope focused
 verification while preserving the same copy/clean/report behavior.
 
@@ -179,6 +179,10 @@ YAML
 
 uv run pystamps --config native-rust.yaml run --dataset "$DATASET_COPY" --start-step 1 --end-step 8
 ```
+
+`cpu_workers: 0` and `stage2_native_threads: 0` select max-throughput auto mode:
+the runner uses all CPUs visible to the process. Set positive values to cap CPU
+process workers and Stage 2 native threads.
 
 Expected output is a JSON array of stage reports from the Rust pipeline driver:
 

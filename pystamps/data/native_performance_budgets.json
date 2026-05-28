@@ -5,7 +5,7 @@
   "runtime_profile": {
     "binary": "target/release/pystamps-native",
     "gate": "make native-full-chain-verify",
-    "stage2_native_threads": "THREADS make variable; default 0 lets the native runner use its CPU budget"
+    "stage2_native_threads": "THREADS make variable; default 0 lets the native runner use all available processing threads"
   },
   "release": {
     "max_total_duration_sec": 600.0,

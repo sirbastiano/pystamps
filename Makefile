@@ -14,7 +14,7 @@ VERIFY_GOLDEN = inputs_and_outputs/InSAR_dataset_test
 # RUN is removed/recreated and must stay outside DATASET. Reports are written to
 # $(RUN)/_native_gate_reports/{native-coverage-report.json,native-run-report.json,
 # native-run-timings.json,native-verify-report.json}. THREADS=0 lets the native
-# runner choose its CPU budget; THREADS=N pins --cpu-workers and
+# runner use all available processing threads; THREADS=N pins --cpu-workers and
 # --stage2-native-threads. START_STEP/END_STEP scope focused gates.
 #
 # MAT/HDF5 support: native Rust uses the vendored pure-Rust HDF5/MAT support and
