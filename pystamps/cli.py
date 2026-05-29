@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -12,6 +11,7 @@ from pystamps.config import ConfigError, RunConfig, load_config
 from pystamps.input_contracts import describe_stage_inputs, parse_stage_spec
 from pystamps.kernels import describe_backend_matrix
 from pystamps.notebooks.dataset_inspection import inspect_stage1_inputs
+from pystamps.native import native_binary_command
 from pystamps.pipeline.stages import run_pipeline
 from pystamps.pipeline.types import PipelineContext
 from pystamps.status import collect_status
@@ -19,21 +19,7 @@ from pystamps.verify import comparison_failure_payload, verify_run_against_golde
 
 
 def _native_binary_command() -> tuple[list[str], Path | None]:
-    repo_root = Path(__file__).resolve().parents[1]
-    if value := os.environ.get("PYSTAMPS_NATIVE_BIN"):
-        return [value], None
-
-    binary = shutil.which("pystamps-native")
-    if binary:
-        return [binary], None
-
-    candidates = [repo_root / "target" / "debug" / "pystamps-native", repo_root / "target" / "release" / "pystamps-native"]
-    for candidate in candidates:
-        if candidate.exists():
-            return [str(candidate)], None
-
-    fallback_command = ["cargo", "run", "-p", "pystamps-core", "--bin", "pystamps-native", "--"]
-    return fallback_command, repo_root
+    return native_binary_command()
 
 
 def _run_native_pipeline(

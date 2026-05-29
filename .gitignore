@@ -17,6 +17,10 @@ __pycache__/
 /.ralph/
 /AGENTS.md
 /.github/
+!/.github/
+/.github/*
+!/.github/workflows/
+!/.github/workflows/**
 /PLANS.md
 /.agent-memory/
 /.build-deps/

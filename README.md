@@ -53,6 +53,33 @@ python -m pip install -e "[dev]"
 native Rust CLI, and the Rust HTML frontend. Wheels from PyPI may avoid local
 compilation.
 
+## Install the bundled native Rust CLI
+
+Platform wheels bundle the standalone `pystamps-native` executable under the
+Python package and expose a `pystamps-native` console entry point that immediately
+launches that executable. After installing a wheel, run the native chain without
+building from source:
+
+```bash
+python -m pip install pystamps-insar
+
+pystamps-native run \
+  --native-only \
+  --dataset /path/to/writable_dataset_copy \
+  --start-step 1 \
+  --end-step 8 \
+  --backend native \
+  --stage2-kernel-backend native \
+  --cpu-workers 0 \
+  --stage2-native-threads 0
+```
+
+The wheel build matrix targets CPython 3.12-3.14 on Linux x86_64/aarch64,
+macOS Intel, macOS Apple Silicon, and Windows AMD64. Other platforms can still
+install from source when a Rust toolchain and platform build tools are available.
+Alpine/musllinux, PyPy, Windows ARM64, and other architectures are not currently
+part of the wheel matrix.
+
 ## Fresh VM native validation
 
 Use this path when reproducing the fast native full-chain gate on a new VM. It
@@ -161,6 +188,50 @@ uv run pystamps run --dataset "$DATASET_COPY" --start-step 1 --end-step 8 --dry-
 ```
 
 ## Native execution
+
+### Run the full native chain without the Python wrapper
+
+Use the standalone Rust binary when you want the processing chain to execute
+without the Python CLI wrapper. Build the optimized binary once, copy the
+dataset to a writable run directory, then launch `pystamps-native` directly:
+
+```bash
+export DATASET_SOURCE=/path/to/original_dataset
+export RUN_COPY=/path/to/native_run_copy
+
+rm -rf "$RUN_COPY"
+cp -a "$DATASET_SOURCE" "$RUN_COPY"
+cargo build --release -p pystamps-core --bin pystamps-native
+
+target/release/pystamps-native run \
+  --native-only \
+  --dataset "$RUN_COPY" \
+  --start-step 1 \
+  --end-step 8 \
+  --backend native \
+  --stage2-kernel-backend native \
+  --cpu-workers 0 \
+  --stage2-native-threads 0
+```
+
+`--native-only` rejects bridge execution and requires `--backend native` with
+`--stage2-kernel-backend native`. `--cpu-workers 0` and
+`--stage2-native-threads 0` mean "use all CPUs visible to the process"; set
+positive values to cap processing threads for reproducible resource limits.
+
+Run a focused native range by changing `--start-step` and `--end-step`:
+
+```bash
+target/release/pystamps-native run \
+  --native-only \
+  --dataset "$RUN_COPY" \
+  --start-step 2 \
+  --end-step 2 \
+  --backend native \
+  --stage2-kernel-backend native \
+  --cpu-workers 0 \
+  --stage2-native-threads 0
+```
 
 ### Run the full native chain with Python compatibility mode
 
@@ -317,6 +388,88 @@ make audit
 ```
 
 `make audit` reads the manifest in `pystamps/data/audited_workflow_manifest.json`.
+
+### Native Rust benchmark evidence
+
+The following benchmark is a single-run native-only measurement on the bundled
+`inputs_and_outputs/InSAR_dataset_test` dataset. Stage totals are measured inside
+the Rust native runner and exclude the release build time. Gate elapsed time
+includes setup and report generation. Treat these values as host-specific
+evidence, not a cross-machine performance guarantee.
+
+Benchmark command:
+
+```bash
+make native-full-chain-run \
+  DATASET=inputs_and_outputs/InSAR_dataset_test \
+  RUN=inputs_and_outputs/validation_runs/native-rust-benchmark-20260529-maxthreads \
+  THREADS=0 \
+  START_STEP=1 \
+  END_STEP=8
+```
+
+The gate above prepares a clean run copy, but the command it validates is the
+standalone Rust binary:
+
+```bash
+target/release/pystamps-native run \
+  --native-only \
+  --dataset inputs_and_outputs/validation_runs/native-rust-benchmark-20260529-maxthreads \
+  --start-step 1 \
+  --end-step 8 \
+  --backend native \
+  --stage2-kernel-backend native \
+  --cpu-workers 0 \
+  --stage2-native-threads 0
+```
+
+Benchmark environment:
+
+| Field | Value |
+|---|---|
+| Date generated | 2026-05-29T13:15:38Z |
+| Git revision | `12c3e4b` |
+| OS/kernel | Ubuntu Linux, `6.8.0-107-generic`, x86_64 |
+| Processor reported by `lscpu` | Intel Xeon Processor (Cascadelake) |
+| Virtualization | KVM full virtualization |
+| Online CPUs visible to process | 16 (`0-15`) |
+| VM CPU topology reported by `lscpu` | 16 sockets x 1 core/socket x 1 thread/core |
+| NUMA nodes | 1 |
+| Rust toolchain | `rustc 1.94.0`, `cargo 1.94.0` |
+| Native thread setting | `THREADS=0`, resolved to 16 Stage 2 native threads |
+| Native execution elapsed | 330.419 s |
+| Gate elapsed | 353.663 s |
+| Release build time before run | 33.76 s |
+| Performance budget status | OK, with existing waived Stage 5 merged local-budget overrun |
+
+Stage totals:
+
+| Stage | Scope | Total duration |
+|---|---|---:|
+| 1 | patch | 31.535 s |
+| 2 | patch | 135.497 s |
+| 3 | patch | 18.963 s |
+| 4 | patch | 17.365 s |
+| 5 | patch + merged | 73.555 s |
+| 6 | merged | 21.841 s |
+| 7 | merged | 14.849 s |
+| 8 | merged | 11.211 s |
+
+Patch and merged breakdown:
+
+| Stage | PATCH_1 | PATCH_2 | PATCH_3 | PATCH_4 | Merged |
+|---|---:|---:|---:|---:|---:|
+| 1 | 6.373 s | 9.440 s | 8.220 s | 7.503 s | - |
+| 2 | 36.450 s | 38.546 s | 28.911 s | 31.590 s | - |
+| 3 | 2.464 s | 6.799 s | 4.762 s | 4.938 s | - |
+| 4 | 2.041 s | 6.139 s | 4.446 s | 4.739 s | - |
+| 5 | 4.794 s | 14.288 s | 9.468 s | 11.149 s | 33.855 s |
+| 6 | - | - | - | - | 21.841 s |
+| 7 | - | - | - | - | 14.849 s |
+| 8 | - | - | - | - | 11.211 s |
+
+Timing evidence is written to
+`inputs_and_outputs/validation_runs/native-rust-benchmark-20260529-maxthreads/_native_gate_reports/native-run-timings.json`.
 
 ## Notes
 

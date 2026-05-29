@@ -43,12 +43,13 @@ dev = [
 
 [project.scripts]
 pystamps = "pystamps.cli:main"
+pystamps-native = "pystamps.native_cli:main"
 
 [tool.setuptools]
 include-package-data = false
 
 [tool.setuptools.package-data]
-pystamps = ["data/*.json"]
+pystamps = ["data/*.json", "bin/*"]
 
 [tool.setuptools.packages.find]
 include = ["pystamps*"]
@@ -67,12 +68,13 @@ markers = [
 [tool.cibuildwheel]
 build = "cp312-* cp313-* cp314-*"
 skip = "pp* *-musllinux*"
+test-command = "pystamps-native coverage --start-step 1 --end-step 8"
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64"]
 
 [tool.cibuildwheel.macos]
-archs = ["universal2"]
+archs = ["auto"]
 
 [tool.cibuildwheel.windows]
 archs = ["AMD64"]
