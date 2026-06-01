@@ -10,6 +10,7 @@ It detects existing artifacts, so stage ranges can be run incrementally:
 - `status`: inspect dataset and stage state
 - `run`: execute a selected range
 - `verify`: compare a run result against a reference dataset
+- `pystamps-native`: run the standalone Rust native pipeline and coverage checks
 
 ## Install
 
@@ -53,6 +54,32 @@ For full processing:
 uv run pystamps run --dataset "$RUN_DATASET" --start-step 1 --end-step 8
 ```
 
+## Native Rust execution
+
+Use the Rust CLI when you want the native-only path without the Python wrapper:
+
+```bash
+cargo build --release -p pystamps-core --bin pystamps-native
+
+target/release/pystamps-native run \
+  --native-only \
+  --dataset "$RUN_DATASET" \
+  --start-step 1 \
+  --end-step 8 \
+  --backend native \
+  --stage2-kernel-backend native \
+  --cpu-workers 0 \
+  --stage2-native-threads 0
+```
+
+Preview native coverage:
+
+```bash
+target/release/pystamps-native coverage --start-step 1 --end-step 8
+```
+
+`0` worker values mean pySTAMPS uses all CPUs visible to the process. Set positive values to cap resource use.
+
 ## Configure kernel backends
 
 ```bash
@@ -88,6 +115,24 @@ uv run pystamps --config native-kernels.yaml run --dataset "$RUN_DATASET" --star
 ```
 
 Use `python` in place of `native` for reference execution paths if you are debugging numerical differences.
+
+## Native validation gate
+
+```bash
+make native-full-chain-verify
+```
+
+Override paths and CPU limits when reproducing on a VM:
+
+```bash
+make native-full-chain-verify \
+  DATASET=/path/to/source_dataset \
+  GOLDEN=/path/to/reference_dataset \
+  RUN=/path/to/clean_run_dataset \
+  THREADS=8
+```
+
+The gate writes reports under `RUN/_native_gate_reports/`.
 
 ## Verify
 

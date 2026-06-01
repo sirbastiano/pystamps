@@ -21,6 +21,7 @@
           <li><a class="active" href="getting-started.html">Getting Started</a></li>
           <li><a href="installation.html">Installation</a></li>
           <li><a href="quickstart.html">Quick Start</a></li>
+          <li><a href="native-cli.html">Native Rust CLI</a></li>
           <li><a href="architecture.html">Architecture</a></li>
           <li><a href="configuration.html">Configuration</a></li>
           <li><a href="usage.html">Usage</a></li>
@@ -135,7 +136,7 @@ uv run pystamps run --dataset /path/to/run_dataset --start-step 6 --end-step 8</
 
     <section class="card">
       <h2>Switch to optimized Rust/native kernels</h2>
-      <p>The CLI stays the same. You switch kernels through config.</p>
+      <p>The Python CLI can use native kernels through config.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-yaml">runtime:
   backend: auto
   stage2_kernel_backend: native
@@ -152,10 +153,27 @@ uv run pystamps run --dataset /path/to/run_dataset --start-step 6 --end-step 8</
   io_workers: 8
   cpu_workers: 0</code></pre>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps --config native-kernels.yaml run --dataset /path/to/run_dataset --start-step 2 --end-step 8</code></pre>
-      <p>Use <span class="code-inline">python</span> to force reference kernels, <span class="code-inline">native</span> for compiled Rust/CPU kernels, and <span class="code-inline">cuda</span> where available.</p>
+      <p>Use <span class="code-inline">python</span> to force reference kernels and <span class="code-inline">native</span> for compiled Rust/CPU kernels. The stage-2 kernel backend accepts only <span class="code-inline">auto</span>, <span class="code-inline">python</span>, or <span class="code-inline">native</span>.</p>
       <p>If the copied dataset already has the expected outputs, the CLI skips those stages. Use a dataset copy that still needs the requested stage outputs, or use benchmark/direct-kernel examples to profile optimized kernels.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run /path/to/run_dataset --golden /path/to/reference_dataset
-make benchmark</code></pre>
+make native-full-chain-verify</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Run the standalone Rust CLI</h2>
+      <p>Use the native CLI when you want the direct Rust runner.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">cargo build --release -p pystamps-core --bin pystamps-native
+
+target/release/pystamps-native run \
+  --native-only \
+  --dataset /path/to/run_dataset \
+  --start-step 1 \
+  --end-step 8 \
+  --backend native \
+  --stage2-kernel-backend native \
+  --cpu-workers 0 \
+  --stage2-native-threads 0</code></pre>
+      <p>See <a href="native-cli.html">Native Rust CLI</a> for coverage, direct stage commands, and full-chain validation.</p>
     </section>
 
     <section class="diagram-card">

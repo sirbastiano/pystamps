@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Practical command flow for a first run.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a class="active" href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a class="active" href="quickstart.html">Quick Start</a></li><li><a href="native-cli.html">Native Rust CLI</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li></ul></div>
     </nav>
   </aside>
@@ -22,65 +22,61 @@
 
     <section class="hero">
       <span class="badge">Run flow</span>
-      <h1>Inspect, rehearse, then run.</h1>
-      <p>This page is the shortest correct path through pySTAMPS. It is intentionally practical: every step is something you can run on a dataset copy without needing to understand every scientific detail first.</p>
+      <h1>Copy the dataset, inspect it, dry-run, then execute.</h1>
+      <p>This is the shortest practical path through pySTAMPS. Each command is safe to run on a writable dataset copy and can be narrowed to one stage when you are debugging.</p>
       <div class="hero-actions">
-        <a class="button-link" href="pipeline-science-guide.html">Learn the science behind this flow</a>
+        <a class="button-link" href="native-cli.html">Native Rust commands</a>
+        <a class="button-link secondary" href="verification.html">Verify outputs</a>
       </div>
     </section>
 
     <section class="card">
-      <h2>Step 1: inspect the dataset</h2>
-      <p>Start by asking pySTAMPS what it sees in the dataset root.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset /path/to/run_dataset</code></pre>
-      <p>This command does not process the data. It reports the merged stage and patch stages it can infer from the artifacts already present.</p>
+      <h2>Step 1: make a run copy</h2>
+      <p>pySTAMPS writes outputs into the dataset tree. Keep the source dataset untouched.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">export SOURCE_DATASET=/path/to/original_dataset
+export RUN_DATASET=/path/to/run_dataset
+
+rm -rf "$RUN_DATASET"
+cp -a "$SOURCE_DATASET" "$RUN_DATASET"</code></pre>
     </section>
 
     <section class="card">
-      <h2>Step 2: dry-run the full pipeline</h2>
-      <p>A dry-run is a safe rehearsal. It shows what pySTAMPS would do without executing the stages.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset /path/to/run_dataset --start-step 1 --end-step 8 --dry-run</code></pre>
+      <h2>Step 2: inspect and dry-run</h2>
+      <p>These commands do not write stage outputs. Use them to confirm what pySTAMPS sees and what it plans to execute.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset "$RUN_DATASET"</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset "$RUN_DATASET" --start-step 1 --end-step 8 --dry-run</code></pre>
     </section>
 
     <section class="card">
-      <h2>Step 3: run on a copy, not on your only original</h2>
-      <p>pySTAMPS writes artifacts into the dataset tree. Make a run copy first.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">cp -a /path/to/run_source_dataset /path/to/run_dataset
-uv run pystamps run --dataset /path/to/run_dataset --start-step 6 --end-step 8</code></pre>
+      <h2>Step 3: run the Python CLI</h2>
+      <p>Run the full pipeline or narrow the stage range while debugging.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset "$RUN_DATASET" --start-step 1 --end-step 8</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset "$RUN_DATASET" --start-step 6 --end-step 8</code></pre>
       <div class="callout tip">For debugging, shorten the range. If the copied dataset already has outputs, completed stages can report <span class="code-inline">skipped_existing</span>.</div>
     </section>
 
     <section class="card">
-      <h2>Step 4: run the optimized Rust/native kernels</h2>
-      <p>Inspect available providers, then pin the optimized native kernels with a config file.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps describe-backends</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-yaml">runtime:
-  backend: auto
-  stage2_kernel_backend: native
-  stage2_native_threads: 0
-  kernel_backend_overrides:
-    stage2_grid_accumulate: native
-    stage2_histogram: native
-    stage2_topofit: native
-    stage2_topofit_row_invariant: native
-    stage2_topofit_coh_row_invariant: native
-    stage4_edge_stats: native
-    stage7_scla: native
-    stage8_edge_noise: native
-  io_workers: 8
-  cpu_workers: 0
-  stage7_chunk_ps: 100000
-  stage8_chunk_edges: 200000</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps --config native-kernels.yaml run --dataset /path/to/run_dataset --start-step 2 --end-step 8</code></pre>
-      <div class="callout info">Use <span class="code-inline">python</span> for reference kernels and <span class="code-inline">native</span> for the compiled Rust/CPU kernels. Use <span class="code-inline">cuda</span> only when that kernel and CuPy are available.</div>
-      <p>If the copied dataset already contains the expected outputs, those stages report <span class="code-inline">skipped_existing</span>. To execute kernels through the pipeline, use a dataset copy that still needs those stage outputs. Use the benchmark or direct-kernel examples for profiling.</p>
+      <h2>Step 4: run the native Rust CLI</h2>
+      <p>Use this when you want the standalone Rust runner instead of the Python wrapper.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">cargo build --release -p pystamps-core --bin pystamps-native
+
+target/release/pystamps-native run \
+  --native-only \
+  --dataset "$RUN_DATASET" \
+  --start-step 1 \
+  --end-step 8 \
+  --backend native \
+  --stage2-kernel-backend native \
+  --cpu-workers 0 \
+  --stage2-native-threads 0</code></pre>
+      <div class="callout info"><span class="code-inline">0</span> worker values mean auto-use the CPUs visible to the process. Set positive values to cap resources.</div>
     </section>
 
     <section class="card">
       <h2>Step 5: validate and benchmark</h2>
-      <p>Verification compares your run copy to a reference dataset. Benchmarking records repeatable JSON/CSV timing evidence.</p>
+      <p>Verification compares your run copy to a reference dataset. The native full-chain gate also records JSON reports for coverage, timings, and parity.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run /path/to/run_dataset --golden /path/to/reference_dataset
-make benchmark</code></pre>
+make native-full-chain-verify</code></pre>
     </section>
 
     <section class="panel-grid">

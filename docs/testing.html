@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Testing Guide</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a class="active" href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="native-cli.html">Native Rust CLI</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a class="active" href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>API</h2><ul class="nav-list"><li><a href="api/pystamps.html">Package</a></li><li><a href="api/configuration.html">config</a></li><li><a href="api/cli.html">cli</a></li><li><a href="api/status.html">status</a></li><li><a href="api/verify.html">verify</a></li><li><a href="api/parity_contract.html">parity_contract</a></li><li><a href="api/io_dataset.html">io.dataset</a></li><li><a href="api/io_mat.html">io.mat</a></li><li><a href="api/runtime.html">runtime</a></li><li><a href="api/kernels.html">kernels</a></li><li><a href="api/pipeline_types.html">pipeline.types</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li><li><a href="api/compat_legacy.html">compat.legacy</a></li></ul></div>
     </nav>
   </aside>
@@ -22,37 +22,41 @@
     <h1>Testing</h1>
 
     <section class="card">
-      <h2>Running tests</h2>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pytest -q</code></pre>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run --with build python -m build --sdist --wheel
-uv run --with twine python -m twine check dist/*</code></pre>
-      <p>The repository includes committed unit tests. Dataset-backed parity tests are kept in-tree as optional checks and skip cleanly when the local validation datasets are absent, so <span class="code-inline">uv run pytest -q</span> remains the clean-checkout gate.</p>
-      <p>Release wheel production is separate from the smoke-build command and uses <span class="code-inline">cibuildwheel</span> on the release hosts.</p>
+      <h2>Main validation commands</h2>
+      <p>Use these gates for normal development and native Rust work.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">cargo test --workspace</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pytest -q tests/test_kernels_accelerated.py</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make native-full-chain-verify</code></pre>
+      <p>The native full-chain gate uses the checked-in performance budget manifest and accepts <span class="code-inline">THREADS=N</span> when you need fixed CPU limits.</p>
     </section>
 
     <section class="card">
       <h2>Test structure</h2>
       <ul>
-        <li>Default unit tests cover config loading, dataset discovery, acceleration helpers, and Stage-7 helper math.</li>
-        <li>Dataset-backed parity tests and audits require local inputs under <span class="code-inline">inputs_and_outputs/</span> and are not part of the minimal fresh-clone contract.</li>
-        <li>Parity checks are documented in the verification guide so you can keep the test command list focused.</li>
+        <li>Rust workspace tests cover the native CLI, planning, stage helpers, and shared Rust crates.</li>
+        <li>The accelerated kernel pytest target covers native/Python kernel behavior without running the whole dataset chain.</li>
+        <li>Dataset-backed native parity validation is handled by <span class="code-inline">make native-full-chain-verify</span>.</li>
       </ul>
     </section>
 
     <section class="card">
       <h2>Coverage</h2>
-      <p>Validation starts with <span class="code-inline">uv run pytest -q</span>, <span class="code-inline">uv run --with build python -m build --sdist --wheel</span>, and <span class="code-inline">uv run --with twine python -m twine check dist/*</span>, then moves to parity-audit validation in <a href="verification.html">Verification</a>.</p>
-      <p>For PyPI wheel releases, use <span class="code-inline">uv run --with cibuildwheel python -m cibuildwheel --platform ... --output-dir dist</span> on the Linux, macOS, and Windows release hosts.</p>
-      <p>For parity workflows, do not guess a Makefile, CI wrapper, or reduced audit dataset list. Use the documented audited dataset set, the generated <span class="code-inline">latest_audit.json</span>, and the explicit verify command shape.</p>
-      <div class="callout info">In-code assertions and explicit exceptions define many behavior guarantees where test coverage is expected to assert failure conditions.</div>
+      <p>For VM reproduction, build <span class="code-inline">target/release/pystamps-native</span> first, then run the native gate. Override paths only when needed.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">cargo build --release -p pystamps-core --bin pystamps-native
+make native-full-chain-verify \
+  DATASET=/path/to/source_dataset \
+  GOLDEN=/path/to/reference_dataset \
+  RUN=/path/to/clean_run_dataset \
+  THREADS=8</code></pre>
+      <p>Inspect <span class="code-inline">RUN/_native_gate_reports/</span> when the gate fails.</p>
     </section>
 
     <section class="card">
       <h2>Validation workflow</h2>
-      <p>Parity audits and explicit verify command patterns are described in <a href="verification.html">Verification</a>.</p>
-      <p>The verification flow includes contract construction, script orchestration, and CLI comparison commands used by release quality checks.</p>
-      <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps verify --run RUN_COPY --golden ./inputs_and_outputs/InSAR_dataset_test</code></pre>
-      <p>Carry the fresh <span class="code-inline">run_root</span> from <span class="code-inline">latest_audit.json</span> into that verify step; stale-output reuse keeps the validation gate red.</p>
+      <p>Run the web console only when changing <span class="code-inline">crates/pystamps-web</span>.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make web</code></pre>
+      <p>Build Python distributions only for packaging work, and avoid committing generated <span class="code-inline">dist/</span> artifacts during normal implementation.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make build</code></pre>
   </section>
   </main>
 </div>

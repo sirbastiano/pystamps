@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Output comparison and parity checks.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a class="active" href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="native-cli.html">Native Rust CLI</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a class="active" href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/cli.html">cli</a></li><li><a href="api/verify.html">verify</a></li><li><a href="api/parity_contract.html">parity_contract</a></li></ul></div>
     </nav>
   </aside>
@@ -35,6 +35,18 @@
         <li>Compares numeric MATLAB payloads with tolerance settings and classifies failure families by artifact.</li>
         <li>Use repository shortcuts only for fixed in-repo references.</li>
       </ul>
+    </section>
+
+    <section class="card">
+      <h2>Native full-chain verification</h2>
+      <p>Use this gate for the Rust native execution path. It prepares a clean run copy, executes native stages, checks performance budgets, and compares outputs against the golden dataset.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make native-full-chain-verify</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make native-full-chain-verify \
+  DATASET=/path/to/source_dataset \
+  GOLDEN=/path/to/reference_dataset \
+  RUN=/path/to/clean_run_dataset \
+  THREADS=8</code></pre>
+      <p>Read <span class="code-inline">RUN/_native_gate_reports/</span> for coverage, run output, timings, and verification details.</p>
     </section>
 
     <section class="card">

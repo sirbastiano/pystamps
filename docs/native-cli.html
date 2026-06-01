@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Native Rust CLI - pySTAMPS Docs</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script defer src="assets/scripts.js"></script>
+</head>
+<body>
+<div class="site">
+  <aside class="sidebar">
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>Rust execution and validation commands.</small>
+    <nav>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="native-cli.html">Native Rust CLI</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li></ul></div>
+      <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/cli.html">cli</a></li></ul></div>
+    </nav>
+  </aside>
+  <main class="content">
+    <div class="breadcrumb">Home / Native Rust CLI</div>
+
+    <section class="hero">
+      <span class="badge">Native execution</span>
+      <h1>Run the Rust pipeline directly when you want the fastest native path.</h1>
+      <p>The Python CLI remains the general entrypoint. The standalone <span class="code-inline">pystamps-native</span> executable is the direct Rust runner for native-only stages, coverage checks, and full-chain validation.</p>
+    </section>
+
+    <section class="card">
+      <h2>Build the native binary</h2>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">cargo build --release -p pystamps-core --bin pystamps-native</code></pre>
+      <p>Wheel installs can also expose <span class="code-inline">pystamps-native</span> as a console command. Source checkouts can run <span class="code-inline">target/release/pystamps-native</span> after the build above.</p>
+    </section>
+
+    <section class="card">
+      <h2>Run native stages 1 through 8</h2>
+      <p>Always run on a writable copy. The command writes stage artifacts into the dataset tree.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">export SOURCE_DATASET=/path/to/original_dataset
+export RUN_DATASET=/path/to/native_run_dataset
+
+rm -rf "$RUN_DATASET"
+cp -a "$SOURCE_DATASET" "$RUN_DATASET"
+
+target/release/pystamps-native run \
+  --native-only \
+  --dataset "$RUN_DATASET" \
+  --start-step 1 \
+  --end-step 8 \
+  --backend native \
+  --stage2-kernel-backend native \
+  --cpu-workers 0 \
+  --stage2-native-threads 0</code></pre>
+      <ul>
+        <li><span class="code-inline">--native-only</span> requires <span class="code-inline">--backend native</span> and <span class="code-inline">--stage2-kernel-backend native</span>.</li>
+        <li><span class="code-inline">--cpu-workers 0</span> and <span class="code-inline">--stage2-native-threads 0</span> use all CPUs visible to the process.</li>
+        <li>Set positive worker values when you need reproducible resource limits.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Preview or inspect coverage</h2>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">target/release/pystamps-native run \
+  --dataset "$RUN_DATASET" \
+  --start-step 1 \
+  --end-step 8 \
+  --dry-run</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">target/release/pystamps-native coverage --start-step 1 --end-step 8</code></pre>
+      <p>Both commands print JSON. Dry-run reports planned stage work; coverage reports which stage scopes are Rust-driven, native-executable, and parity-certified.</p>
+    </section>
+
+    <section class="card">
+      <h2>Debug one stage</h2>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">target/release/pystamps-native stage 1 --patch "$RUN_DATASET/PATCH_1"
+target/release/pystamps-native stage 5 --dataset "$RUN_DATASET"
+target/release/pystamps-native stage 8 --dataset "$RUN_DATASET"</code></pre>
+      <p>Stages 1 through 5 can operate on patch data where appropriate. Stages 5 through 8 also include merged dataset-level work.</p>
+    </section>
+
+    <section class="card">
+      <h2>Full native validation gate</h2>
+      <p>This is the release-style local gate for native execution. It builds the release binary, prepares a clean run copy, executes the chain, compares outputs, and writes reports.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make native-full-chain-verify</code></pre>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">make native-full-chain-verify \
+  DATASET=/path/to/source_dataset \
+  GOLDEN=/path/to/reference_dataset \
+  RUN=/path/to/clean_run_dataset \
+  THREADS=8</code></pre>
+      <p>Reports are written under <span class="code-inline">RUN/_native_gate_reports/</span>, including coverage, native run output, timings, and verification results.</p>
+    </section>
+  </main>
+</div>
+</body>
+</html>
