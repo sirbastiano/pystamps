@@ -7,14 +7,34 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: wheels-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' && !startsWith(github.ref, 'refs/tags/') }}
+
 jobs:
   build-wheels:
-    name: Build wheels on ${{ matrix.os }}
+    name: Build ${{ matrix.platform }} wheels
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-13, macos-14, windows-2022]
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-24.04
+            cibw_archs_linux: x86_64
+          - platform: linux-aarch64
+            os: ubuntu-24.04-arm
+            cibw_archs_linux: aarch64
+          - platform: macos-x86_64
+            os: macos-15-intel
+            cibw_archs_linux: ""
+          - platform: macos-arm64
+            os: macos-14
+            cibw_archs_linux: ""
+          - platform: windows-amd64
+            os: windows-2022
+            cibw_archs_linux: ""
 
     steps:
       - uses: actions/checkout@v4
@@ -28,29 +48,50 @@ jobs:
       - name: Install cibuildwheel
         run: python -m pip install cibuildwheel==2.23.3
 
-      - name: Pre-pull manylinux images
+      - name: Select wheel build scope
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" || "$GITHUB_REF" == refs/tags/* ]]; then
+            echo "CIBW_BUILD=cp312-* cp313-* cp314-*" >> "$GITHUB_ENV"
+          else
+            echo "CIBW_BUILD=cp312-*" >> "$GITHUB_ENV"
+          fi
+
+          if [[ -n "${{ matrix.cibw_archs_linux }}" ]]; then
+            echo "CIBW_ARCHS_LINUX=${{ matrix.cibw_archs_linux }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Pre-pull manylinux image
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
 
-          images=(
-            quay.io/pypa/manylinux2014_x86_64
-            quay.io/pypa/manylinux2014_aarch64
-          )
+          case "$RUNNER_ARCH" in
+            X64)
+              image=quay.io/pypa/manylinux2014_x86_64
+              ;;
+            ARM64)
+              image=quay.io/pypa/manylinux2014_aarch64
+              ;;
+            *)
+              echo "Unsupported Linux runner architecture: $RUNNER_ARCH" >&2
+              exit 1
+              ;;
+          esac
 
-          for image in "${images[@]}"; do
-            for attempt in 1 2 3; do
-              if docker pull "$image"; then
-                break
-              fi
+          for attempt in 1 2 3; do
+            if docker pull "$image"; then
+              break
+            fi
 
-              if [ "$attempt" -eq 3 ]; then
-                exit 1
-              fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
 
-              sleep "$((attempt * 30))"
-            done
+            sleep "$((attempt * 30))"
           done
 
       - name: Build wheels
@@ -58,12 +99,13 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
+          name: wheels-${{ matrix.platform }}
           path: wheelhouse/*.whl
 
   build-sdist:
     name: Build sdist
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
