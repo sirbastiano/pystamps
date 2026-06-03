@@ -1,0 +1,137 @@
+name: Publish
+
+on:
+  workflow_run:
+    workflows: ["Wheels"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "Completed Wheels workflow run ID to publish"
+        required: true
+        type: string
+
+concurrency:
+  group: publish-pypi
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to PyPI
+    if: >-
+      ${{
+        (
+          github.event_name == 'workflow_run' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          github.event.workflow_run.event == 'push' &&
+          startsWith(github.event.workflow_run.head_branch, 'v')
+        ) ||
+        github.event_name == 'workflow_dispatch'
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: pypi
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Resolve Wheels run
+        id: wheels
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "run_id=${{ github.event.workflow_run.id }}" >> "$GITHUB_OUTPUT"
+            echo "source=${{ github.event.workflow_run.head_branch }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "run_id=${{ inputs.run_id }}" >> "$GITHUB_OUTPUT"
+            echo "source=manual" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ steps.wheels.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: dist
+          merge-multiple: true
+
+      - name: Validate artifact set
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          import sys
+
+          dist = Path("dist")
+          wheels = sorted(dist.glob("*.whl"))
+          sdists = sorted(dist.glob("*.tar.gz"))
+
+          errors: list[str] = []
+          if len(sdists) != 1:
+              errors.append(f"expected exactly one sdist, found {len(sdists)}")
+
+          wheel_names = [wheel.name for wheel in wheels]
+          expected_python = ("cp312", "cp313", "cp314")
+          expected_platforms = {
+              "linux-x86_64": lambda name: "manylinux_2_28_x86_64" in name,
+              "linux-aarch64": lambda name: "manylinux_2_28_aarch64" in name,
+              "macos-x86_64": lambda name: "macosx" in name and name.endswith("_x86_64.whl"),
+              "macos-arm64": lambda name: "macosx" in name and name.endswith("_arm64.whl"),
+              "windows-amd64": lambda name: name.endswith("win_amd64.whl"),
+          }
+
+          for py_tag in expected_python:
+              abi_tag = f"-{py_tag}-{py_tag}-"
+              for platform, matches_platform in expected_platforms.items():
+                  matches = [
+                      name
+                      for name in wheel_names
+                      if abi_tag in name and matches_platform(name)
+                  ]
+                  if len(matches) != 1:
+                      errors.append(
+                          f"expected one {py_tag} {platform} wheel, found {len(matches)}"
+                      )
+
+          version_pattern = re.compile(
+              r"^pystamps_insar-(?P<version>.+?)(?:-cp\d{3}-cp\d{3}-.+\.whl|\.tar\.gz)$"
+          )
+          versions = {
+              match.group("version")
+              for path in [*wheels, *sdists]
+              if (match := version_pattern.match(path.name))
+          }
+          if len(versions) != 1:
+              errors.append(f"expected one artifact version, found {sorted(versions)}")
+
+          if errors:
+              for error in errors:
+                  print(f"artifact validation failed: {error}", file=sys.stderr)
+              print("found artifacts:", file=sys.stderr)
+              for path in sorted(dist.iterdir()):
+                  print(f"  {path.name}", file=sys.stderr)
+              sys.exit(1)
+
+          version = next(iter(versions))
+          print(f"validated {len(wheels)} wheels and {len(sdists)} sdist for {version}")
+          PY
+
+      - name: Check distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip twine
+          python -m twine check dist/*
+
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          skip-existing: false
