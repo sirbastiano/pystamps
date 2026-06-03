@@ -1,16 +1,24 @@
 # Release Process
 
-`pystamps` releases are manual and tag-driven. This standalone repo uses direct Python packaging commands rather than a tracked `Makefile`.
+`pystamps` releases are manual and tag-driven. The `Makefile` supports two
+publishing paths:
+
+- `make release VERSION=X.Y.Z`: local Linux x86_64 release path for an sdist
+  plus an auditwheel-repaired Linux wheel.
+- `make publish-dist PUBLISH_DIST_DIR=dist`: broad publishing path for a
+  gathered artifact directory containing all CI-built wheels plus the sdist.
 
 ## Prerequisites
 
 - Python 3.12+ and `pip`
 - Rust toolchain (`cargo`, `rustc`) available on any machine that builds source or wheel artifacts
-- PyPI credentials available to `twine`
+- PyPI credentials available to `twine` through `UV_PUBLISH_TOKEN` or
+  `TWINE_PASSWORD`
 - a clean Git worktree
 - local access to the validation datasets required by the parity audit
 - the maintained run-copy seed `inputs_and_outputs/RUN_FULL_GATE_1e10` for the `InSAR_dataset_test` refresh
-- Docker available on the Linux release host for manylinux wheel builds via `cibuildwheel`
+- Docker available on any Linux release host that builds manylinux wheels via
+  `cibuildwheel`
 
 ## Release Steps
 
@@ -49,46 +57,43 @@
 
 5. Create and push a release tag using the version form `vX.Y.Z`.
 
-6. Build the release artifacts from the tagged commit:
+6. Build the source distribution from the tagged commit:
 
    ```bash
-   uv run --with build python -m build --sdist
+   SETUPTOOLS_SCM_PRETEND_VERSION=X.Y.Z \
+     uv run --with build --with setuptools-scm python -m build --sdist -o dist
    ```
 
-7. Build Linux wheels on the Linux host:
+7. Build wheels for every platform. Prefer the GitHub `Wheels` workflow on the
+   release tag so each platform uses its native runner. Download and unpack the
+   `wheels-*` artifacts into `dist/`.
+
+   Manual fallback commands, when building on each platform yourself:
 
    ```bash
    uv run --with cibuildwheel python -m cibuildwheel --platform linux --output-dir dist
-   ```
-
-8. Build macOS wheels on the macOS host:
-
-   ```bash
    uv run --with cibuildwheel python -m cibuildwheel --platform macos --output-dir dist
-   ```
-
-9. Build Windows wheels on the Windows host:
-
-   ```bash
    uv run --with cibuildwheel python -m cibuildwheel --platform windows --output-dir dist
    ```
 
-10. Validate the gathered artifacts:
+8. Validate the gathered artifacts:
 
    ```bash
-   uv run --with twine python -m twine check dist/*
+   make publish-dist-check PUBLISH_DIST_DIR=dist
    ```
 
-11. Upload to TestPyPI for rehearsal when needed:
+9. Upload to TestPyPI for rehearsal when needed:
 
    ```bash
-   uv run --with twine python -m twine upload --repository testpypi dist/*
+   export UV_PUBLISH_TOKEN=<testpypi-token>
+   make publish-testpypi PUBLISH_DIST_DIR=dist
    ```
 
-12. Upload the final artifacts to PyPI:
+10. Upload the final gathered artifact set to PyPI:
 
    ```bash
-   uv run --with twine python -m twine upload dist/*
+   export UV_PUBLISH_TOKEN=<pypi-token>
+   make publish-dist PUBLISH_DIST_DIR=dist
    ```
 
 ## Release Requirements
@@ -98,7 +103,8 @@
 - The explicit verification command must pass using the `run_root` recorded in `latest_audit.json` (documented in verification).
 - `python -m build --sdist` must emit the release sdist.
 - `cibuildwheel` must emit the expected platform wheels for Linux, macOS, and Windows.
-- `twine check` must pass on every file gathered in `dist/`.
+- `make publish-dist PUBLISH_DIST_DIR=dist` must run `twine check` on every
+  wheel and sdist gathered in `dist/` before upload.
 - Any interrupted audit, manual restart, or stale run-copy reuse leaves the release gate closed.
 
 ## Distribution Scope

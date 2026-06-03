@@ -35,13 +35,16 @@ VERSION ?=
 DIST_DIR ?= dist
 RELEASE_DIST_DIR ?= /tmp/pystamps-insar-dist
 WHEELHOUSE ?= /tmp/pystamps-insar-wheelhouse
+PUBLISH_DIST_DIR ?= $(DIST_DIR)
 TWINE_USERNAME ?= __token__
 TWINE_PASSWORD ?= $(UV_PUBLISH_TOKEN)
+TWINE_REPOSITORY ?=
+TWINE_REPOSITORY_ARGS = $(if $(TWINE_REPOSITORY),--repository $(TWINE_REPOSITORY),)
 UV_INSTALL_URL ?= https://astral.sh/uv/install.sh
 RUSTUP_INSTALL_URL ?= https://sh.rustup.rs
 APT_NATIVE_DEPS ?= build-essential curl pkg-config python3 python3-dev
 
-.PHONY: deps deps-python deps-rust deps-ubuntu deps-check setup test test-impl build clean-dist require-version next-patch bump release-build repair-wheel release-check publish release release-patch audit verify benchmark parity-loop web native-release-bin native-full-chain-run native-full-chain-verify
+.PHONY: deps deps-python deps-rust deps-ubuntu deps-check setup test test-impl build clean-dist require-version require-publish-token require-publish-files next-patch bump release-build repair-wheel release-check publish publish-dist-check publish-dist publish-testpypi release release-patch audit verify benchmark parity-loop web native-release-bin native-full-chain-run native-full-chain-verify
 
 deps: deps-rust deps-python
 
@@ -104,6 +107,18 @@ require-version:
 		exit 2; \
 	fi
 
+require-publish-token:
+	@if [ -z "$(TWINE_PASSWORD)" ]; then \
+		echo "Set UV_PUBLISH_TOKEN or TWINE_PASSWORD before publishing"; \
+		exit 2; \
+	fi
+
+require-publish-files:
+	@python -c 'import glob, sys; files=[f for p in sys.argv[1:] for f in glob.glob(p)]; sys.exit(0 if files else 2)' "$(PUBLISH_DIST_DIR)/*.whl" "$(PUBLISH_DIST_DIR)/*.tar.gz" || { \
+		echo "No distributions found in $(PUBLISH_DIST_DIR)"; \
+		exit 2; \
+	}
+
 next-patch:
 	@python -c 'import json, urllib.request; v=json.load(urllib.request.urlopen("https://pypi.org/pypi/$(PYPI_PROJECT)/json", timeout=15))["info"]["version"].split("."); print(f"{v[0]}.{v[1]}.{int(v[2]) + 1}")'
 
@@ -127,15 +142,25 @@ release-check: repair-wheel
 		$(WHEELHOUSE)/*.whl \
 		$(RELEASE_DIST_DIR)/*.tar.gz
 
-publish: release-check
-	@if [ -z "$(TWINE_PASSWORD)" ]; then \
-		echo "Set UV_PUBLISH_TOKEN or TWINE_PASSWORD before publishing"; \
-		exit 2; \
-	fi
+publish: release-check require-publish-token
 	TWINE_USERNAME=$(TWINE_USERNAME) TWINE_PASSWORD=$(TWINE_PASSWORD) \
 		uv run --with twine python -m twine upload \
 		$(WHEELHOUSE)/*.whl \
 		$(RELEASE_DIST_DIR)/*.tar.gz
+
+publish-dist-check: require-publish-files
+	@files=$$(python -c 'import glob, sys; print(" ".join(f for p in sys.argv[1:] for f in glob.glob(p)))' "$(PUBLISH_DIST_DIR)/*.whl" "$(PUBLISH_DIST_DIR)/*.tar.gz"); \
+	uv run --with twine python -m twine check $$files
+
+publish-dist: publish-dist-check require-publish-token
+	@files=$$(python -c 'import glob, sys; print(" ".join(f for p in sys.argv[1:] for f in glob.glob(p)))' "$(PUBLISH_DIST_DIR)/*.whl" "$(PUBLISH_DIST_DIR)/*.tar.gz"); \
+	TWINE_USERNAME=$(TWINE_USERNAME) TWINE_PASSWORD=$(TWINE_PASSWORD) \
+		uv run --with twine python -m twine upload \
+		$(TWINE_REPOSITORY_ARGS) \
+		$$files
+
+publish-testpypi:
+	$(MAKE) publish-dist TWINE_REPOSITORY=testpypi
 
 release: publish
 
