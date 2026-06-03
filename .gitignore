@@ -1,6 +1,12 @@
 *.mat
 __pycache__/
 *.py[cod]
+*.bak
+*.orig
+*.rej
+*.temp
+*.tmp
+*~
 .pytest_cache/
 .ruff_cache/
 .venv/
@@ -31,6 +37,8 @@ __pycache__/
 /.tmp_test_us012/
 /pytest-of-rdelprete/
 /target/
+/pystamps-stage2-rng-*/
+dist/
 
 # Generated metadata
 *.egg-info/
@@ -40,12 +48,8 @@ __pycache__/
 /build/
 inputs_and_outputs/
 tmp/
+notebooks/tmp/
 StaMPS/
-
-# Keep release artifacts visible in this repo
-!dist/
-!dist/*.whl
-!dist/*.tar.gz
 
 .cache/
 summary_final_report.md
