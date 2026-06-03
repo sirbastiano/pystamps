@@ -1,6 +1,8 @@
 name: Publish
 
 on:
+  push:
+    branches: [main]
   workflow_run:
     workflows: ["Wheels"]
     types: [completed]
@@ -16,6 +18,70 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  bump-version:
+    name: Bump version tag
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute next patch version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import re
+          import subprocess
+          import urllib.request
+
+          versions: list[tuple[int, int, int]] = []
+
+          with urllib.request.urlopen(
+              "https://pypi.org/pypi/pystamps-insar/json", timeout=15
+          ) as response:
+              pypi_version = json.load(response)["info"]["version"]
+          if re.fullmatch(r"\d+\.\d+\.\d+", pypi_version):
+              versions.append(tuple(map(int, pypi_version.split("."))))
+
+          tags = subprocess.check_output(
+              ["git", "tag", "--list", "v[0-9]*.[0-9]*.[0-9]*"], text=True
+          ).splitlines()
+          for tag in tags:
+              if match := re.fullmatch(r"v(\d+)\.(\d+)\.(\d+)", tag):
+                  versions.append(tuple(map(int, match.groups())))
+
+          major, minor, patch = max(versions) if versions else (0, 0, 0)
+          version = f"{major}.{minor}.{patch + 1}"
+          print(f"version={version}")
+          print(f"tag=v{version}")
+          PY
+
+      - name: Create release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ steps.version.outputs.tag }}"
+          version="${{ steps.version.outputs.version }}"
+
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Tag $tag already exists" >&2
+            exit 1
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $version"
+          git push origin "$tag"
+
   publish:
     name: Publish to PyPI
     if: >-
