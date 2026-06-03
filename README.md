@@ -1,3 +1,4 @@
+[![Wheels](https://github.com/sirbastiano/pystamps/actions/workflows/wheels.yml/badge.svg)](https://github.com/sirbastiano/pystamps/actions/workflows/wheels.yml)
 <div align="center">
 
 <img src="docs/assets/pystamps-logo.svg" alt="pySTAMPS" style="width: 200px; height: auto; max-width: 100%;" />
