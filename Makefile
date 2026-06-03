@@ -133,29 +133,29 @@ release-build: clean-dist require-version
 
 repair-wheel: release-build
 	mkdir -p $(WHEELHOUSE)
-	uv run --with auditwheel --with patchelf auditwheel repair \
+	uv run --no-project --with auditwheel --with patchelf auditwheel repair \
 		$(RELEASE_DIST_DIR)/*-linux_x86_64.whl \
 		-w $(WHEELHOUSE)
 
 release-check: repair-wheel
-	uv run --with twine python -m twine check \
+	uv run --no-project --with twine python -m twine check \
 		$(WHEELHOUSE)/*.whl \
 		$(RELEASE_DIST_DIR)/*.tar.gz
 
 publish: release-check require-publish-token
-	TWINE_USERNAME=$(TWINE_USERNAME) TWINE_PASSWORD=$(TWINE_PASSWORD) \
-		uv run --with twine python -m twine upload \
+	@TWINE_USERNAME=$(TWINE_USERNAME) TWINE_PASSWORD=$(TWINE_PASSWORD) \
+		uv run --no-project --with twine python -m twine upload \
 		$(WHEELHOUSE)/*.whl \
 		$(RELEASE_DIST_DIR)/*.tar.gz
 
 publish-dist-check: require-publish-files
 	@files=$$(python -c 'import glob, sys; print(" ".join(f for p in sys.argv[1:] for f in glob.glob(p)))' "$(PUBLISH_DIST_DIR)/*.whl" "$(PUBLISH_DIST_DIR)/*.tar.gz"); \
-	uv run --with twine python -m twine check $$files
+	uv run --no-project --with twine python -m twine check $$files
 
 publish-dist: publish-dist-check require-publish-token
 	@files=$$(python -c 'import glob, sys; print(" ".join(f for p in sys.argv[1:] for f in glob.glob(p)))' "$(PUBLISH_DIST_DIR)/*.whl" "$(PUBLISH_DIST_DIR)/*.tar.gz"); \
 	TWINE_USERNAME=$(TWINE_USERNAME) TWINE_PASSWORD=$(TWINE_PASSWORD) \
-		uv run --with twine python -m twine upload \
+		uv run --no-project --with twine python -m twine upload \
 		$(TWINE_REPOSITORY_ARGS) \
 		$$files
 
