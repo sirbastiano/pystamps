@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>System structure, module roles, and data flow.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="stages.html">Stages and Code Paths</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="native-cli.html">Native Rust CLI</a></li><li><a class="active" href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li><li><a href="api/kernels.html">kernels</a></li></ul></div>
     </nav>
   </aside>
@@ -25,9 +25,16 @@
       <h1>pySTAMPS is organized around the dataset directory as the source of truth.</h1>
       <p>The CLI, runtime scheduler, ported stages, optimized kernels, and verification tools all read from or write to the same StaMPS-style dataset tree.</p>
       <div class="hero-actions">
-        <a class="button-link" href="pipeline-science-guide.html">Read the pipeline guide</a>
+        <a class="button-link" href="stages.html">Read stage code paths</a>
+        <a class="button-link secondary" href="pipeline-science-guide.html">Read science guide</a>
         <a class="button-link secondary" href="function-reference.html">Open function reference</a>
       </div>
+    </section>
+
+    <section class="diagram-card">
+      <h2>Capability Map</h2>
+      <p>The architecture splits user interfaces, dataset state, stage orchestration, native Rust execution, verification, and the local web console into separate responsibilities.</p>
+      <img class="doc-figure" src="assets/pystamps-capabilities.svg" alt="pySTAMPS architecture capability map" />
     </section>
 
     <section class="card">
@@ -42,6 +49,10 @@
             <tr><td>Pipeline orchestration</td><td><code>pystamps.pipeline.stages</code></td><td>Select stages, skip existing artifacts, schedule patch or merged work.</td></tr>
             <tr><td>Scientific stages</td><td><code>pystamps.pipeline.ported</code></td><td>Implement StaMPS-style stage behavior in Python.</td></tr>
             <tr><td>Kernels</td><td><code>pystamps.kernels</code></td><td>Dispatch hot numerical kernels to Python, native Rust/CPU, or CUDA providers.</td></tr>
+            <tr><td>Native Rust core</td><td><code>crates/pystamps-core</code></td><td>Plan native runs, own the <code>pystamps-native</code> CLI, execute native stages, and report coverage.</td></tr>
+            <tr><td>Native stage registry</td><td><code>crates/pystamps-stages</code></td><td>Record stage-scope readiness and parity certification status.</td></tr>
+            <tr><td>Rust MAT support</td><td><code>crates/pystamps-mat</code></td><td>Write MATLAB v5 artifacts from Rust-owned stage code.</td></tr>
+            <tr><td>Rust web console</td><td><code>crates/pystamps-web</code></td><td>Serve the local run console and native coverage API.</td></tr>
             <tr><td>Verification</td><td><code>pystamps.verify</code>, <code>scripts/validate_audit.py</code></td><td>Compare outputs against golden datasets and audit manifests.</td></tr>
           </tbody>
         </table>
@@ -65,7 +76,7 @@
           </tbody>
         </table>
       </div>
-      <div class="callout info">Patch-scoped stages run once per discovered <span class="code-inline">PATCH_*</span> directory. Merged stages run once at the dataset root.</div>
+      <div class="callout info">Patch-scoped stages run once per discovered <span class="code-inline">PATCH_*</span> directory. Merged stages run once at the dataset root. For implementation details by stage, use <a href="stages.html">Stages and Code Paths</a>.</div>
     </section>
 
     <section class="card">
@@ -127,23 +138,9 @@
     </section>
 
     <section class="diagram-card">
-      <h2>Workflow graph (Figma)</h2>
-      <p>This diagram focuses on the command flow around <span class="code-inline">status</span> and <span class="code-inline">run</span>.</p>
-      <a class="diagram-link" href="https://www.figma.com/online-whiteboard/create-diagram/2cd2c194-7c86-4c16-9a10-d964fc5a1b40?utm_source=chatgpt&utm_content=edit_in_figjam&oai_id=&request_id=72140c10-d529-4949-8a78-a575e6a13883">
-        <strong>Open the source graph in Figma</strong>
-      </a>
-      <div class="diagram-zoom-wrap">
-        <div class="diagram-zoom-controls">
-          <label for="architecture-diagram-zoom"><span>Diagram zoom</span><output id="architecture-diagram-zoom-value" for="architecture-diagram-zoom">100%</output></label>
-          <input id="architecture-diagram-zoom" class="diagram-zoom-slider" type="range" min="60" max="180" value="100" data-diagram-zoom="#architecture-diagram" data-diagram-zoom-output="#architecture-diagram-zoom-value" />
-        </div>
-        <div class="diagram-zoom-frame">
-          <picture>
-            <source srcset="assets/pystamps-workflow.svg" type="image/svg+xml" />
-            <img id="architecture-diagram" class="diagram-zoom-image" src="assets/pystamps-workflow.png" alt="pySTAMPS status/run workflow graph" />
-          </picture>
-        </div>
-      </div>
+      <h2>Workflow Graph</h2>
+      <p>This graph focuses on the command flow around <span class="code-inline">status</span>, <span class="code-inline">run</span>, <span class="code-inline">verify</span>, and native gate reports.</p>
+      <img class="doc-figure" src="assets/pystamps-workflow.svg" alt="pySTAMPS status, dry-run, execution, and verification workflow graph" />
     </section>
 
     <section class="card">
@@ -158,8 +155,9 @@ make audit</code></pre>
       <h2>Practical boundaries</h2>
       <ul>
         <li>The package implements stages 1 through 8 in <span class="code-inline">pystamps.pipeline.ported</span>.</li>
-        <li>The optimized native extension accelerates selected hot kernels, not every line of the pipeline.</li>
-        <li>External tools such as <span class="code-inline">triangle</span> and <span class="code-inline">snaphu</span> are still required for relevant unwrapping workflows.</li>
+        <li>The native Rust CLI owns parity-certified stage scopes across stages 1 through 8 plus Stage-5 merged aggregation.</li>
+        <li>The optimized Python extension accelerates selected hot kernels, while the Rust CLI can execute the full native chain directly.</li>
+        <li>External tools such as <span class="code-inline">triangle</span> and <span class="code-inline">snaphu</span> remain relevant for non-native fallback workflows.</li>
         <li>Parity should be claimed from <span class="code-inline">verify</span> or audit evidence, not from command completion alone.</li>
         <li>Speed should be claimed from <span class="code-inline">make benchmark</span> or <span class="code-inline">scripts/benchmark_backends.py</span>, not from a skipped pipeline run.</li>
       </ul>

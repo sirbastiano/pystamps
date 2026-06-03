@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Rust execution and validation commands.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="native-cli.html">Native Rust CLI</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="stages.html">Stages and Code Paths</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a class="active" href="native-cli.html">Native Rust CLI</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/cli.html">cli</a></li></ul></div>
     </nav>
   </aside>
@@ -24,6 +24,11 @@
       <span class="badge">Native execution</span>
       <h1>Run the Rust pipeline directly when you want the fastest native path.</h1>
       <p>The Python CLI remains the general entrypoint. The standalone <span class="code-inline">pystamps-native</span> executable is the direct Rust runner for native-only stages, coverage checks, and full-chain validation.</p>
+      <div class="hero-actions">
+        <a class="button-link" href="#full-chain">Run full native chain</a>
+        <a class="button-link secondary" href="#stage-debug">Debug one stage</a>
+        <a class="button-link secondary" href="stages.html">Read stage details</a>
+      </div>
     </section>
 
     <section class="card">
@@ -32,7 +37,13 @@
       <p>Wheel installs can also expose <span class="code-inline">pystamps-native</span> as a console command. Source checkouts can run <span class="code-inline">target/release/pystamps-native</span> after the build above.</p>
     </section>
 
-    <section class="card">
+    <section class="diagram-card">
+      <h2>Native Stage Coverage</h2>
+      <p>The native runner covers patch and merged scopes directly. Stage 5 appears twice because it has both patch promotion and merged aggregation behavior.</p>
+      <img class="doc-figure" src="assets/pystamps-stage-map.svg" alt="Native pySTAMPS stage coverage map" />
+    </section>
+
+    <section id="full-chain" class="card">
       <h2>Run native stages 1 through 8</h2>
       <p>Always run on a writable copy. The command writes stage artifacts into the dataset tree.</p>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">export SOURCE_DATASET=/path/to/original_dataset
@@ -68,12 +79,24 @@ target/release/pystamps-native run \
       <p>Both commands print JSON. Dry-run reports planned stage work; coverage reports which stage scopes are Rust-driven, native-executable, and parity-certified.</p>
     </section>
 
-    <section class="card">
+    <section id="stage-debug" class="card">
       <h2>Debug one stage</h2>
       <pre><button class="copy-btn">Copy</button><code class="language-bash">target/release/pystamps-native stage 1 --patch "$RUN_DATASET/PATCH_1"
+target/release/pystamps-native stage 2 --patch "$RUN_DATASET/PATCH_1"
+target/release/pystamps-native stage 5 --patch "$RUN_DATASET/PATCH_1"
 target/release/pystamps-native stage 5 --dataset "$RUN_DATASET"
 target/release/pystamps-native stage 8 --dataset "$RUN_DATASET"</code></pre>
-      <p>Stages 1 through 5 can operate on patch data where appropriate. Stages 5 through 8 also include merged dataset-level work.</p>
+      <p>Stages 1 through 5 can operate on patch data where appropriate. Stage 5 also has a merged dataset command, and stages 6 through 8 run at the dataset root.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Stage</th><th>Native target</th><th>Command shape</th></tr></thead>
+          <tbody>
+            <tr><td>1-4</td><td>Patch</td><td><code>stage N --patch "$RUN_DATASET/PATCH_1"</code></td></tr>
+            <tr><td>5</td><td>Patch or merged</td><td><code>stage 5 --patch ...</code> or <code>stage 5 --dataset ...</code></td></tr>
+            <tr><td>6-8</td><td>Merged</td><td><code>stage N --dataset "$RUN_DATASET"</code></td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section class="card">

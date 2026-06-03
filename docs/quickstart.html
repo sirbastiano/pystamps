@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Practical command flow for a first run.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a class="active" href="quickstart.html">Quick Start</a></li><li><a href="native-cli.html">Native Rust CLI</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="stages.html">Stages and Code Paths</a></li><li><a href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a class="active" href="quickstart.html">Quick Start</a></li><li><a href="native-cli.html">Native Rust CLI</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li></ul></div>
     </nav>
   </aside>
@@ -26,6 +26,7 @@
       <p>This is the shortest practical path through pySTAMPS. Each command is safe to run on a writable dataset copy and can be narrowed to one stage when you are debugging.</p>
       <div class="hero-actions">
         <a class="button-link" href="native-cli.html">Native Rust commands</a>
+        <a class="button-link secondary" href="stages.html">Stage details</a>
         <a class="button-link secondary" href="verification.html">Verify outputs</a>
       </div>
     </section>
@@ -100,8 +101,14 @@ make native-full-chain-verify</code></pre>
       </article>
       <article class="action-card">
         <h3>Need the execution map?</h3>
-        <p>Use the six-step flow above: inspect, dry-run, execute, verify, and benchmark. Repeat with narrower stage ranges as needed.</p>
+        <p>Use the copy-first flow above, then read <a href="stages.html">Stages and Code Paths</a> when you need to understand artifacts or narrow execution to one stage.</p>
       </article>
+    </section>
+
+    <section class="diagram-card">
+      <h2>Execution Map</h2>
+      <p>Short sequence: copy, <span class="code-inline">status</span>, optional <span class="code-inline">--dry-run</span>, stage execution, <span class="code-inline">verify</span>, and native gate reports when needed.</p>
+      <img class="doc-figure" src="assets/pystamps-workflow.svg" alt="pySTAMPS execution workflow from dataset copy through verification" />
     </section>
 
     <section class="card">

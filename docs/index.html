@@ -11,12 +11,13 @@
 <div class="site">
   <aside class="sidebar">
     <div class="logo"><img class="brand-logo brand-logo--hero" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
-    <small>Beginner-friendly documentation for a Python-first StaMPS runtime.</small>
+    <small>Practical documentation for the Python and Rust StaMPS-style processing runtime.</small>
     <nav>
       <div class="nav-group">
         <h2>Guide</h2>
         <ul class="nav-list">
           <li><a class="active" href="index.html">Introduction</a></li>
+          <li><a href="stages.html">Stages and Code Paths</a></li>
           <li><a href="pipeline-science-guide.html">Pipeline Guide</a></li>
           <li><a href="getting-started.html">Getting Started</a></li>
           <li><a href="installation.html">Installation</a></li>
@@ -40,15 +41,12 @@
           <li><a href="api/cli.html">cli</a></li>
           <li><a href="api/status.html">status</a></li>
           <li><a href="api/verify.html">verify</a></li>
-          <li><a href="api/parity_contract.html">parity_contract</a></li>
           <li><a href="api/io_dataset.html">io.dataset</a></li>
           <li><a href="api/io_mat.html">io.mat</a></li>
           <li><a href="api/runtime.html">runtime</a></li>
           <li><a href="api/kernels.html">kernels</a></li>
-          <li><a href="api/pipeline_types.html">pipeline.types</a></li>
           <li><a href="api/pipeline_stages.html">pipeline.stages</a></li>
           <li><a href="api/pipeline_ported.html">pipeline.ported</a></li>
-          <li><a href="api/compat_legacy.html">compat.legacy</a></li>
         </ul>
       </div>
     </nav>
@@ -58,79 +56,81 @@
 
     <section class="hero">
       <span class="badge">Python + Rust StaMPS runtime</span>
-      <h1>Run pySTAMPS from a clear command flow.</h1>
-      <p>pySTAMPS works on a writable dataset copy. Start by inspecting the data, dry-run the stage range, run the Python or native Rust path, then verify the result against a reference dataset.</p>
+      <h1>Run pySTAMPS from the same flow the code executes.</h1>
+      <p>pySTAMPS works on a writable StaMPS-style dataset copy. The documentation now follows the operational path: copy the dataset, inspect status, dry-run the stage range, run the Python or native Rust path, then verify outputs against a reference tree.</p>
       <div class="hero-actions">
         <a class="button-link" href="quickstart.html">Start with commands</a>
-        <a class="button-link secondary" href="native-cli.html">Use the Rust CLI</a>
-        <a class="button-link secondary" href="verification.html">Verify a run</a>
+        <a class="button-link secondary" href="stages.html">Understand stages</a>
+        <a class="button-link secondary" href="native-cli.html">Use Rust CLI</a>
       </div>
-      <div class="stat-grid">
-        <div class="stat-card">
-          <h3>Inspect</h3>
-          <p>Run this first and confirm that dataset layout and stage metadata are what you expect.</p>
-          <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset /path/to/dataset</code></pre>
-        </div>
-        <div class="stat-card">
-          <h3>Run</h3>
-          <p>Process only what you need, and optionally dry-run before expensive execution.</p>
-          <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset /path/to/dataset --start-step 1 --end-step 4 --dry-run</code></pre>
-          <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps run --dataset /path/to/dataset --start-step 6 --end-step 8</code></pre>
-        </div>
-        <div class="stat-card">
-          <h3>Native Rust</h3>
-          <p>Build and run the direct Rust CLI when you want native-only execution.</p>
-          <pre><button class="copy-btn">Copy</button><code class="language-bash">cargo build --release -p pystamps-core --bin pystamps-native</code></pre>
-          <pre><button class="copy-btn">Copy</button><code class="language-bash">target/release/pystamps-native coverage --start-step 1 --end-step 8</code></pre>
-        </div>
-      </div>
+    </section>
+
+    <section class="diagram-card">
+      <h2>Workflow At A Glance</h2>
+      <p>The safe run pattern is copy-first and artifact-aware. Stages that already have their expected outputs report <span class="code-inline">skipped_existing</span>, so dry-run and status are part of normal use.</p>
+      <img class="doc-figure" src="assets/pystamps-workflow.svg" alt="pySTAMPS copy, inspect, dry-run, execute, verify, and review workflow" />
     </section>
 
     <section class="panel-grid">
       <article class="action-card">
-        <h3>New to interferometry?</h3>
-        <p>Read <a href="pipeline-science-guide.html">Pipeline Guide</a> for the combined science and program tutorial, or <a href="getting-started.html">Getting Started</a> for the shorter beginner path.</p>
+        <h3>Run A Dataset</h3>
+        <p>Use <a href="quickstart.html">Quick Start</a> for the shortest copy-first command sequence.</p>
+        <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps status --dataset "$RUN_DATASET"
+uv run pystamps run --dataset "$RUN_DATASET" --start-step 1 --end-step 8 --dry-run</code></pre>
       </article>
       <article class="action-card">
-        <h3>Need the shortest path?</h3>
-        <p>Go to <a href="quickstart.html">Quick Start</a> for the minimum command sequence, including copy-first execution and verification.</p>
+        <h3>Read The Stage Model</h3>
+        <p><a href="stages.html">Stages and Code Paths</a> explains every stage, its artifacts, and the Python/Rust entrypoints that implement it.</p>
+        <pre><button class="copy-btn">Copy</button><code class="language-bash">uv run pystamps describe-inputs --stage all</code></pre>
       </article>
       <article class="action-card">
-        <h3>Need the Rust path?</h3>
-        <p>Use <a href="native-cli.html">Native Rust CLI</a> for direct native execution, coverage, stage debugging, and the full-chain gate.</p>
+        <h3>Validate Native Execution</h3>
+        <p><a href="native-cli.html">Native Rust CLI</a> covers direct Rust execution, coverage, and the full-chain gate.</p>
+        <pre><button class="copy-btn">Copy</button><code class="language-bash">make native-full-chain-verify</code></pre>
       </article>
     </section>
 
     <section class="card">
-      <h2>What pySTAMPS actually does</h2>
+      <h2>What pySTAMPS Does</h2>
       <div class="quick-links">
         <div class="highlight-card">
-          <h3>It works on a dataset folder</h3>
-          <p>pySTAMPS expects a StaMPS-style dataset root with patch directories such as <span class="code-inline">PATCH_1</span> and stage artifacts inside those patches or at the merged dataset level.</p>
+          <h3>Discovers A Dataset Tree</h3>
+          <p>The working unit is a directory with <span class="code-inline">PATCH_*</span> folders, optional <span class="code-inline">patch.list</span>, input folders, and stage artifacts.</p>
         </div>
         <div class="highlight-card">
-          <h3>It orchestrates stages 1 through 8</h3>
-          <p>The pipeline can run only the range you need. This matters because later stages often depend on outputs created by earlier stages, and some stages are expensive.</p>
+          <h3>Runs Stages 1 Through 8</h3>
+          <p>Patch-scoped stages prepare, score, select, weed, and promote candidates. Merged stages unwrap, correct, and filter dataset-level products.</p>
         </div>
         <div class="highlight-card">
-          <h3>It is artifact driven</h3>
-          <p>Existing stage artifacts are inspected and can be skipped. That lets you resume or study a partial run without throwing away all intermediate results.</p>
+          <h3>Verifies Outputs</h3>
+          <p>Verification compares generated MAT artifacts against golden datasets with explicit tolerances and native gate reports.</p>
         </div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Start here if you want to run the package</h2>
-      <ol>
-        <li>Install the Python environment and external tools from <a href="installation.html">Installation</a>.</li>
-        <li>Follow <a href="quickstart.html">Quick Start</a> on a copy of a dataset, not your only original dataset.</li>
-        <li>Use <a href="native-cli.html">Native Rust CLI</a> when you want the standalone Rust runner.</li>
-        <li>Use <a href="configuration.html">Configuration</a> once you need backend and worker tuning.</li>
-        <li>Use <a href="verification.html">Verification</a> when you need output comparison and parity gate checks.</li>
-      </ol>
+    <section class="diagram-card">
+      <h2>Capability Map</h2>
+      <p>The codebase has a Python package surface and a Rust native surface. The docs separate those responsibilities so users know which entrypoint to use.</p>
+      <img class="doc-figure" src="assets/pystamps-capabilities.svg" alt="pySTAMPS capability map" />
     </section>
 
-    <p class="footer">Last updated: 2026-06-01</p>
+    <section class="card">
+      <h2>Documentation Paths</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Need</th><th>Start Here</th><th>Then Read</th></tr></thead>
+          <tbody>
+            <tr><td>First run</td><td><a href="quickstart.html">Quick Start</a></td><td><a href="verification.html">Verification</a></td></tr>
+            <tr><td>Stage meaning and code paths</td><td><a href="stages.html">Stages and Code Paths</a></td><td><a href="function-reference.html">Function Reference</a></td></tr>
+            <tr><td>Science background</td><td><a href="pipeline-science-guide.html">Pipeline Guide</a></td><td><a href="architecture.html">Architecture</a></td></tr>
+            <tr><td>Rust native operation</td><td><a href="native-cli.html">Native Rust CLI</a></td><td><a href="testing.html">Testing</a></td></tr>
+            <tr><td>Runtime tuning</td><td><a href="configuration.html">Configuration</a></td><td><a href="usage.html">Usage</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="footer">Last updated: 2026-06-03</p>
   </main>
 </div>
 </body>

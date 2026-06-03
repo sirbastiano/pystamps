@@ -17,6 +17,7 @@
         <h2>Guide</h2>
         <ul class="nav-list">
           <li><a href="index.html">Introduction</a></li>
+          <li><a href="stages.html">Stages and Code Paths</a></li>
           <li><a href="pipeline-science-guide.html">Pipeline Guide</a></li>
           <li><a class="active" href="getting-started.html">Getting Started</a></li>
           <li><a href="installation.html">Installation</a></li>
@@ -50,6 +51,7 @@
       <div class="hero-actions">
         <a class="button-link" href="pipeline-science-guide.html">Read the full pipeline guide</a>
         <a class="button-link secondary" href="quickstart.html">Use quick start</a>
+        <a class="button-link secondary" href="stages.html">Open stage map</a>
       </div>
     </section>
 
@@ -179,10 +181,7 @@ target/release/pystamps-native run \
     <section class="diagram-card">
       <h2>Execution map</h2>
       <p>Short sequence: <span class="code-inline">status</span> → optional <span class="code-inline">--dry-run</span> → stage execution → <span class="code-inline">verify</span>.</p>
-      <picture>
-        <source srcset="assets/pystamps-workflow.svg" type="image/svg+xml" />
-        <img src="assets/pystamps-workflow.png" alt="pySTAMPS execution workflow from dataset inspection through verification" />
-      </picture>
+      <img class="doc-figure" src="assets/pystamps-workflow.svg" alt="pySTAMPS execution workflow from dataset inspection through verification" />
     </section>
 
     <section class="card">

@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" role="img" aria-labelledby="title desc">
+  <title id="title">pySTAMPS stage map</title>
+  <desc id="desc">Stage-by-stage map from patch-scoped stages through merged dataset stages.</desc>
+  <defs>
+    <linearGradient id="patch" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d9488"/>
+      <stop offset="1" stop-color="#3559e0"/>
+    </linearGradient>
+    <linearGradient id="merged" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3559e0"/>
+      <stop offset="1" stop-color="#c36a1d"/>
+    </linearGradient>
+    <style>
+      .frame { fill: #ffffff; stroke: #dce4ea; stroke-width: 1.4; rx: 24; }
+      .band { fill: #f0f6f4; rx: 18; }
+      .title { fill: #17212b; font: 700 36px Arial, Helvetica, sans-serif; }
+      .sub { fill: #5c6a73; font: 500 16px Arial, Helvetica, sans-serif; }
+      .scope { fill: #0f4f64; font: 700 13px Arial, Helvetica, sans-serif; letter-spacing: .08em; }
+      .card { fill: #ffffff; stroke: #dce4ea; stroke-width: 1.4; rx: 14; }
+      .num { fill: #ffffff; font: 700 18px Arial, Helvetica, sans-serif; }
+      .label { fill: #17212b; font: 700 18px Arial, Helvetica, sans-serif; }
+      .copy { fill: #5c6a73; font: 500 13px Arial, Helvetica, sans-serif; }
+      .artifact { fill: #0f4f64; font: 700 12px Arial, Helvetica, sans-serif; }
+      .arrow { stroke: #90a4b3; stroke-width: 3; fill: none; stroke-linecap: round; }
+    </style>
+  </defs>
+  <rect x="1" y="1" width="1278" height="518" class="frame"/>
+  <text x="54" y="66" class="title">Stage-by-stage artifact contract</text>
+  <text x="54" y="96" class="sub">Stages 1-5 operate on each patch. Stage 5 also creates the merged dataset products used by stages 6-8.</text>
+
+  <rect x="54" y="132" width="1172" height="166" class="band"/>
+  <text x="78" y="164" class="scope">PATCH SCOPE: each PATCH_* directory</text>
+  <path d="M220 232H1010" class="arrow"/>
+  <polygon points="1020,232 1002,222 1002,242" fill="#90a4b3"/>
+
+  <g transform="translate(78 184)">
+    <rect width="190" height="86" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#patch)"/><text x="23" y="35" class="num">1</text>
+    <text x="56" y="32" class="label">Initial load</text>
+    <text x="56" y="56" class="copy">prepare candidates</text>
+    <text x="56" y="76" class="artifact">ps1 ph1 bp1</text>
+  </g>
+  <g transform="translate(292 184)">
+    <rect width="190" height="86" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#patch)"/><text x="23" y="35" class="num">2</text>
+    <text x="56" y="32" class="label">Gamma</text>
+    <text x="56" y="56" class="copy">fit model terms</text>
+    <text x="56" y="76" class="artifact">pm1</text>
+  </g>
+  <g transform="translate(506 184)">
+    <rect width="190" height="86" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#patch)"/><text x="23" y="35" class="num">3</text>
+    <text x="56" y="32" class="label">Select PS</text>
+    <text x="56" y="56" class="copy">keep candidates</text>
+    <text x="56" y="76" class="artifact">select1</text>
+  </g>
+  <g transform="translate(720 184)">
+    <rect width="190" height="86" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#patch)"/><text x="23" y="35" class="num">4</text>
+    <text x="56" y="32" class="label">Weed</text>
+    <text x="56" y="56" class="copy">remove weak points</text>
+    <text x="56" y="76" class="artifact">weed1</text>
+  </g>
+  <g transform="translate(934 184)">
+    <rect width="244" height="86" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#patch)"/><text x="23" y="35" class="num">5</text>
+    <text x="56" y="32" class="label">Promote patch</text>
+    <text x="56" y="56" class="copy">write corrected patch outputs</text>
+    <text x="56" y="76" class="artifact">ps2 ph2 pm2 bp2</text>
+  </g>
+
+  <rect x="54" y="332" width="1172" height="140" class="band"/>
+  <text x="78" y="364" class="scope">MERGED SCOPE: dataset root</text>
+  <path d="M250 424H1010" class="arrow"/>
+  <polygon points="1020,424 1002,414 1002,434" fill="#90a4b3"/>
+
+  <g transform="translate(78 384)">
+    <rect width="230" height="74" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#merged)"/><text x="23" y="35" class="num">5</text>
+    <text x="56" y="30" class="label">Merge patches</text>
+    <text x="56" y="54" class="artifact">ifgstd2 plus merged ps2/ph2</text>
+  </g>
+  <g transform="translate(340 384)">
+    <rect width="230" height="74" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#merged)"/><text x="23" y="35" class="num">6</text>
+    <text x="56" y="30" class="label">Unwrap phase</text>
+    <text x="56" y="54" class="artifact">phuw2 uw_grid uw_interp</text>
+  </g>
+  <g transform="translate(602 384)">
+    <rect width="230" height="74" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#merged)"/><text x="23" y="35" class="num">7</text>
+    <text x="56" y="30" class="label">Estimate SCLA</text>
+    <text x="56" y="54" class="artifact">scla2 scla_smooth2</text>
+  </g>
+  <g transform="translate(864 384)">
+    <rect width="260" height="74" class="card"/>
+    <circle cx="28" cy="28" r="18" fill="url(#merged)"/><text x="23" y="35" class="num">8</text>
+    <text x="56" y="30" class="label">Filter SCN</text>
+    <text x="56" y="54" class="artifact">mean_v uw_space_time</text>
+  </g>
+</svg>

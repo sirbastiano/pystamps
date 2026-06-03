@@ -12,6 +12,8 @@ It detects existing artifacts, so stage ranges can be run incrementally:
 - `verify`: compare a run result against a reference dataset
 - `pystamps-native`: run the standalone Rust native pipeline and coverage checks
 
+For detailed stage meanings, artifacts, and code entrypoints, read [stages.html](stages.html).
+
 ## Install
 
 ```bash
@@ -153,3 +155,5 @@ uv run pystamps verify --run "$RUN_DATASET" --golden "$GOLDEN_DATASET"
 | 6 | Unwrap temporal products |
 | 7 | Estimate SCLA correction terms |
 | 8 | Apply final space-time filtering |
+
+The full stage guide is [docs/stages.html](stages.html).

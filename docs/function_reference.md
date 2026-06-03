@@ -171,6 +171,8 @@ Purpose: orchestration layer for deciding which stages run, in what order, and w
 - `_selected_stages(start_step: int, end_step: int) -> list[StageDef]`: select the active stage definitions for a requested range
 - `run_pipeline(context: PipelineContext) -> PipelineReport`: main pipeline orchestration entrypoint
 
+For a stage-by-stage implementation map, read [stages.html](stages.html).
+
 `PipelineContext` still carries `workflow_profile`, but the wrapper-backed legacy post flow is modeled inside stage ownership rather than by expanding the outer stage list.
 
 ## `pystamps.pipeline.ported`

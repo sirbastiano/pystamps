@@ -2,7 +2,9 @@
 
 pySTAMPS is organized around one invariant: a StaMPS-style dataset directory is the source of truth. The CLI, runtime scheduler, ported stages, optimized kernels, and verification tools all read from or write to that directory.
 
-For the full teaching guide, read [pipeline_science_guide.md](pipeline_science_guide.md).
+For the full teaching guide, read [pipeline_science_guide.md](pipeline_science_guide.md). For stage-by-stage implementation entrypoints, read [stages.md](stages.md).
+
+![pySTAMPS capability map](assets/pystamps-capabilities.svg)
 
 ## Runtime layers
 
@@ -38,6 +40,8 @@ Stages mirror the StaMPS stage range 1 through 8.
 | 8 | merged | Filter SCN | root `uw_space_time.mat` |
 
 Patch-scoped stages run once per discovered `PATCH_*` directory. Merged stages run once at the dataset root. Stage 5 has both patch promotion and merged aggregation behavior.
+
+For the code path behind each stage, see [stages.md](stages.md).
 
 ## Artifact-driven scheduling
 

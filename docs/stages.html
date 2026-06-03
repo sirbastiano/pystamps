@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stages and Code Paths - pySTAMPS Docs</title>
+  <link rel="stylesheet" href="assets/styles.css" />
+  <script defer src="assets/scripts.js"></script>
+</head>
+<body>
+<div class="site">
+  <aside class="sidebar">
+    <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
+    <small>Stage-by-stage behavior, artifacts, and implementation entrypoints.</small>
+    <nav>
+      <div class="nav-group">
+        <h2>Guide</h2>
+        <ul class="nav-list">
+          <li><a href="index.html">Introduction</a></li>
+          <li><a class="active" href="stages.html">Stages and Code Paths</a></li>
+          <li><a href="pipeline-science-guide.html">Pipeline Guide</a></li>
+          <li><a href="getting-started.html">Getting Started</a></li>
+          <li><a href="installation.html">Installation</a></li>
+          <li><a href="quickstart.html">Quick Start</a></li>
+          <li><a href="native-cli.html">Native Rust CLI</a></li>
+          <li><a href="architecture.html">Architecture</a></li>
+          <li><a href="configuration.html">Configuration</a></li>
+          <li><a href="usage.html">Usage</a></li>
+          <li><a href="testing.html">Testing</a></li>
+          <li><a href="verification.html">Verification</a></li>
+          <li><a href="contributing.html">Contributing</a></li>
+          <li><a href="faq.html">FAQ</a></li>
+        </ul>
+      </div>
+      <div class="nav-group">
+        <h2>Reference</h2>
+        <ul class="nav-list">
+          <li><a href="function-reference.html">Function Reference</a></li>
+          <li><a href="api/pipeline_stages.html">pipeline.stages</a></li>
+          <li><a href="api/pipeline_ported.html">pipeline.ported</a></li>
+          <li><a href="api/kernels.html">kernels</a></li>
+        </ul>
+      </div>
+    </nav>
+  </aside>
+  <main class="content">
+    <div class="breadcrumb">Home / Stages and Code Paths</div>
+
+    <section class="hero">
+      <span class="badge">Stage guide</span>
+      <h1>Every stage has a scope, an artifact contract, and a code entrypoint.</h1>
+      <p>This page connects the user-facing stage numbers to the implementation. Use it when you need to know what a stage reads, what it writes, why it may skip, and which Python or Rust function owns the work.</p>
+      <div class="hero-actions">
+        <a class="button-link" href="#stage-details">Read stages</a>
+        <a class="button-link secondary" href="#code-map">Read code paths</a>
+        <a class="button-link secondary" href="native-cli.html">Run native CLI</a>
+      </div>
+    </section>
+
+    <section class="diagram-card">
+      <h2>Stage Map</h2>
+      <p>Stages 1 through 5 run inside each patch. Stage 5 also creates merged dataset products. Stages 6 through 8 run once at the dataset root.</p>
+      <img class="doc-figure" src="assets/pystamps-stage-map.svg" alt="pySTAMPS stage artifact map" />
+    </section>
+
+    <section class="card">
+      <h2>Jump To A Stage</h2>
+      <div class="stage-strip">
+        <a href="#stage-1">Stage 1<small>Initial load</small></a>
+        <a href="#stage-2">Stage 2<small>Gamma</small></a>
+        <a href="#stage-3">Stage 3<small>Select PS</small></a>
+        <a href="#stage-4">Stage 4<small>Weed</small></a>
+        <a href="#stage-5">Stage 5<small>Promote + merge</small></a>
+        <a href="#stage-6">Stage 6<small>Unwrap</small></a>
+        <a href="#stage-7">Stage 7<small>SCLA</small></a>
+        <a href="#stage-8">Stage 8<small>Filter SCN</small></a>
+      </div>
+    </section>
+
+    <section id="code-map" class="card">
+      <h2>How The Code Runs A Stage Range</h2>
+      <div class="code-grid">
+        <article class="code-card">
+          <h3>1. CLI Builds Context</h3>
+          <p><span class="code-inline">pystamps.cli</span> parses <span class="code-inline">run</span>, loads config, and creates a <span class="code-inline">PipelineContext</span> with dataset root, start/end steps, and dry-run mode.</p>
+        </article>
+        <article class="code-card">
+          <h3>2. Dataset Is Discovered</h3>
+          <p><span class="code-inline">pystamps.io.dataset.discover_dataset()</span> resolves the root, reads <span class="code-inline">patch.list</span> when present, and orders <span class="code-inline">PATCH_*</span> folders.</p>
+        </article>
+        <article class="code-card">
+          <h3>3. Scheduler Selects Stages</h3>
+          <p><span class="code-inline">pystamps.pipeline.stages.run_pipeline()</span> walks the selected <span class="code-inline">StageDef</span> records and sends patch or merged work to the hybrid executor.</p>
+        </article>
+        <article class="code-card">
+          <h3>4. Artifacts Decide Skips</h3>
+          <p><span class="code-inline">expected_stage_artifact()</span> and merged bundles decide whether a stage is <span class="code-inline">planned</span>, <span class="code-inline">completed</span>, or <span class="code-inline">skipped_existing</span>.</p>
+        </article>
+      </div>
+      <pre><button class="copy-btn">Copy</button><code class="language-python">from pathlib import Path
+
+from pystamps.config import RunConfig
+from pystamps.pipeline.stages import run_pipeline
+from pystamps.pipeline.types import PipelineContext
+
+context = PipelineContext(
+    dataset_root=Path("/path/to/run_dataset"),
+    run_config=RunConfig(),
+    start_step=1,
+    end_step=8,
+    dry_run=True,
+)
+report = run_pipeline(context)</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Implementation Files To Read First</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>File</th><th>Why It Matters</th></tr></thead>
+          <tbody>
+            <tr><td><code>pystamps/pipeline/stages.py</code></td><td>Stage definitions, artifact skips, patch/merged dispatch, strict reference replay, and result timing.</td></tr>
+            <tr><td><code>pystamps/pipeline/ported.py</code></td><td>Python stage entrypoints and scientific helpers for stages 1 through 8.</td></tr>
+            <tr><td><code>pystamps/io/dataset.py</code></td><td>Dataset discovery plus expected artifact mapping used by status and scheduling.</td></tr>
+            <tr><td><code>pystamps/kernels/accelerated.py</code></td><td>Backend dispatch for hot kernels in stages 2, 4, 7, and 8.</td></tr>
+            <tr><td><code>crates/pystamps-core/src/bin/pystamps-native.rs</code></td><td>Standalone Rust CLI argument parsing and native stage dispatch.</td></tr>
+            <tr><td><code>crates/pystamps-stages/src/lib.rs</code></td><td>Native readiness inventory and parity certification details for each stage scope.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="stage-details" class="stage-grid">
+      <article id="stage-1" class="stage-card">
+        <h3><span class="stage-number">1</span> Initial Load</h3>
+        <div class="meta-row"><span class="meta-pill">Scope: patch</span><span class="meta-pill">Progress: ps1.mat</span><span class="meta-pill">Native: parity certified</span></div>
+        <p>Stage 1 turns patch inputs and metadata into consistent early MAT artifacts. Later stages rely on these files instead of re-reading raw source folders.</p>
+        <p><strong>Python entrypoint:</strong> <span class="code-inline">stage1_load_initial()</span>. <strong>Rust entrypoint:</strong> <span class="code-inline">native_stage1::run_stage1_native</span>.</p>
+        <p><strong>Main outputs:</strong> <span class="code-inline">ps1.mat</span>, <span class="code-inline">ph1.mat</span>, <span class="code-inline">bp1.mat</span>, <span class="code-inline">da1.mat</span>, <span class="code-inline">hgt1.mat</span>, <span class="code-inline">la1.mat</span>, <span class="code-inline">psver.mat</span>.</p>
+      </article>
+      <article id="stage-2" class="stage-card">
+        <h3><span class="stage-number">2</span> Estimate Gamma</h3>
+        <div class="meta-row"><span class="meta-pill">Scope: patch</span><span class="meta-pill">Progress: pm1.mat</span><span class="meta-pill">Native: parity certified</span></div>
+        <p>Stage 2 estimates phase-model and coherence-like terms for each candidate. This is the hot patch stage and owns several optimized kernels.</p>
+        <p><strong>Python entrypoint:</strong> <span class="code-inline">stage2_estimate_gamma()</span>. <strong>Rust entrypoint:</strong> <span class="code-inline">native_stage2::run_stage2_native</span>.</p>
+        <p><strong>Optimized kernels:</strong> <span class="code-inline">stage2_grid_accumulate</span>, <span class="code-inline">stage2_histogram</span>, <span class="code-inline">stage2_topofit</span>, <span class="code-inline">stage2_topofit_row_invariant</span>, <span class="code-inline">stage2_topofit_coh_row_invariant</span>.</p>
+      </article>
+      <article id="stage-3" class="stage-card">
+        <h3><span class="stage-number">3</span> Select PS Pixels</h3>
+        <div class="meta-row"><span class="meta-pill">Scope: patch</span><span class="meta-pill">Progress: select1.mat</span><span class="meta-pill">Native: parity certified</span></div>
+        <p>Stage 3 chooses persistent-scatterer candidates from the stage-2 quality terms. It writes the selection mask and related metadata used by weeding.</p>
+        <p><strong>Python entrypoint:</strong> <span class="code-inline">stage3_select_ps()</span>. <strong>Rust entrypoint:</strong> <span class="code-inline">native_stage3::run_stage3_native</span>.</p>
+        <p><strong>Main output:</strong> <span class="code-inline">select1.mat</span>.</p>
+      </article>
+      <article id="stage-4" class="stage-card">
+        <h3><span class="stage-number">4</span> Weed Adjacent Pixels</h3>
+        <div class="meta-row"><span class="meta-pill">Scope: patch</span><span class="meta-pill">Progress: weed1.mat</span><span class="meta-pill">Native: parity certified</span></div>
+        <p>Stage 4 removes weak, redundant, or geometry-conflicting candidates before patch products are promoted. The edge-stat kernel has Python and native implementations.</p>
+        <p><strong>Python entrypoint:</strong> <span class="code-inline">stage4_weed_ps()</span>. <strong>Rust entrypoint:</strong> <span class="code-inline">native_stage4::run_stage4_native</span>.</p>
+        <p><strong>Optimized kernel:</strong> <span class="code-inline">stage4_edge_stats</span>. <strong>Main output:</strong> <span class="code-inline">weed1.mat</span>.</p>
+      </article>
+      <article id="stage-5" class="stage-card">
+        <h3><span class="stage-number">5</span> Correct Phase And Merge</h3>
+        <div class="meta-row"><span class="meta-pill">Scope: patch + merged</span><span class="meta-pill">Progress: ph2.mat / ifgstd2.mat</span><span class="meta-pill">Native: parity certified</span></div>
+        <p>Stage 5 is the transition point. It promotes each patch to corrected stage-2 products, then merges patch outputs into root-level dataset artifacts.</p>
+        <p><strong>Python entrypoints:</strong> <span class="code-inline">stage5_correct_and_promote()</span> and <span class="code-inline">stage5_merge_and_ifgstd()</span>. <strong>Rust entrypoints:</strong> <span class="code-inline">native_stage5::run_stage5_patch_native</span> and <span class="code-inline">native_stage5::run_stage5_merge_native</span>.</p>
+        <p><strong>Main outputs:</strong> patch <span class="code-inline">ps2.mat</span>, <span class="code-inline">ph2.mat</span>, <span class="code-inline">pm2.mat</span>, <span class="code-inline">bp2.mat</span>, plus merged <span class="code-inline">ifgstd2.mat</span>.</p>
+      </article>
+      <article id="stage-6" class="stage-card">
+        <h3><span class="stage-number">6</span> Unwrap Phase</h3>
+        <div class="meta-row"><span class="meta-pill">Scope: merged</span><span class="meta-pill">Progress: phuw2.mat</span><span class="meta-pill">Native: parity certified</span></div>
+        <p>Stage 6 unwraps merged phase products and writes the graph/grid support files used by later correction and filtering stages.</p>
+        <p><strong>Python entrypoint:</strong> <span class="code-inline">stage6_unwrap()</span>. <strong>Rust entrypoint:</strong> <span class="code-inline">native_stage6::run_stage6_native</span>.</p>
+        <p><strong>Main outputs:</strong> <span class="code-inline">phuw2.mat</span>, <span class="code-inline">uw_phaseuw.mat</span>, <span class="code-inline">uw_grid.mat</span>, <span class="code-inline">uw_interp.mat</span>.</p>
+      </article>
+      <article id="stage-7" class="stage-card">
+        <h3><span class="stage-number">7</span> Calculate SCLA</h3>
+        <div class="meta-row"><span class="meta-pill">Scope: merged</span><span class="meta-pill">Progress: scla2.mat</span><span class="meta-pill">Native: parity certified</span></div>
+        <p>Stage 7 estimates spatially correlated look-angle error products and smoothed correction artifacts from unwrapped merged phase.</p>
+        <p><strong>Python entrypoint:</strong> <span class="code-inline">stage7_calc_scla()</span>. <strong>Rust entrypoint:</strong> <span class="code-inline">native_stage7::run_stage7_native</span>.</p>
+        <p><strong>Optimized kernel:</strong> <span class="code-inline">stage7_scla</span>. <strong>Main outputs:</strong> <span class="code-inline">scla2.mat</span>, <span class="code-inline">scla_smooth2.mat</span>.</p>
+      </article>
+      <article id="stage-8" class="stage-card">
+        <h3><span class="stage-number">8</span> Filter SCN</h3>
+        <div class="meta-row"><span class="meta-pill">Scope: merged</span><span class="meta-pill">Progress: uw_space_time.mat</span><span class="meta-pill">Native: parity certified</span></div>
+        <p>Stage 8 applies final space-time filtering, edge-noise calculations, and exports the final mean velocity and space-time products.</p>
+        <p><strong>Python entrypoint:</strong> <span class="code-inline">stage8_filter_scn()</span>. <strong>Rust entrypoint:</strong> <span class="code-inline">native_stage8::run_stage8_native</span>.</p>
+        <p><strong>Optimized kernel:</strong> <span class="code-inline">stage8_edge_noise</span>. <strong>Main outputs:</strong> <span class="code-inline">mean_v.mat</span>, <span class="code-inline">uw_space_time.mat</span>.</p>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Direct Stage Commands</h2>
+      <p>Use direct native commands when you are validating or debugging one stage scope. Patch stages need <span class="code-inline">--patch</span>; merged stages need <span class="code-inline">--dataset</span>.</p>
+      <pre><button class="copy-btn">Copy</button><code class="language-bash">target/release/pystamps-native stage 1 --patch "$RUN_DATASET/PATCH_1"
+target/release/pystamps-native stage 2 --patch "$RUN_DATASET/PATCH_1"
+target/release/pystamps-native stage 5 --dataset "$RUN_DATASET"
+target/release/pystamps-native stage 8 --dataset "$RUN_DATASET"</code></pre>
+    </section>
+
+    <section class="card">
+      <h2>Stage Result Statuses</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>planned</code></td><td>Dry-run selected the stage but did not write artifacts.</td></tr>
+            <tr><td><code>completed</code></td><td>The stage executed, or strict reference replay copied the expected bundle.</td></tr>
+            <tr><td><code>skipped_existing</code></td><td>The expected artifact or merged bundle already exists.</td></tr>
+            <tr><td><code>skipped</code></td><td>No expected artifact mapping exists for that stage/scope combination.</td></tr>
+            <tr><td><code>failed</code></td><td>The stage raised an execution error. The <span class="code-inline">details</span> field contains the message.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="footer">Next: use <a href="pipeline-science-guide.html">Pipeline Guide</a> for science background or <a href="function-reference.html">Function Reference</a> for module-level explanations.</p>
+  </main>
+</div>
+</body>
+</html>

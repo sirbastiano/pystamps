@@ -1,66 +1,64 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="420" viewBox="0 0 1200 420" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="500" viewBox="0 0 1280 500" role="img" aria-labelledby="title desc">
   <title id="title">pySTAMPS capability map</title>
-  <desc id="desc">A capability map showing the main parts of pySTAMPS: interface, execution, verification, and supporting modules.</desc>
+  <desc id="desc">A capability map showing interfaces, dataset model, stage runtime, native Rust, verification, and web console.</desc>
   <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f2f8f5" />
-      <stop offset="100%" stop-color="#e7f3ef" />
-    </linearGradient>
-    <linearGradient id="hero" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10221e" />
-      <stop offset="100%" stop-color="#0f766e" />
-    </linearGradient>
     <style>
-      .frame { fill: url(#bg); stroke: #c6dad3; stroke-width: 1.2; rx: 28; }
-      .core { fill: url(#hero); rx: 26; }
-      .cardA { fill: #ffffff; stroke: #bfd8d0; stroke-width: 1.3; rx: 20; }
-      .cardB { fill: #f7fbf9; stroke: #bfd8d0; stroke-width: 1.3; rx: 20; }
-      .title { fill: #10221e; font: 700 34px Arial, Helvetica, sans-serif; }
-      .sub { fill: #53635f; font: 500 16px Arial, Helvetica, sans-serif; }
-      .core-title { fill: #f5fbff; font: 700 28px Arial, Helvetica, sans-serif; }
-      .core-copy { fill: #d5e7f8; font: 500 15px Arial, Helvetica, sans-serif; }
-      .label { fill: #10221e; font: 700 20px Arial, Helvetica, sans-serif; }
-      .copy { fill: #53635f; font: 500 14px Arial, Helvetica, sans-serif; }
-      .mini { fill: #0f766e; font: 600 12px Arial, Helvetica, sans-serif; letter-spacing: 0.08em; }
-      .line { stroke: #8cbfb3; stroke-width: 3; fill: none; }
+      .frame { fill: #f8fbfd; stroke: #dce4ea; stroke-width: 1.4; rx: 24; }
+      .hub { fill: #101820; rx: 22; }
+      .card { fill: #ffffff; stroke: #dce4ea; stroke-width: 1.4; rx: 16; }
+      .line { stroke: #8fa4b4; stroke-width: 3; fill: none; }
+      .title { fill: #17212b; font: 700 36px Arial, Helvetica, sans-serif; }
+      .sub { fill: #5c6a73; font: 500 16px Arial, Helvetica, sans-serif; }
+      .hub-title { fill: #f8fbff; font: 700 27px Arial, Helvetica, sans-serif; }
+      .hub-copy { fill: #cad7e0; font: 500 15px Arial, Helvetica, sans-serif; }
+      .label { fill: #17212b; font: 700 19px Arial, Helvetica, sans-serif; }
+      .copy { fill: #5c6a73; font: 500 14px Arial, Helvetica, sans-serif; }
+      .tag { fill: #0f4f64; font: 700 12px Arial, Helvetica, sans-serif; letter-spacing: .07em; }
     </style>
   </defs>
+  <rect x="1" y="1" width="1278" height="498" class="frame"/>
+  <text x="56" y="70" class="title">pySTAMPS capability map</text>
+  <text x="56" y="100" class="sub">The project is documented around the same responsibilities that appear in the package and Rust workspace.</text>
 
-  <rect width="1200" height="420" class="frame" />
-  <text x="56" y="68" class="title">pySTAMPS capability map</text>
-  <text x="56" y="96" class="sub">The package is organized so users can inspect datasets, run controlled stages, and verify outputs without leaving the Python workflow.</text>
+  <rect x="430" y="170" width="420" height="160" class="hub"/>
+  <text x="486" y="222" class="hub-title">Dataset-centered stage runtime</text>
+  <text x="486" y="252" class="hub-copy">Discover PATCH_* folders, select a stage range, skip</text>
+  <text x="486" y="274" class="hub-copy">existing artifacts, execute Python or Rust paths, and</text>
+  <text x="486" y="296" class="hub-copy">return structured stage results.</text>
 
-  <rect x="420" y="136" width="360" height="146" class="core" />
-  <text x="468" y="192" class="core-title">pySTAMPS core runtime</text>
-  <text x="468" y="220" class="core-copy">CLI orchestration, typed pipeline context, stage scheduling,</text>
-  <text x="468" y="242" class="core-copy">I/O helpers, and numerical stage implementations.</text>
+  <path d="M356 154C398 154 410 190 430 218" class="line"/>
+  <path d="M924 154C882 154 870 190 850 218" class="line"/>
+  <path d="M356 364C398 364 410 310 430 282" class="line"/>
+  <path d="M924 364C882 364 870 310 850 282" class="line"/>
+  <path d="M640 390V330" class="line"/>
 
-  <path d="M 332 162 C 370 162, 386 162, 420 188" class="line" />
-  <path d="M 870 162 C 832 162, 816 162, 780 188" class="line" />
-  <path d="M 332 320 C 370 320, 386 320, 420 248" class="line" />
-  <path d="M 870 320 C 832 320, 816 320, 780 248" class="line" />
-
-  <rect x="56" y="118" width="300" height="98" class="cardA" />
-  <text x="84" y="148" class="mini">INTERFACE</text>
-  <text x="84" y="176" class="label">Inspect and control</text>
-  <text x="84" y="198" class="copy">Commands such as status and run</text>
-  <text x="84" y="218" class="copy">show what pySTAMPS will process.</text>
-
-  <rect x="844" y="118" width="300" height="98" class="cardA" />
-  <text x="896" y="148" class="mini">VERIFICATION</text>
-  <text x="896" y="176" class="label">Compare outputs</text>
-  <text x="872" y="198" class="copy">Verification compares generated .mat</text>
-  <text x="872" y="218" class="copy">artifacts with a reference dataset.</text>
-
-  <rect x="56" y="272" width="300" height="98" class="cardB" />
-  <text x="84" y="302" class="mini">DATA MODEL</text>
-  <text x="84" y="330" class="label">Dataset-aware workflow</text>
-  <text x="84" y="354" class="copy">Dataset directory is the working unit</text>
-  <text x="84" y="374" class="copy">for inputs, outputs and stage state.</text>
-
-  <rect x="844" y="272" width="300" height="98" class="cardB" />
-  <text x="896" y="302" class="mini">ACCELERATION</text>
-  <text x="896" y="330" class="label">Runtime and kernels</text>
-  <text x="872" y="354" class="copy">Thread/process/GPU paths speed up</text>
-  <text x="872" y="374" class="copy">numerical stages where needed.</text>
+  <g transform="translate(56 130)">
+    <rect width="300" height="104" class="card"/>
+    <text x="24" y="31" class="tag">INTERFACE</text>
+    <text x="24" y="62" class="label">Python CLI and API</text>
+    <text x="24" y="86" class="copy">status, run, verify, describe-inputs, backends</text>
+  </g>
+  <g transform="translate(924 130)">
+    <rect width="300" height="104" class="card"/>
+    <text x="24" y="31" class="tag">NATIVE RUST</text>
+    <text x="24" y="62" class="label">pystamps-native</text>
+    <text x="24" y="86" class="copy">stage execution, coverage, full-chain gate</text>
+  </g>
+  <g transform="translate(56 316)">
+    <rect width="300" height="104" class="card"/>
+    <text x="24" y="31" class="tag">DATA MODEL</text>
+    <text x="24" y="62" class="label">StaMPS-style dataset tree</text>
+    <text x="24" y="86" class="copy">patch artifacts plus merged .mat products</text>
+  </g>
+  <g transform="translate(924 316)">
+    <rect width="300" height="104" class="card"/>
+    <text x="24" y="31" class="tag">VERIFICATION</text>
+    <text x="24" y="62" class="label">Golden dataset comparison</text>
+    <text x="24" y="86" class="copy">tolerance manifest, audit, native gate reports</text>
+  </g>
+  <g transform="translate(490 390)">
+    <rect width="300" height="78" class="card"/>
+    <text x="24" y="31" class="tag">WEB CONSOLE</text>
+    <text x="24" y="58" class="copy">make web serves the local Rust run console</text>
+  </g>
 </svg>

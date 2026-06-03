@@ -5,7 +5,7 @@ This guide teaches the two things a new user needs at the same time:
 - the scientific meaning of the StaMPS-style persistent-scatterer workflow
 - the practical pySTAMPS commands used to inspect, run, accelerate, and verify that workflow
 
-If you only need commands, start with [quickstart.html](quickstart.html). If you need to understand why the commands exist and what each stage produces, read this guide first.
+If you only need commands, start with [quickstart.html](quickstart.html). If you need implementation entrypoints and artifact contracts, use [stages.html](stages.html). If you need to understand why the commands exist and what each stage produces, read this guide first.
 
 ## What pySTAMPS is
 
@@ -183,6 +183,8 @@ uv run pystamps describe-backends
 ```
 
 ## Stage-by-stage science and outputs
+
+For Python/Rust entrypoints, readiness status, and direct native stage commands, read [stages.html](stages.html).
 
 | Stage | Scope | Science question | Main inputs | Main outputs |
 | --- | --- | --- | --- | --- |

@@ -13,7 +13,7 @@
     <div class="logo"><img class="brand-logo" src="assets/pystamps-logo.svg" alt="pySTAMPS logo" /><h1>pySTAMPS Docs</h1></div>
     <small>Science, program model, and pipeline run guide.</small>
     <nav>
-      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a class="active" href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
+      <div class="nav-group"><h2>Guide</h2><ul class="nav-list"><li><a href="index.html">Introduction</a></li><li><a href="stages.html">Stages and Code Paths</a></li><li><a class="active" href="pipeline-science-guide.html">Pipeline Guide</a></li><li><a href="getting-started.html">Getting Started</a></li><li><a href="installation.html">Installation</a></li><li><a href="quickstart.html">Quick Start</a></li><li><a href="native-cli.html">Native Rust CLI</a></li><li><a href="architecture.html">Architecture</a></li><li><a href="configuration.html">Configuration</a></li><li><a href="usage.html">Usage</a></li><li><a href="testing.html">Testing</a></li><li><a href="verification.html">Verification</a></li><li><a href="contributing.html">Contributing</a></li><li><a href="faq.html">FAQ</a></li></ul></div>
       <div class="nav-group"><h2>Reference</h2><ul class="nav-list"><li><a href="function-reference.html">Function Reference</a></li><li><a href="api/pystamps.html">Package API</a></li><li><a href="api/pipeline_stages.html">pipeline.stages</a></li><li><a href="api/pipeline_ported.html">pipeline.ported</a></li><li><a href="api/kernels.html">kernels</a></li></ul></div>
     </nav>
   </aside>
@@ -26,9 +26,15 @@
       <p>This guide joins the scientific concepts behind StaMPS-style persistent-scatterer processing with the pySTAMPS commands used to inspect, execute, accelerate, verify, and benchmark a dataset.</p>
       <div class="hero-actions">
         <a class="button-link" href="#first-run">Run the pipeline</a>
-        <a class="button-link secondary" href="#stages">Understand stages</a>
+        <a class="button-link secondary" href="stages.html">Understand stages</a>
         <a class="button-link secondary" href="#kernels">Switch kernels</a>
       </div>
+    </section>
+
+    <section class="diagram-card">
+      <h2>Stage And Artifact Map</h2>
+      <p>The scientific workflow is implemented as an artifact-driven stage chain. Use this map with the detailed <a href="stages.html">Stages and Code Paths</a> page when reading code or debugging a run.</p>
+      <img class="doc-figure" src="assets/pystamps-stage-map.svg" alt="pySTAMPS stage and artifact map" />
     </section>
 
     <section class="card">
@@ -134,6 +140,7 @@ uv run pystamps describe-backends</code></pre>
 
     <section id="stages" class="card">
       <h2>Stage-by-stage science and outputs</h2>
+      <p>This table explains the scientific question at each stage. For implementation entrypoints, Rust readiness, and direct stage commands, open <a href="stages.html">Stages and Code Paths</a>.</p>
       <div class="table-wrap">
         <table>
           <thead><tr><th>Stage</th><th>Scope</th><th>Science question</th><th>Main outputs</th></tr></thead>
