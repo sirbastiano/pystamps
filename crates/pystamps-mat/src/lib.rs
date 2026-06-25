@@ -2381,21 +2381,33 @@ fn read_element<'a>(
             bytes.len().saturating_sub(data_start)
         ));
     }
-    let padded_end = data_end
-        .checked_add((8 - (data_size % 8)) % 8)
-        .ok_or_else(|| {
-            format!(
-                "data element at byte {} padded length overflows usize",
+    if data_type == MI_COMPRESSED {
+        // scipy and MATLAB do NOT pad miCOMPRESSED elements to an 8-byte boundary, so the next
+        // element's tag follows immediately at data_end; an 8-byte-padded advance would over-shoot
+        // into its zlib stream and mis-read the tag. Then skip any trailing zero padding, to also
+        // tolerate writers that DO pad (top-level element tags are never 0x00). All other element
+        // types ARE 8-byte padded, so they keep the padded advance below.
+        *offset = data_end;
+        while *offset < bytes.len() && bytes[*offset] == 0 {
+            *offset += 1;
+        }
+    } else {
+        let padded_end = data_end
+            .checked_add((8 - (data_size % 8)) % 8)
+            .ok_or_else(|| {
+                format!(
+                    "data element at byte {} padded length overflows usize",
+                    *offset
+                )
+            })?;
+        if padded_end > bytes.len() {
+            return Err(format!(
+                "data element at byte {} padding exceeds file length",
                 *offset
-            )
-        })?;
-    if padded_end > bytes.len() {
-        return Err(format!(
-            "data element at byte {} padding exceeds file length",
-            *offset
-        ));
+            ));
+        }
+        *offset = padded_end;
     }
-    *offset = padded_end;
     Ok(DataElement {
         data_type,
         data: &bytes[data_start..data_end],
@@ -2408,6 +2420,52 @@ mod tests {
     use flate2::write::ZlibEncoder;
     use flate2::Compression;
     use std::process::Command;
+
+    #[test]
+    fn reads_multiple_unpadded_compressed_elements() {
+        // scipy and MATLAB write each variable as its OWN miCOMPRESSED element, and do NOT pad those
+        // elements to an 8-byte boundary. A padded advance over-shoots into the next element's zlib
+        // stream and mis-reads its tag. Regression for ESA-PhiLab/pystamps#12.
+        let pa = temp_path("pystamps-mat-cvar-a");
+        let mut ma = MatFile::new(&pa);
+        ma.add_f64_col_vector("n_ps", vec![3.0]).unwrap();
+        ma.write().unwrap();
+        let rawa = std::fs::read(&pa).unwrap();
+        std::fs::remove_file(&pa).unwrap();
+
+        let pb = temp_path("pystamps-mat-cvar-b");
+        let mut mb = MatFile::new(&pb);
+        mb.add_f64_matrix("ij", 3, 3, vec![1.0, 10.0, 20.0, 2.0, 11.0, 21.0, 3.0, 12.0, 22.0])
+            .unwrap();
+        mb.write().unwrap();
+        let rawb = std::fs::read(&pb).unwrap();
+        std::fs::remove_file(&pb).unwrap();
+
+        let zip = |body: &[u8]| {
+            let mut e = ZlibEncoder::new(Vec::new(), Compression::default());
+            e.write_all(body).unwrap();
+            e.finish().unwrap()
+        };
+        let c1 = zip(&rawa[128..]);
+        let c2 = zip(&rawb[128..]);
+        // the bug only manifests when the first compressed element is not already 8-aligned
+        assert_ne!(c1.len() % 8, 0, "test needs a non-8-aligned first compressed element");
+
+        let mut bytes = rawa[..128].to_vec(); // reuse a valid v5 header
+        write_tag(&mut bytes, MI_COMPRESSED, c1.len()).unwrap();
+        bytes.extend_from_slice(&c1); // NO pad_to_8 — exactly as scipy/MATLAB write it
+        write_tag(&mut bytes, MI_COMPRESSED, c2.len()).unwrap();
+        bytes.extend_from_slice(&c2);
+
+        let path = temp_path("pystamps-mat-multicompressed");
+        std::fs::write(&path, &bytes).unwrap();
+        let data = MatData::read(&path).unwrap();
+        assert_eq!(data.get_f64_matrix("n_ps").unwrap().values, vec![3.0]);
+        let ij = data.get_f64_matrix("ij").unwrap();
+        assert_eq!((ij.rows, ij.cols), (3, 3));
+        assert_eq!(ij.values[8], 22.0);
+        std::fs::remove_file(path).unwrap();
+    }
 
     #[test]
     fn rejects_shape_mismatch() {
